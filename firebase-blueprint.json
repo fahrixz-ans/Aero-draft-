@@ -1,0 +1,234 @@
+{
+  "entities": {
+    "Application": {
+      "title": "Application",
+      "description": "Metadata and details of an Android application.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "developer": { "type": "string" },
+        "icon": { "type": "string" },
+        "screenshots": { "type": "array" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "version": { "type": "string" },
+        "size": { "type": "string" },
+        "androidVersion": { "type": "string" },
+        "rating": { "type": "number" },
+        "downloads": { "type": "number" },
+        "releaseDate": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "officialDownloadUrl": { "type": "string" },
+        "alternativeDownloadUrl": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "popular": { "type": "boolean" },
+        "whatsNew": { "type": "string" },
+        "permissions": { "type": "array" },
+        "minSdk": { "type": "integer" },
+        "targetSdk": { "type": "integer" },
+        "signingCertificate": {
+          "type": "object",
+          "properties": {
+            "sha256": { "type": "string" },
+            "sha1": { "type": "string" },
+            "issuer": { "type": "string" },
+            "subject": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "name", "slug", "developer", "icon", "description", "category", "version", "size", "androidVersion", "rating", "downloads", "releaseDate", "updatedAt", "officialDownloadUrl"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Application report or feedback submitted by users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "applicationName": { "type": "string" },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "reviewed", "resolved"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "applicationId", "applicationName", "type", "message", "status", "createdAt"]
+    },
+    "NewsletterSubscriber": {
+      "title": "NewsletterSubscriber",
+      "description": "Subscriber email for newsletter system.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "subscribedAt": { "type": "string" }
+      },
+      "required": ["email", "subscribedAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Administrative audit trail entry recording critical actions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminId": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "entityName": { "type": "string" },
+        "metadata": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "adminId", "adminEmail", "action", "entityType", "entityId", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Application category grouping.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "AppVersion": {
+      "title": "AppVersion",
+      "description": "Version details of an Android application.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "appId": { "type": "string" },
+        "versionName": { "type": "string" },
+        "versionCode": { "type": "integer" },
+        "apkFileUrl": { "type": "string" },
+        "storageKey": { "type": "string" },
+        "fileSize": { "type": "integer" },
+        "minSdk": { "type": "integer" },
+        "targetSdk": { "type": "integer" },
+        "architectures": { "type": "array" },
+        "permissions": { "type": "array" },
+        "sha256": { "type": "string" },
+        "certificateSha256": { "type": "string" },
+        "changelog": { "type": "string" },
+        "securityStatus": { "type": "string", "enum": ["pending", "passed", "warning", "rejected"] },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "appId", "versionName", "versionCode", "apkFileUrl", "storageKey", "fileSize", "sha256", "securityStatus", "status", "createdAt", "updatedAt"]
+    },
+    "AppCollection": {
+      "title": "AppCollection",
+      "description": "Curated collection of applications (e.g. Editor's Picks, Essential Apps).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "description": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "appIds": { "type": "array", "items": { "type": "string" } },
+        "sortOrder": { "type": "integer" },
+        "isPublished": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["manual", "automatic", "hybrid"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "slug", "appIds", "sortOrder", "isPublished", "createdAt", "updatedAt"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "System and algorithmic configuration settings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "config": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "category", "config", "updatedAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Admin user profile and assigned role permissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "role", "permissions", "isActive", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Collection of application categories."
+    },
+    "/applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Collection of all applications."
+    },
+    "/applications/{applicationId}/appVersions/{versionId}": {
+      "schema": "AppVersion",
+      "description": "Subcollection of all versions for a given application."
+    },
+    "/applications/{applicationId}/versions/{versionId}": {
+      "schema": "AppVersion",
+      "description": "Legacy subcollection alias of all versions for a given application."
+    },
+    "/applications/{applicationId}/revisions/{revisionId}": {
+      "description": "Audit and rollback revision history for an application."
+    },
+    "/collections/{collectionId}": {
+      "schema": "AppCollection",
+      "description": "Curated application collections."
+    },
+    "/settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "System settings and algorithm weights."
+    },
+    "/adminUsers/{userId}": {
+      "schema": "AdminUser",
+      "description": "Administrator role assignments and permissions."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "Collection of app feedback reports."
+    },
+    "/reports/{reportId}": {
+      "description": "Collection of community and APK issue reports."
+    },
+    "/applications/{applicationId}/ratings/{userId}": {
+      "description": "User ratings subcollection per application."
+    },
+    "/applications/{applicationId}/reviews/{reviewId}": {
+      "description": "User reviews subcollection per application."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "description": "User notifications collection."
+    },
+    "/adminAuditLogs/{logId}": {
+      "schema": "AdminAuditLog",
+      "description": "Immutable audit trails of administrative events."
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": "AdminAuditLog",
+      "description": "Immutable audit trails of administrative events (canonical collection)."
+    },
+    "/subscribers/{subscriberId}": {
+      "schema": "NewsletterSubscriber",
+      "description": "Collection of newsletter subscribers."
+    }
+  }
+}

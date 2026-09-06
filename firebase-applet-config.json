@@ -1,0 +1,12 @@
+{
+  "projectId": "aero-apk",
+  "appId": "1:456423311338:web:e7dc693208c0d3e006d493",
+  "apiKey": "AIzaSyDe0EszmKMZagMFhJv47I2DAe-J1xKhyTI",
+  "authDomain": "aero-apk.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-aeroapk-ec6f67f9-f252-49c5-b270-25dfeed5f061",
+  "storageBucket": "aero-apk.firebasestorage.app",
+  "messagingSenderId": "456423311338",
+  "measurementId": "",
+  "oAuthClientId": "456423311338-salq9ukpn7567htrk3cfsorlp3lt3koh.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

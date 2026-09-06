@@ -1,0 +1,160 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Checking if user has admin privileges.
+    // Bootstrapped using the user's registered runtime email or an admins collection document.
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'fahriandriansaputra123@gmail.com' ||
+        request.auth.token.email == 'admin@aeroapk.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Users & private data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      
+      match /{allSubcollections=**} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Admins list
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Categories collection
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Applications collection
+    match /applications/{applicationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingAverage', 'ratingCount', 'ratingDistribution', 'ratingValue', 'downloads', 'healthStatus']));
+      
+      match /appVersions/{versionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+
+        match /feedback/{feedbackId} {
+          allow read: if true;
+          allow create, update: if isSignedIn();
+          allow delete: if isAdmin();
+        }
+      }
+
+      match /versions/{versionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      
+      match /ratings/{ratingUserId} {
+        allow read: if true;
+        allow write: if isOwner(ratingUserId) || isAdmin();
+      }
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      }
+
+      match /versionFeedback/{feedbackId} {
+        allow read: if true;
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
+      }
+      
+      match /changelogs/{changelogId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      
+      match /screenshots/{screenshotId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Reports collection - Any user/guest can report, users can read their own reports, admins can manage all
+    match /reports/{reportId} {
+      allow create: if true;
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Review Reports collection
+    match /reviewReports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Feedback collection - Anyone can submit (create), only admins can manage (read, update, delete)
+    match /feedback/{feedbackId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Newsletter Subscribers
+    match /subscribers/{subscriberId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Import Jobs history
+    match /importJobs/{jobId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Curated Collections
+    match /collections/{collectionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // System Settings & Config
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin Users & RBAC
+    match /adminUsers/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Admin Audit Logs collection - Immutable history, admin-only read and create
+    match /adminAuditLogs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false; // Immutable audit log
+    }
+
+    match /admin_audit_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false; // Immutable audit log
+    }
+
+    // Analytics collection
+    match /analytics/{eventId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}

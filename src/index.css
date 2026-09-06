@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-light-bg: #FFFFFF;
+  --color-brand-light-sec: #F7F7F8;
+  --color-brand-light-primary: #171717;
+  --color-brand-light-secondary: #737373;
+  --color-brand-light-border: #E5E5E5;
+  --color-brand-light-accent: #5B5BD6;
+
+  --color-brand-dark-bg: #101010;
+  --color-brand-dark-sec: #181818;
+  --color-brand-dark-primary: #F5F5F5;
+  --color-brand-dark-secondary: #999999;
+  --color-brand-dark-border: #292929;
+  --color-brand-dark-accent: #7777E8;
+
+  --radius-modal: 14px;
+  --radius-badge: 6px;
+  --radius-icon: 10px;
+  --radius-card: 12px;
+  --radius-btn: 8px;
+}
+
+@utility bg-brand-bg {
+  background-color: var(--color-brand-light-bg);
+  .dark & {
+    background-color: var(--color-brand-dark-bg);
+  }
+}
+
+@utility bg-brand-sec {
+  background-color: var(--color-brand-light-sec);
+  .dark & {
+    background-color: var(--color-brand-dark-sec);
+  }
+}
+
+@utility text-brand-primary {
+  color: var(--color-brand-light-primary);
+  .dark & {
+    color: var(--color-brand-dark-primary);
+  }
+}
+
+@utility text-brand-secondary {
+  color: var(--color-brand-light-secondary);
+  .dark & {
+    color: var(--color-brand-dark-secondary);
+  }
+}
+
+@utility border-brand-border {
+  border-color: var(--color-brand-light-border);
+  .dark & {
+    border-color: var(--color-brand-dark-border);
+  }
+}
+
+@utility bg-brand-accent {
+  background-color: var(--color-brand-light-accent);
+  .dark & {
+    background-color: var(--color-brand-dark-accent);
+  }
+}
+
+@utility text-brand-accent {
+  color: var(--color-brand-light-accent);
+  .dark & {
+    color: var(--color-brand-dark-accent);
+  }
+}
+
+@utility border-brand-accent {
+  border-color: var(--color-brand-light-accent);
+  .dark & {
+    border-color: var(--color-brand-dark-accent);
+  }
+}
