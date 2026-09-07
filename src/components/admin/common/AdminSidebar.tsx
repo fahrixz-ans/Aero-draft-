@@ -79,6 +79,8 @@ export default function AdminSidebar({
       title: 'CONTENT',
       items: [
         { id: 'homepage', label: 'Homepage', icon: Layout },
+        { id: 'recommendations', label: 'Recommendations', icon: Sparkles },
+        { id: 'ranking-engine', label: 'Ranking & Trending', icon: BarChart3 },
         { id: 'banners', label: 'Banners', icon: Flag },
         { id: 'featured', label: 'Featured', icon: Sparkles }
       ]

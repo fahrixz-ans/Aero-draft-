@@ -70,12 +70,12 @@ type TabType = 'overview' | 'saved' | 'history' | 'reviews' | 'reports' | 'prefe
 
 export default function UserProfileView({
   user,
-  allApps,
-  savedApps,
+  allApps = [],
+  savedApps = [],
   followedApps = [],
   followedCategories = [],
   downloadHistory = [],
-  notifications,
+  notifications = [],
   onSelectApp,
   onDownloadApp,
   onRemoveBookmark,
@@ -111,19 +111,20 @@ export default function UserProfileView({
 
   // Load reviews
   useEffect(() => {
-    if (activeTab === 'reviews') {
+    if (activeTab === 'reviews' && user?.uid) {
       loadMyReviews();
     }
-  }, [activeTab, user.uid]);
+  }, [activeTab, user?.uid]);
 
   // Load reports
   useEffect(() => {
-    if (activeTab === 'reports') {
+    if (activeTab === 'reports' && user?.uid) {
       loadMyReports();
     }
-  }, [activeTab, user.uid]);
+  }, [activeTab, user?.uid]);
 
   const loadMyReviews = async () => {
+    if (!user?.uid) return;
     setLoadingReviews(true);
     try {
       const reviewsGroupQuery = query(
@@ -145,6 +146,7 @@ export default function UserProfileView({
   };
 
   const loadMyReports = async () => {
+    if (!user?.uid) return;
     setLoadingReports(true);
     try {
       const reportsQuery = query(
@@ -232,14 +234,14 @@ export default function UserProfileView({
     }
   };
 
-  const unreadNotifCount = notifications.filter((n) => !n.read).length;
+  const unreadNotifCount = (notifications || []).filter((n) => !n.read).length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in" id="user-profile-view">
       {/* Account Header */}
       <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 mb-8 shadow-sm flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 text-center sm:text-left">
         <div className="flex flex-col sm:flex-row items-center gap-5">
-          {user.photoURL ? (
+          {user?.photoURL ? (
             <img
               src={user.photoURL}
               alt={user.displayName || 'Akun Pengguna'}
@@ -248,16 +250,16 @@ export default function UserProfileView({
             />
           ) : (
             <div className="w-20 h-20 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-800/40 font-black text-2xl">
-              {(user.displayName || user.email || 'A').substring(0, 1).toUpperCase()}
+              {(user?.displayName || user?.email || 'A').substring(0, 1).toUpperCase()}
             </div>
           )}
 
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {user.displayName || 'Pengguna Aero'}
+              {user?.displayName || 'Pengguna Aero'}
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {user.email}
+              {user?.email || 'Akun Tamu (Tersimpan Lokal)'}
             </p>
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
@@ -389,6 +391,7 @@ export default function UserProfileView({
                     app={app}
                     onSelect={onSelectApp}
                     onDownload={onDownloadApp}
+                    downloadHistory={downloadHistory}
                   />
                 ))}
               </div>
@@ -413,7 +416,7 @@ export default function UserProfileView({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {savedApps.map((app) => (
                   <div key={app.id} className="relative group/saved">
-                    <AppCard app={app} onSelect={onSelectApp} onDownload={onDownloadApp} />
+                    <AppCard app={app} onSelect={onSelectApp} onDownload={onDownloadApp} downloadHistory={downloadHistory} />
                     <button
                       onClick={() => onRemoveBookmark(app.id)}
                       className="absolute top-2 right-2 p-2 bg-white/90 dark:bg-slate-900/90 text-slate-400 hover:text-red-500 rounded-xl shadow border border-slate-200 dark:border-white/10 opacity-0 group-hover/saved:opacity-100 transition-opacity cursor-pointer"
@@ -441,7 +444,7 @@ export default function UserProfileView({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {followedApps.map((app) => (
                   <div key={app.id} className="relative group/followed">
-                    <AppCard app={app} onSelect={onSelectApp} onDownload={onDownloadApp} />
+                    <AppCard app={app} onSelect={onSelectApp} onDownload={onDownloadApp} downloadHistory={downloadHistory} />
                     {onUnfollowApp && (
                       <button
                         onClick={() => onUnfollowApp(app.id)}

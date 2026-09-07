@@ -17,7 +17,7 @@ interface NotificationCenterModalProps {
 export default function NotificationCenterModal({
   isOpen,
   onClose,
-  notifications,
+  notifications = [],
   onMarkAsRead,
   onMarkRead,
   onMarkAllAsRead,
@@ -31,7 +31,8 @@ export default function NotificationCenterModal({
   const handleMarkAllRead = onMarkAllRead || onMarkAllAsRead || (() => {});
   const handleNavigateApp = onSelectApp || onNavigateToApp;
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const notifsList = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = notifsList.filter((n) => !n.read).length;
 
   return (
     <div

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { AppData, AppVersion, ReportType } from '../types';
+import { AppData, AppVersion, ReportType, DownloadHistoryRecord } from '../types';
 import Breadcrumb from './Breadcrumb';
 import ScreenshotGallery from './ScreenshotGallery';
 import AppCard from './AppCard';
@@ -16,10 +16,16 @@ import ReportIssueModal from './ReportIssueModal';
 import RatingReviewSection from './RatingReviewSection';
 import VersionFeedbackBar from './VersionFeedbackBar';
 import LoginPromptModal from './LoginPromptModal';
+import VersionHistorySection from './VersionHistorySection';
+import VersionDetailModal from './VersionDetailModal';
+import VersionComparisonModal from './VersionComparisonModal';
 import QRCode from 'qrcode';
 import { calculateAppBadges } from '../utils/badges';
-import { trackEvent, recordUserInteraction, getIntelligentRelatedApps } from '../services';
-import { recordRecentlyViewed } from '../services/userService';
+import { trackEvent, recordUserInteraction } from '../services';
+import { getSimilarAppsRecommendations, ScoredApp } from '../services/recommendations';
+import RecommendationShelf from './recommendations/RecommendationShelf';
+import { recordRecentlyViewed, recordDownloadHistory } from '../services/userService';
+import AppTrustIndicators from './AppTrustIndicators';
 
 interface AppDetailProps {
   app: AppData;
@@ -34,6 +40,7 @@ interface AppDetailProps {
   onToggleFollow?: () => void;
   currentUser?: any;
   onSignIn?: () => void;
+  downloadHistory?: DownloadHistoryRecord[];
 }
 
 export default function AppDetail({
@@ -48,7 +55,8 @@ export default function AppDetail({
   isFollowed,
   onToggleFollow,
   currentUser,
-  onSignIn
+  onSignIn,
+  downloadHistory
 }: AppDetailProps) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -66,11 +74,17 @@ export default function AppDetail({
   const [copiedSha256, setCopiedSha256] = useState(false);
   const [copiedSha1, setCopiedSha1] = useState(false);
 
+  // Stage 9.3: Similar Apps Recommendation Engine State
+  const [similarRecommendations, setSimilarRecommendations] = useState<ScoredApp[]>([]);
+  const [loadingSimilarRecs, setLoadingSimilarRecs] = useState(false);
+
   // Version History state
   const [versionHistory, setVersionHistory] = useState<AppVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState<boolean>(false);
   const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
   const [versionDownloadStatuses, setVersionDownloadStatuses] = useState<Record<string, 'idle' | 'loading' | 'error'>>({});
+  const [selectedVersionForDetail, setSelectedVersionForDetail] = useState<AppVersion | null>(null);
+  const [comparisonModalOpen, setComparisonModalOpen] = useState(false);
 
   // Fetch Version History on app ID change
   useEffect(() => {
@@ -120,7 +134,24 @@ export default function AppDetail({
       recordUserInteraction('view', app);
       recordRecentlyViewed(app);
     }
-  }, [app.id, app.category, currentUser?.uid]);
+
+    // Stage 9.3: Compute Intelligent Similar App Recommendations
+    const loadSimilar = async () => {
+      const pool = (allApps && allApps.length > 0) ? allApps : relatedApps;
+      if (pool && pool.length > 0) {
+        setLoadingSimilarRecs(true);
+        try {
+          const recs = await getSimilarAppsRecommendations(app, pool, 4);
+          setSimilarRecommendations(recs);
+        } catch (err) {
+          console.error('Error fetching similar recommendations:', err);
+        } finally {
+          setLoadingSimilarRecs(false);
+        }
+      }
+    };
+    loadSimilar();
+  }, [app.id, app.category, currentUser?.uid, allApps, relatedApps]);
 
   // Determine current active URL for QR Code
   const activeDownloadUrl = qrUrlType === 'alternative' && app.alternativeDownloadUrl 
@@ -226,6 +257,12 @@ export default function AppDetail({
         link.click();
         document.body.removeChild(link);
         setVersionDownloadStatuses(prev => ({ ...prev, [versionItem.id]: 'idle' }));
+        // Record download history
+        recordDownloadHistory(currentUser, { 
+          ...app, 
+          version: versionItem.versionName || app.version, 
+          size: typeof versionItem.fileSize === 'number' ? `${versionItem.fileSize} MB` : (versionItem.fileSize || app.size) 
+        }, 'apk').catch(() => {});
       } catch (err) {
         console.error('Download version failed:', err);
         setVersionDownloadStatuses(prev => ({ ...prev, [versionItem.id]: 'error' }));
@@ -346,6 +383,9 @@ export default function AppDetail({
             </div>
           </div>
 
+          {/* Trust Indicators (Stage 9.6) */}
+          <AppTrustIndicators app={app} />
+
           {/* Screenshot Slider */}
           <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl">
             <ScreenshotGallery screenshots={app.screenshots} appName={app.name} />
@@ -374,115 +414,31 @@ export default function AppDetail({
             </p>
           </div>
 
-          {/* VERSION HISTORY SECTION */}
-          {versionHistory.length > 0 && (
-            <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4">
-              <div className="flex items-center gap-2.5">
-                <History className="h-5 w-5 text-indigo-500" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Riwayat Versi Aplikasi
-                </h3>
-              </div>
+          {/* VERSION HISTORY & MANAGEMENT SECTION (Stage 9.8) */}
+          <VersionHistorySection
+            versions={versionHistory}
+            onSelectVersion={(ver) => setSelectedVersionForDetail(ver)}
+            onCompareVersions={() => setComparisonModalOpen(true)}
+            onDownloadVersion={(ver) => triggerVersionDownload(ver)}
+          />
 
-              <div className="divide-y divide-slate-100 dark:divide-white/5 space-y-3">
-                {versionHistory.map((ver) => {
-                  const isExpanded = expandedVersionId === ver.id;
-                  const isDownloading = versionDownloadStatuses[ver.id] === 'loading';
-                  const hasError = versionDownloadStatuses[ver.id] === 'error';
+          {/* Version Detail Modal */}
+          {selectedVersionForDetail && (
+            <VersionDetailModal
+              version={selectedVersionForDetail}
+              app={app}
+              onClose={() => setSelectedVersionForDetail(null)}
+              onDownload={(ver) => triggerVersionDownload(ver)}
+            />
+          )}
 
-                  return (
-                    <div key={ver.id} className="pt-3 first:pt-0 space-y-2">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-sm text-slate-900 dark:text-white">
-                              v{ver.versionName}
-                            </span>
-                            <span className="text-[10px] bg-slate-100 dark:bg-white/5 text-slate-500 px-1.5 py-0.5 rounded font-mono">
-                              Code: {ver.versionCode}
-                            </span>
-                            {ver.versionName === app.version && (
-                              <span className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold px-1.5 py-0.5 rounded">
-                                Terkini
-                              </span>
-                            )}
-                            {ver.securityStatus === 'passed' && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold px-1.5 py-0.5 rounded">
-                                <ShieldCheck className="h-3 w-3" /> Aman
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10.5px] text-slate-400 dark:text-slate-550 font-medium block mt-0.5">
-                            Dirilis pada: {ver.releasedAt ? new Date(ver.releasedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Baru-baru ini'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          {ver.changelog && (
-                            <button
-                              onClick={() => setExpandedVersionId(isExpanded ? null : ver.id)}
-                              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-                              title={isExpanded ? "Sembunyikan log perubahan" : "Tampilkan log perubahan"}
-                            >
-                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                          )}
-
-                          {ver.apkFileUrl && (
-                            <button
-                              onClick={() => triggerVersionDownload(ver)}
-                              disabled={isDownloading}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer select-none ${
-                                isDownloading
-                                  ? 'bg-blue-600/60 dark:bg-blue-600/40 text-white cursor-not-allowed'
-                                  : hasError
-                                  ? 'bg-red-600 text-white'
-                                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200'
-                              }`}
-                            >
-                              {isDownloading ? (
-                                <>
-                                  <div className="h-3 w-3 border-2 border-white/35 border-t-white rounded-full animate-spin" />
-                                  <span>Mengunduh...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Download className="h-3.5 w-3.5" />
-                                  <span>Unduh APK</span>
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expanded Changelog */}
-                      {isExpanded && ver.changelog && (
-                        <div className="p-3 bg-slate-50 dark:bg-black/25 border border-slate-100 dark:border-white/5 rounded-xl text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed animate-fade-in whitespace-pre-line">
-                          <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider mb-1">Log Perubahan:</p>
-                          {ver.changelog}
-                        </div>
-                      )}
-
-                      {/* Version Feedback (Good / Neutral / Bad) */}
-                      <VersionFeedbackBar
-                        appId={app.id}
-                        versionId={ver.id}
-                        versionName={ver.versionName}
-                        currentUser={currentUser || null}
-                        onRequireLogin={() => {
-                          setLoginPromptConfig({
-                            title: 'Masuk untuk memberikan umpan balik versi',
-                            description: 'Beri tahu pengguna lain apakah versi aplikasi ini berjalan lancar di perangkat Anda.'
-                          });
-                          setLoginPromptOpen(true);
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Version Comparison Modal */}
+          {comparisonModalOpen && (
+            <VersionComparisonModal
+              versions={versionHistory}
+              appName={app.name}
+              onClose={() => setComparisonModalOpen(false)}
+            />
           )}
 
           {/* TECHNICAL SECURITY METADATA SECTION */}
@@ -783,46 +739,47 @@ export default function AppDetail({
         </div>
       </div>
 
-      {/* Related apps grid with Intelligence Layer */}
-      {(() => {
-        const candidatePool = (allApps && allApps.length > 0) ? allApps : relatedApps;
-        const intelligentMatches = getIntelligentRelatedApps(app, candidatePool, 4);
-        const displayApps = intelligentMatches.length > 0 ? intelligentMatches : relatedApps.slice(0, 4).map(a => ({ app: a, similarityScore: 80, reason: `Kategori: ${a.category}` }));
-
-        if (displayApps.length === 0) return null;
-
-        return (
-          <div className="space-y-4 pt-4" id="related-apps-section">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                Aplikasi Serupa Terkait
-              </h3>
-              <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                Rekomendasi cerdas berdasarkan kesamaan fungsi, kompatibilitas, dan kategori ({app.category}):
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-              {displayApps.map(({ app: rel, reason }) => (
-                <div key={rel.id} className="flex flex-col space-y-1.5">
-                  <AppCard
-                    app={rel}
-                    onSelect={onSelectRelated}
-                    onDownload={onDownloadRelated}
-                  />
-                  {reason && (
-                    <div className="px-2">
-                      <span className="inline-block text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-500/20 px-2 py-0.5 rounded-md truncate max-w-full">
-                        {reason}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+      {/* Stage 9.3: Similar Apps Shelf with Explainability and Recommendation Engine */}
+      {similarRecommendations.length > 0 ? (
+        <div className="pt-4" id="related-apps-section">
+          <RecommendationShelf
+            shelfId="similarApps"
+            title="Aplikasi Serupa Terkait"
+            subtitle={`Rekomendasi cerdas berdasarkan kesamaan fungsi, kompatibilitas, dan kategori (${app.category})`}
+            items={similarRecommendations}
+            onSelectApp={(selected) => onSelectRelated(selected.slug || selected.id)}
+            onDownloadApp={(selected) => onDownloadRelated({} as any, selected)}
+            downloadHistory={downloadHistory}
+            currentUser={currentUser}
+            showExplanationBadges={true}
+            allowDismiss={true}
+          />
+        </div>
+      ) : relatedApps.length > 0 ? (
+        <div className="space-y-4 pt-4" id="related-apps-section">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+              Aplikasi Serupa Terkait
+            </h3>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              Rekomendasi berdasarkan kategori ({app.category}):
+            </p>
           </div>
-        );
-      })()}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
+            {relatedApps.slice(0, 4).map((rel) => (
+              <div key={rel.id} className="flex flex-col space-y-1.5">
+                <AppCard
+                  app={rel}
+                  onSelect={onSelectRelated}
+                  onDownload={onDownloadRelated}
+                  downloadHistory={downloadHistory}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Dynamic Feedback Modal */}
       <FeedbackModal

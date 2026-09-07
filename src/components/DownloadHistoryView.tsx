@@ -23,15 +23,18 @@ export default function DownloadHistoryView({
   onClearHistory,
   onBackHome
 }: DownloadHistoryViewProps) {
-  const records = downloadHistory || history || [];
+  const records = Array.isArray(downloadHistory) ? downloadHistory : (Array.isArray(history) ? history : []);
   const handleDownload = onDownloadAgain || onDownloadApp || (() => {});
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'apk' | 'official_link'>('all');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const filteredHistory = records.filter(item => {
-    const matchesSearch = item.appName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.version.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!item) return false;
+    const nameStr = (item.appName || '').toLowerCase();
+    const verStr = (item.version || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = nameStr.includes(q) || verStr.includes(q);
     const matchesType = filterType === 'all' || item.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -60,7 +63,7 @@ export default function DownloadHistoryView({
           </p>
         </div>
 
-        {history.length > 0 && (
+        {records.length > 0 && (
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               onClick={() => setShowClearConfirm(true)}
@@ -74,7 +77,7 @@ export default function DownloadHistoryView({
       </div>
 
       {/* Filter and Search Toolbar */}
-      {history.length > 0 && (
+      {records.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -96,7 +99,7 @@ export default function DownloadHistoryView({
                   : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              Semua ({history.length})
+              Semua ({records.length})
             </button>
             <button
               onClick={() => setFilterType('apk')}
@@ -106,7 +109,7 @@ export default function DownloadHistoryView({
                   : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              Berkas APK ({history.filter(h => h.type === 'apk').length})
+              Berkas APK ({records.filter(h => h && h.type === 'apk').length})
             </button>
             <button
               onClick={() => setFilterType('official_link')}
@@ -116,7 +119,7 @@ export default function DownloadHistoryView({
                   : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              Tautan Resmi ({history.filter(h => h.type === 'official_link').length})
+              Tautan Resmi ({records.filter(h => h && h.type === 'official_link').length})
             </button>
           </div>
         </div>

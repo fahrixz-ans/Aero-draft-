@@ -15,7 +15,7 @@ interface NotificationCenterViewProps {
 }
 
 export default function NotificationCenterView({
-  notifications,
+  notifications = [],
   onMarkRead,
   onMarkAllRead,
   onSelectApp,
@@ -29,7 +29,10 @@ export default function NotificationCenterView({
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [requestingPush, setRequestingPush] = useState(false);
 
-  const filteredNotifications = notifications.filter(item => {
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+
+  const filteredNotifications = safeNotifications.filter(item => {
+    if (!item) return false;
     if (activeCategory === 'all') return true;
     if (activeCategory === 'app_update') return item.type === 'app_update';
     if (activeCategory === 'new_app') return item.type === 'new_app';
@@ -38,7 +41,7 @@ export default function NotificationCenterView({
     return true;
   });
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = safeNotifications.filter(n => n && !n.read).length;
 
   const handlePushClick = async () => {
     if (!onEnablePush) return;

@@ -15,6 +15,7 @@ service cloud.firestore {
     // Bootstrapped using the user's registered runtime email or an admins collection document.
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.token.email == 'fantrastore.id@gmail.com' ||
         request.auth.token.email == 'fahriandriansaputra123@gmail.com' ||
         request.auth.token.email == 'admin@aeroapk.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))

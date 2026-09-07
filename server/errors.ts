@@ -1,0 +1,165 @@
+// ---------------------------------------------------------------------------
+// AERO API ERROR CODE REGISTRY & CONTRACT HELPERS (STAGE 8.8 & 8.9)
+// ---------------------------------------------------------------------------
+
+export const ERROR_CODES = {
+  // Standard HTTP Error Mappings
+  INVALID_REQUEST: 'INVALID_REQUEST',
+  AUTH_REQUIRED: 'AUTH_REQUIRED',
+  AUTH_INVALID: 'AUTH_INVALID',
+  AUTH_PROVIDER_ERROR: 'AUTH_PROVIDER_ERROR',
+  FORBIDDEN: 'FORBIDDEN',
+  ADMIN_REQUIRED: 'ADMIN_REQUIRED',
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  RESOURCE_CONFLICT: 'RESOURCE_CONFLICT',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+
+  // Domain Specific App & Version Errors
+  APP_NOT_FOUND: 'APP_NOT_FOUND',
+  APP_NOT_PUBLISHED: 'APP_NOT_PUBLISHED',
+  APP_INVALID_STATUS: 'APP_INVALID_STATUS',
+  APP_ALREADY_EXISTS: 'APP_ALREADY_EXISTS',
+  VERSION_NOT_FOUND: 'VERSION_NOT_FOUND',
+  VERSION_NOT_PUBLISHED: 'VERSION_NOT_PUBLISHED',
+  VERSION_INVALID_STATUS: 'VERSION_INVALID_STATUS',
+  VERSION_CONFLICT: 'VERSION_CONFLICT',
+  VERSION_ALREADY_PUBLISHED: 'VERSION_ALREADY_PUBLISHED',
+  CATEGORY_NOT_FOUND: 'CATEGORY_NOT_FOUND',
+  CATEGORY_ALREADY_EXISTS: 'CATEGORY_ALREADY_EXISTS',
+  COLLECTION_NOT_FOUND: 'COLLECTION_NOT_FOUND',
+  COLLECTION_ALREADY_EXISTS: 'COLLECTION_ALREADY_EXISTS',
+  MODERATION_NOT_FOUND: 'MODERATION_NOT_FOUND',
+  INVALID_MODERATION_STATE: 'INVALID_MODERATION_STATE',
+  DEPENDENCY_CONFLICT: 'DEPENDENCY_CONFLICT',
+
+  // Security & APK Scan Errors
+  SECURITY_SCAN_FAILED: 'SECURITY_SCAN_FAILED',
+  SECURITY_CHECK_FAILED: 'SECURITY_CHECK_FAILED',
+  APK_SIGNATURE_INVALID: 'APK_SIGNATURE_INVALID',
+  APK_HASH_MISMATCH: 'APK_HASH_MISMATCH',
+  APK_QUARANTINED: 'APK_QUARANTINED',
+  APK_SECURITY_BLOCKED: 'APK_SECURITY_BLOCKED',
+  APK_NOT_VERIFIED: 'APK_NOT_VERIFIED',
+  APK_INVALID: 'APK_INVALID',
+  APK_CORRUPTED: 'APK_CORRUPTED',
+  APK_ANALYSIS_FAILED: 'APK_ANALYSIS_FAILED',
+
+  // Distribution & URL Errors
+  DOWNLOAD_NOT_AVAILABLE: 'DOWNLOAD_NOT_AVAILABLE',
+  SECURITY_CHECK_REQUIRED: 'SECURITY_CHECK_REQUIRED',
+  APK_UNAVAILABLE: 'APK_UNAVAILABLE',
+  DOWNLOAD_NOT_ALLOWED: 'DOWNLOAD_NOT_ALLOWED',
+  OFFICIAL_URL_INVALID: 'OFFICIAL_URL_INVALID',
+  PUBLISH_GATE_FAILED: 'PUBLISH_GATE_FAILED',
+  VERSION_REVOKED: 'VERSION_REVOKED',
+  VERSION_ARCHIVED: 'VERSION_ARCHIVED',
+  VERSION_IMMUTABLE_VIOLATION: 'VERSION_IMMUTABLE_VIOLATION',
+  VERSION_CODE_DUPLICATE: 'VERSION_CODE_DUPLICATE',
+  CERTIFICATE_MISMATCH: 'CERTIFICATE_MISMATCH',
+  PACKAGE_MISMATCH: 'PACKAGE_MISMATCH',
+
+  // Upload Errors
+  UPLOAD_FAILED: 'UPLOAD_FAILED',
+  UPLOAD_NOT_FOUND: 'UPLOAD_NOT_FOUND',
+  UPLOAD_INVALID_FILE: 'UPLOAD_INVALID_FILE',
+  UPLOAD_TOO_LARGE: 'UPLOAD_TOO_LARGE',
+  UPLOAD_DUPLICATE: 'UPLOAD_DUPLICATE',
+  UPLOAD_ALREADY_COMPLETED: 'UPLOAD_ALREADY_COMPLETED',
+
+  // Cloudflare R2 Errors
+  R2_UPLOAD_FAILED: 'R2_UPLOAD_FAILED',
+  R2_OBJECT_NOT_FOUND: 'R2_OBJECT_NOT_FOUND',
+  R2_HEAD_FAILED: 'R2_HEAD_FAILED',
+  R2_SIGNED_URL_FAILED: 'R2_SIGNED_URL_FAILED',
+  R2_DELETE_FAILED: 'R2_DELETE_FAILED',
+  R2_DELIVERY_FAILED: 'R2_DELIVERY_FAILED',
+
+  // Database & Queue Errors
+  FIRESTORE_READ_FAILED: 'FIRESTORE_READ_FAILED',
+  FIRESTORE_WRITE_FAILED: 'FIRESTORE_WRITE_FAILED',
+  FIRESTORE_TRANSACTION_FAILED: 'FIRESTORE_TRANSACTION_FAILED',
+  QUEUE_SUBMIT_FAILED: 'QUEUE_SUBMIT_FAILED',
+  JOB_TIMEOUT: 'JOB_TIMEOUT',
+  JOB_FAILED: 'JOB_FAILED',
+  JOB_RETRY_EXHAUSTED: 'JOB_RETRY_EXHAUSTED',
+  JOB_DEAD_LETTERED: 'JOB_DEAD_LETTERED'
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+// Check if error is transient and retryable (Stage 8.9 Contract)
+export function isRetryableError(code: string): boolean {
+  const nonRetryableCodes = [
+    ERROR_CODES.INVALID_REQUEST,
+    ERROR_CODES.VALIDATION_ERROR,
+    ERROR_CODES.FORBIDDEN,
+    ERROR_CODES.ADMIN_REQUIRED,
+    ERROR_CODES.APP_NOT_FOUND,
+    ERROR_CODES.VERSION_NOT_FOUND,
+    ERROR_CODES.RESOURCE_NOT_FOUND,
+    ERROR_CODES.RESOURCE_CONFLICT,
+    ERROR_CODES.VERSION_CONFLICT,
+    ERROR_CODES.UPLOAD_TOO_LARGE,
+    ERROR_CODES.UPLOAD_INVALID_FILE,
+    ERROR_CODES.APK_INVALID,
+    ERROR_CODES.APK_CORRUPTED,
+    ERROR_CODES.APK_SIGNATURE_INVALID,
+    ERROR_CODES.APK_SECURITY_BLOCKED,
+    ERROR_CODES.APK_HASH_MISMATCH,
+    ERROR_CODES.PUBLISH_GATE_FAILED,
+    ERROR_CODES.OFFICIAL_URL_INVALID
+  ];
+  return !nonRetryableCodes.includes(code as any);
+}
+
+export function sendSuccess(res: any, data: any, statusCode = 200) {
+  const requestId = res.getHeader('X-Request-ID') || `req_${Date.now()}`;
+  return res.status(statusCode).json({
+    success: true,
+    data,
+    meta: {
+      requestId,
+      timestamp: new Date().toISOString()
+    }
+  });
+}
+
+export function sendList(res: any, data: any[], page: number, pageSize: number, total: number, statusCode = 200) {
+  const totalPages = Math.ceil(total / (pageSize || 1)) || 1;
+  const requestId = res.getHeader('X-Request-ID') || `req_${Date.now()}`;
+  return res.status(statusCode).json({
+    success: true,
+    data,
+    pagination: {
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 20,
+      total,
+      totalPages
+    },
+    meta: {
+      requestId,
+      timestamp: new Date().toISOString()
+    }
+  });
+}
+
+export function sendError(res: any, code: string, message: string, statusCode = 400, details?: any) {
+  const requestId = res.getHeader('X-Request-ID') || `req_${Date.now()}`;
+  const retryable = isRetryableError(code);
+  return res.status(statusCode).json({
+    success: false,
+    error: {
+      code,
+      message,
+      ...(details !== undefined ? { details } : {}),
+      retryable
+    },
+    meta: {
+      requestId,
+      timestamp: new Date().toISOString()
+    }
+  });
+}

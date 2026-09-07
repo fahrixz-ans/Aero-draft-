@@ -224,58 +224,64 @@ export default function AdminDashboardOverview({
 
       </div>
 
-      {/* SECTION 15: QUICK ACTIONS (MAX 4-6 ACTIONS) */}
+      {/* SECTION 15: QUICK ACTIONS (SECTION 20: OWNER HOME QUICK ACTIONS) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 shadow-2xs">
         <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-          Pintasan Aksi Operasional
+          Pintasan Aksi Cepat Owner Home
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           <button
             onClick={onOpenNewAppForm}
-            className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            id="owner-quick-add-app"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add App</span>
+            <span>+ Tambah Aplikasi</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('users-roles')}
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="owner-quick-add-dev"
+          >
+            <Users className="w-4 h-4 text-blue-500" />
+            <span>+ Tambah Developer</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('categories')}
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="owner-quick-add-cat"
+          >
+            <Layers className="w-4 h-4 text-purple-500" />
+            <span>+ Tambah Kategori</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('homepage-cms')}
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="owner-quick-add-banner"
+          >
+            <HardDrive className="w-4 h-4 text-emerald-500" />
+            <span>+ Tambah Banner</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('homepage-cms')}
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="owner-quick-add-event"
+          >
+            <TrendingUp className="w-4 h-4 text-amber-500" />
+            <span>+ Tambah Event</span>
           </button>
 
           <button
             onClick={() => onNavigateTab('moderation')}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            id="owner-quick-create-notif"
           >
-            <ShieldAlert className="w-4 h-4 text-amber-500" />
-            <span>Review Moderation</span>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('security-center')}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Security Center</span>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('collections')}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Layers className="w-4 h-4 text-purple-500" />
-            <span>Manage Collections</span>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('system-search')}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Database className="w-4 h-4 text-blue-500" />
-            <span>Search Index</span>
-          </button>
-
-          <button
-            onClick={() => onNavigateTab('system-health')}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Activity className="w-4 h-4 text-emerald-500" />
-            <span>System Health</span>
+            <ShieldAlert className="w-4 h-4 text-red-500" />
+            <span>+ Buat Notifikasi</span>
           </button>
         </div>
       </div>

@@ -54,6 +54,11 @@ export interface AppData {
   status?: AppStatus; // Visibility
   publishMode?: PublishMode;
   publishAt?: string | null; // ISO Date String or null
+  publishStatus?: string;
+  securityStatus?: string;
+  moderationStatus?: string;
+  modAvailability?: boolean;
+  qualityScore?: number;
   verifiedSource?: boolean;
   verifiedAt?: string | null;
   verifiedBy?: string | null;
@@ -85,6 +90,15 @@ export interface AppData {
   };
   healthStatus?: 'healthy' | 'warning' | 'problem';
   verifiedBadge?: boolean;
+  tags?: string[];
+  keywords?: string[];
+  shortDescription?: string;
+  trending?: boolean;
+  isOfficialVerified?: boolean;
+  securityScan?: { status: string; passed?: boolean; scannedAt?: string };
+  badges?: string[];
+  viewCount?: number;
+  minAndroid?: string;
 }
 
 export interface ImportJob {
@@ -627,6 +641,186 @@ export type DownloadHistoryItem = DownloadHistoryRecord;
 export type RecentlyViewedItem = RecentlyViewedRecord;
 export type ReportIssue = AppReport;
 
+// ----------------------------------------------------
+// TAHAP 9.1: CORE IDENTITY, ROLE & SUBSCRIPTION MODELS
+// ----------------------------------------------------
 
+export type UserRole = 'user' | 'developer' | 'admin' | 'owner';
+export type SubscriptionPlan = 'free' | 'premium';
 
+export interface UserSubscription {
+  status: SubscriptionPlan;
+  planId?: 'monthly' | 'yearly' | 'lifetime';
+  expiresAt?: string;
+  activatedAt?: string;
+  autoRenew?: boolean;
+}
 
+export interface DeveloperProfile {
+  id: string;
+  uid: string;
+  devId: string;
+  name: string;
+  email: string;
+  bio?: string;
+  website?: string;
+  verified: boolean;
+  status: 'active' | 'pending' | 'rejected';
+  appCount?: number;
+  totalDownloads?: number;
+  createdAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
+export interface EventBannerItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  buttonText: string;
+  destinationUrl: string;
+  tag?: string;
+  priority?: number;
+  isActive: boolean;
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+}
+
+// ----------------------------------------------------
+// TAHAP 9.2: SEARCH INTELLIGENCE + DISCOVERY ENGINE
+// ----------------------------------------------------
+
+export type SearchIntentType = 
+  | 'EXACT_APP' 
+  | 'APP_DISCOVERY' 
+  | 'GAME_DISCOVERY' 
+  | 'CATEGORY' 
+  | 'DEVELOPER' 
+  | 'VERSION' 
+  | 'GENERAL' 
+  | 'NO_RESULT';
+
+export type SearchTabType = 'all' | 'apps' | 'games' | 'developers' | 'categories';
+
+export interface SearchFilterParams {
+  type?: 'all' | 'apps' | 'games';
+  category?: string;
+  developer?: string;
+  rating?: string; // 'all' | '4.0+' | '4.5+'
+  minAndroid?: string;
+  hasApk?: boolean;
+  hasOfficialWebsite?: boolean;
+  recentlyUpdated?: boolean;
+  sort?: SortOption;
+}
+
+export interface ScoreBreakdown {
+  textRelevance: number;
+  quality: number;
+  popularity: number;
+  ctr: number;
+  freshness: number;
+  totalScore: number;
+}
+
+export interface RankedSearchResult {
+  app: AppData;
+  scoreBreakdown: ScoreBreakdown;
+  matchedField: 'name' | 'alias' | 'prefix' | 'developer' | 'category' | 'description' | 'packageName' | 'fuzzy';
+  highlightTerm?: string;
+}
+
+export interface SearchSuggestionGroup {
+  apps: {
+    id: string;
+    name: string;
+    slug: string;
+    icon: string;
+    category: string;
+    rating: number;
+    developer: string;
+    downloads?: number;
+  }[];
+  developers: string[];
+  categories: string[];
+  queries: string[];
+  didYouMean: string | null;
+}
+
+export interface SearchPipelineResult {
+  query: string;
+  normalizedQuery: string;
+  intent: SearchIntentType;
+  tokens: string[];
+  didYouMean: string | null;
+  appliedFilters: SearchFilterParams;
+  totalCandidates: number;
+  results: RankedSearchResult[];
+  suggestions: SearchSuggestionGroup;
+  timingMs: number;
+}
+
+export type SearchAnalyticsEventType = 
+  | 'SEARCH_STARTED'
+  | 'SEARCH_SUBMITTED'
+  | 'SEARCH_RESULT_SHOWN'
+  | 'SEARCH_RESULT_CLICKED'
+  | 'SEARCH_FILTER_USED'
+  | 'SEARCH_SORT_USED'
+  | 'SEARCH_NO_RESULT'
+  | 'SEARCH_SUGGESTION_CLICKED'
+  | 'SEARCH_RECENT_CLICKED'
+  | 'SEARCH_POPULAR_CLICKED'
+  | 'SEARCH_ABANDONED';
+
+export interface SearchAnalyticsEvent {
+  id?: string;
+  userId?: string | null;
+  sessionId: string;
+  eventType: SearchAnalyticsEventType;
+  query: string;
+  normalizedQuery: string;
+  intent?: SearchIntentType;
+  resultCount: number;
+  clickedResultId?: string | null;
+  clickedResultSlug?: string | null;
+  position?: number;
+  filters?: Record<string, any>;
+  sort?: string;
+  timestamp: string;
+}
+
+export interface SearchAnalyticsAggregated {
+  query: string;
+  normalizedQuery: string;
+  searchCount: number;
+  clickCount: number;
+  resultCount: number;
+  noResultCount: number;
+  ctr: number; // 0 - 100 percentage
+  lastSearchedAt: string;
+  growthRate: number; // % growth
+  potentialCategory?: string;
+  potentialSuggestion?: string;
+  status?: 'active' | 'aliased' | 'ignored' | 'mapped';
+}
+
+export interface SearchAlias {
+  id: string;
+  alias: string;
+  targetQuery: string;
+  targetSlug?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface SearchQualityScore {
+  overallScore: number; // 0 - 100
+  relevanceScore: number;
+  ctrScore: number;
+  noResultRateScore: number;
+  abandonmentScore: number;
+  recommendations: string[];
+}

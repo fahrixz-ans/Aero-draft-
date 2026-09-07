@@ -43,12 +43,15 @@ import ProductionHealthDashboard from './admin/ProductionHealthDashboard';
 import AppEditorModal from './admin/AppEditorModal';
 import AdminCollectionsView from './admin/AdminCollectionsView';
 import AdminHomepageCMS from './admin/AdminHomepageCMS';
+import AdminRecommendationManagement from './admin/AdminRecommendationManagement';
+import AdminRankingManagement from './admin/AdminRankingManagement';
 import AdminSearchManagement from './admin/AdminSearchManagement';
 import AdminStorageManagement from './admin/AdminStorageManagement';
 import AdminUsersRolesView from './admin/AdminUsersRolesView';
 import AdminSettingsView from './admin/AdminSettingsView';
 import AdminJobsView from './admin/AdminJobsView';
 import AdminApkSecurityView from './admin/AdminApkSecurityView';
+import AdminAnalyticsDashboard from './admin/AdminAnalyticsDashboard';
 import AdminExportModal from './admin/AdminExportModal';
 import AdminDashboardOverview from './admin/AdminDashboardOverview';
 import AdminNewAppForm from './admin/AdminNewAppForm';
@@ -2765,6 +2768,27 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
               {activeTab === 'homepage-cms' && (
                 <div className="animate-fade-in">
                   <AdminHomepageCMS apps={apps} />
+                </div>
+              )}
+
+              {/* STAGE 9.3: RECOMMENDATION ENGINE CONTROL CENTER */}
+              {activeTab === 'recommendations' && (
+                <div className="animate-fade-in">
+                  <AdminRecommendationManagement apps={apps} />
+                </div>
+              )}
+
+              {/* STAGE 9.4: RANKING & TRENDING ENGINE CONTROL CENTER */}
+              {activeTab === 'ranking-engine' && (
+                <div className="animate-fade-in">
+                  <AdminRankingManagement apps={apps} />
+                </div>
+              )}
+
+              {/* STAGE 9.5: ANALYTICS & EVENT TRACKING DASHBOARD */}
+              {(activeTab === 'analytics-overview' || activeTab === 'analytics-apps' || activeTab === 'analytics-downloads' || activeTab === 'analytics-search') && (
+                <div className="animate-fade-in">
+                  <AdminAnalyticsDashboard apps={apps} />
                 </div>
               )}
 

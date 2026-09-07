@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Bookmark, ArrowLeft, Trash2, Bell, Layers, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2 } from 'lucide-react';
-import { AppData, FollowedCategoryEntry } from '../types';
+import { AppData, FollowedCategoryEntry, DownloadHistoryRecord } from '../types';
 import AppCard from './AppCard';
 
 interface SavedAppsViewProps {
@@ -14,6 +14,7 @@ interface SavedAppsViewProps {
   onUnfollowCategory?: (categoryName: string) => void;
   onSelectCategory?: (categoryName: string) => void;
   onBackHome?: () => void;
+  downloadHistory?: DownloadHistoryRecord[];
 }
 
 type MainTab = 'saved' | 'followed_apps' | 'followed_categories';
@@ -29,7 +30,8 @@ export default function SavedAppsView({
   onUnfollowApp,
   onUnfollowCategory,
   onSelectCategory,
-  onBackHome
+  onBackHome,
+  downloadHistory
 }: SavedAppsViewProps) {
   const [activeTab, setActiveTab] = useState<MainTab>('saved');
   const [savedFilter, setSavedFilter] = useState<SavedFilter>('all');
@@ -187,6 +189,7 @@ export default function SavedAppsView({
                     app={app}
                     onSelect={onSelectApp}
                     onDownload={onDownloadApp}
+                    downloadHistory={downloadHistory}
                   />
                   <button
                     onClick={(e) => {
@@ -241,6 +244,7 @@ export default function SavedAppsView({
                     app={app}
                     onSelect={onSelectApp}
                     onDownload={onDownloadApp}
+                    downloadHistory={downloadHistory}
                   />
                   {onUnfollowApp && (
                     <button

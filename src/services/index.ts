@@ -4,8 +4,10 @@ export * from './analytics/sessionManager';
 export * from './analytics/analyticsService';
 
 export * from './ranking/types';
+export * from './ranking/eventService';
 export * from './ranking/trendingEngine';
 export * from './ranking/newAndRisingEngine';
+export * from './ranking/rankingService';
 
 export * from './scoring/qualityScoring';
 

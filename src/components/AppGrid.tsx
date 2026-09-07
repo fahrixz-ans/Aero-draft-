@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import AppCard from './AppCard';
 import EmptyState from './EmptyState';
-import { AppData } from '../types';
+import { AppData, DownloadHistoryRecord } from '../types';
 
 interface AppGridProps {
   apps: AppData[];
@@ -9,6 +9,7 @@ interface AppGridProps {
   onDownload: (e: React.MouseEvent, app: AppData) => void;
   onResetSearch?: () => void;
   pageSize?: number;
+  downloadHistory?: DownloadHistoryRecord[];
 }
 
 export default function AppGrid({
@@ -16,7 +17,8 @@ export default function AppGrid({
   onSelect,
   onDownload,
   onResetSearch,
-  pageSize = 8
+  pageSize = 8,
+  downloadHistory
 }: AppGridProps) {
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -54,6 +56,7 @@ export default function AppGrid({
             app={app}
             onSelect={onSelect}
             onDownload={onDownload}
+            downloadHistory={downloadHistory}
           />
         ))}
       </div>

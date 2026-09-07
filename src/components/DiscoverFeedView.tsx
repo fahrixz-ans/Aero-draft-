@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Compass, Sparkles, Flame, TrendingUp, RefreshCw, Star, Layers, ArrowLeft, Filter } from 'lucide-react';
-import { AppData } from '../types';
+import { AppData, DownloadHistoryRecord } from '../types';
 import { CATEGORIES } from '../data/appsData';
 import AppCard from './AppCard';
 
@@ -12,6 +12,7 @@ interface DiscoverFeedViewProps {
   onSelectCategory?: (category: string) => void;
   onBackHome?: () => void;
   onNavigate?: (view: string, slug?: string) => void;
+  downloadHistory?: DownloadHistoryRecord[];
 }
 
 type DiscoverSort = 'trending' | 'popular' | 'rating' | 'newest';
@@ -23,7 +24,8 @@ export default function DiscoverFeedView({
   onDownloadApp,
   onSelectCategory,
   onBackHome,
-  onNavigate
+  onNavigate,
+  downloadHistory
 }: DiscoverFeedViewProps) {
   const dataset = allApps || apps || [];
   const handleBack = onBackHome || (() => onNavigate?.('home'));
@@ -145,6 +147,7 @@ export default function DiscoverFeedView({
                 app={app}
                 onSelect={onSelectApp}
                 onDownload={onDownloadApp}
+                downloadHistory={downloadHistory}
               />
             ))}
           </div>

@@ -313,7 +313,10 @@ export async function mergeGuestDataToAccount(user: User): Promise<void> {
 export function getGuestDownloadHistory(): DownloadHistoryRecord[] {
   try {
     const raw = localStorage.getItem(GUEST_DOWNLOAD_HISTORY_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
   return [];
 }
@@ -342,6 +345,10 @@ export async function recordDownloadHistory(
   const filtered = [record, ...current.filter(c => c.id !== record.id)].slice(0, 50);
   localStorage.setItem(GUEST_DOWNLOAD_HISTORY_KEY, JSON.stringify(filtered));
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('aero:download-history-updated', { detail: record }));
+  }
+
   // Sync to Firestore if user logged in
   if (user) {
     try {
@@ -354,6 +361,9 @@ export async function recordDownloadHistory(
 
 export async function clearDownloadHistory(user: User | null): Promise<void> {
   localStorage.removeItem(GUEST_DOWNLOAD_HISTORY_KEY);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('aero:download-history-updated'));
+  }
   if (user) {
     try {
       const snap = await getDocs(collection(db, 'users', user.uid, 'download_history'));
