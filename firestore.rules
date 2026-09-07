@@ -129,6 +129,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Smart Collections (Stage 9.9) - public read, admin write
+    match /smartCollections/{collectionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /items/{itemId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
     // System Settings & Config
     match /settings/{settingId} {
       allow read: if true;

@@ -187,7 +187,11 @@ export interface AppVersion {
 
   securityStatus: SecurityStatus;
 
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'published' | 'archived' | 'REVOKED' | 'ARCHIVED';
+
+  downloadAllowed?: boolean;
+  securityRevoked?: boolean;
+  packageName?: string;
 
   createdAt: string; // To keep consistent with Firestore/JSON date strings
   updatedAt: string; // To keep consistent with Firestore/JSON date strings
@@ -824,3 +828,14 @@ export interface SearchQualityScore {
   abandonmentScore: number;
   recommendations: string[];
 }
+
+// ----------------------------------------------------
+// TAHAP 9.9: SMART COLLECTIONS & INTELLIGENT APP SHELVES
+// ----------------------------------------------------
+export * from './features/smartCollections/types/smartCollections';
+
+// ----------------------------------------------------
+// TAHAP 9.10: ADMIN INTELLIGENCE & OBSERVABILITY LAYER
+// ----------------------------------------------------
+export * from './types/intelligence';
+

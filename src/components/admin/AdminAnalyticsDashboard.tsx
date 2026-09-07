@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppData } from '../../types';
 import { getAnalyticsOverview, getLocalMetricsCache } from '../../services/analytics/analyticsService';
+import { AdminIntelligenceDashboard } from '../intelligence/AdminIntelligenceDashboard';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -14,7 +15,8 @@ import {
   Calendar, 
   ArrowUpRight, 
   ShieldCheck,
-  Award
+  Award,
+  Layers
 } from 'lucide-react';
 
 interface AdminAnalyticsDashboardProps {
@@ -22,11 +24,30 @@ interface AdminAnalyticsDashboardProps {
 }
 
 export default function AdminAnalyticsDashboard({ apps }: AdminAnalyticsDashboardProps) {
+  const [viewMode, setViewMode] = useState<'stage_9_10' | 'legacy_stage_9_5'>('stage_9_10');
   const [period, setPeriod] = useState<'24H' | '7D' | '30D'>('7D');
   const [activeTab, setActiveTab] = useState<'overview' | 'apps' | 'search' | 'recommendation' | 'ranking'>('overview');
 
   const overview = getAnalyticsOverview();
   const metricsCache = getLocalMetricsCache();
+
+  // If viewing Stage 9.10, render the unified Intelligence & Observability Dashboard
+  if (viewMode === 'stage_9_10') {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setViewMode('legacy_stage_9_5')}
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline font-medium"
+          >
+            Beralih ke Tampilan Ringkas (Stage 9.5)
+          </button>
+        </div>
+        <AdminIntelligenceDashboard initialApps={apps} />
+      </div>
+    );
+  }
 
   // Top apps ranked by analytics views/downloads
   const topAppMetrics = apps.map(app => {
@@ -43,6 +64,16 @@ export default function AdminAnalyticsDashboard({ apps }: AdminAnalyticsDashboar
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setViewMode('stage_9_10')}
+          className="px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm flex items-center gap-1.5"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          Buka Stage 9.10 Intelligence & Observability
+        </button>
+      </div>
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-2">

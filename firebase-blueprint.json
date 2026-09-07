@@ -168,9 +168,42 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "email", "role", "permissions", "isActive", "createdAt"]
+    },
+    "SmartCollection": {
+      "title": "SmartCollection",
+      "description": "Dynamic or curated smart collection shelf.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["PERSONALIZED", "POPULAR", "TRENDING", "FRESH", "CONTEXTUAL", "EDITORIAL"] },
+        "source": { "type": "string", "enum": ["RECOMMENDATION", "RANKING", "SEARCH", "ANALYTICS", "EDITORIAL"] },
+        "placement": { "type": "string", "enum": ["HOME", "SEARCH", "APP_DETAIL", "CATEGORY"] },
+        "algorithmVersion": { "type": "string" },
+        "items": { "type": "array" },
+        "maxItems": { "type": "integer" },
+        "enabled": { "type": "boolean" },
+        "priority": { "type": "integer" },
+        "state": { "type": "string" },
+        "generatedAt": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "diversityRules": { "type": "object" },
+        "editorialAppIds": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "source", "placement", "enabled", "priority", "state"]
     }
   },
   "firestore": {
+    "/smartCollections/{collectionId}": {
+      "schema": "SmartCollection",
+      "description": "Collection of smart application shelves."
+    },
+    "/smartCollections/{collectionId}/items/{itemId}": {
+      "description": "Subcollection of items within a smart collection."
+    },
     "/categories/{categoryId}": {
       "schema": "Category",
       "description": "Collection of application categories."

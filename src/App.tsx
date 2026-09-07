@@ -64,6 +64,12 @@ import {
   ScoredApp
 } from './services/recommendations';
 import RecommendationShelf from './components/recommendations/RecommendationShelf';
+import { 
+  useSmartCollections, 
+  SmartCollectionComponent as SmartCollectionShelfView, 
+  CollectionViewAll as SmartCollectionViewAllModal,
+  type SmartCollection as SmartCollectionData
+} from './features/smartCollections';
 
 import {
   saveBookmark,
@@ -171,6 +177,22 @@ export default function App() {
     });
     return () => unsubscribeApps();
   }, []);
+
+  // Stage 9.9: Smart Collections & Intelligent App Shelves
+  const [viewAllSmartCollection, setViewAllSmartCollection] = useState<SmartCollectionData | null>(null);
+  const { 
+    collections: homeSmartCollections, 
+    loading: smartCollectionsLoading 
+  } = useSmartCollections({
+    placement: 'HOME',
+    allApps: apps,
+    userId: user?.uid,
+    userInteractions: {
+      downloadedAppIds: downloadHistory.map(d => d.appId),
+      viewedAppIds: recentlyViewed.map(r => r.appId),
+      searchedQueries: searchHistory
+    }
+  });
 
   const [filters, setFilters] = useState<FilterState>({
     category: '',
@@ -1030,59 +1052,19 @@ export default function App() {
                     </section>
                   )}
 
-                  {/* Smart Collections Section */}
-                  <section className="space-y-6" id="home-smart-collections">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
-                          <Layers className="h-5 w-5" />
-                        </div>
-                        <h2 className="text-2xl font-black text-slate-850 dark:text-white tracking-tight">
-                          Koleksi Cerdas
-                        </h2>
-                      </div>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-1">
-                        Daftar kurasi otomatis yang dikelompokkan berdasarkan data metrik dan karakteristik aplikasi.
-                      </p>
-                    </div>
-
-                    {/* Collection Tabs */}
-                    <div className="flex flex-wrap gap-2">
-                      {smartCollections.map((col) => (
-                        <button
+                  {/* Stage 9.9: Intelligent Smart Collections Shelves */}
+                  {homeSmartCollections.length > 0 && (
+                    <div className="space-y-8" id="home-smart-collections">
+                      {homeSmartCollections.map((col) => (
+                        <SmartCollectionShelfView
                           key={col.id}
-                          onClick={() => setActiveCollectionId(col.id)}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                            activeCollectionId === col.id
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-md font-extrabold'
-                              : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10'
-                          }`}
-                        >
-                          {col.title}
-                          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-md ${
-                            activeCollectionId === col.id ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-white/10 text-slate-500'
-                          }`}>
-                            {col.badge}
-                          </span>
-                        </button>
+                          collection={col}
+                          onSelectApp={(item) => navigateTo('detail', item.slug || item.appId)}
+                          onViewAll={(c) => setViewAllSmartCollection(c)}
+                        />
                       ))}
                     </div>
-
-                    {/* Collection Apps Grid */}
-                    {activeSmartCollection && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                        {activeSmartCollection.apps.slice(0, 4).map((app) => (
-                          <AppCard
-                            key={app.id}
-                            app={app}
-                            onSelect={(s) => navigateTo('detail', s)}
-                            onDownload={handleDirectDownload}
-                            downloadHistory={downloadHistory}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </section>
+                  )}
 
                   {/* Featured apps section */}
                   <section className="space-y-6" id="home-featured-apps">
@@ -1846,6 +1828,18 @@ export default function App() {
           navigateTo('subscription');
         }}
       />
+
+      {/* Stage 9.9: Full Grid View-All Modal for Smart Collections */}
+      {viewAllSmartCollection && (
+        <SmartCollectionViewAllModal
+          collection={viewAllSmartCollection}
+          onClose={() => setViewAllSmartCollection(null)}
+          onSelectApp={(item) => {
+            setViewAllSmartCollection(null);
+            navigateTo('detail', item.slug || item.appId);
+          }}
+        />
+      )}
     </div>
   );
 }

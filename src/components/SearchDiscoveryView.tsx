@@ -14,6 +14,12 @@ import {
   clearAllRecentSearches,
   getAggregatedSearchIntelligence 
 } from '../services/search/searchIntelligence';
+import { 
+  useSmartCollections, 
+  SmartCollectionComponent,
+  CollectionViewAll as SmartCollectionViewAllModal,
+  type SmartCollection as SmartCollectionData
+} from '../features/smartCollections';
 
 interface SearchDiscoveryViewProps {
   apps?: AppData[];
@@ -67,6 +73,15 @@ export default function SearchDiscoveryView({
   
   // Pagination
   const [visibleCount, setVisibleCount] = useState(20);
+
+  // Stage 9.9: Contextual Smart Collections for Search Placement
+  const [viewAllCollection, setViewAllCollection] = useState<SmartCollectionData | null>(null);
+  const { collections: searchCollections } = useSmartCollections({
+    placement: 'SEARCH',
+    allApps: apps,
+    searchQuery: submittedQuery,
+    userId
+  });
 
   // Sync prop changes
   useEffect(() => {
@@ -799,6 +814,20 @@ export default function SearchDiscoveryView({
               </button>
             </div>
           )}
+
+          {/* Stage 9.9: Contextual Smart Shelves for Search */}
+          {searchCollections.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-slate-200/80 dark:border-white/10 space-y-8">
+              {searchCollections.map(col => (
+                <SmartCollectionComponent
+                  key={col.id}
+                  collection={col}
+                  onSelectApp={(item) => onSelectApp(item.slug || item.appId)}
+                  onViewAll={(c) => setViewAllCollection(c)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         /* ------------------------------------------------------------- */
@@ -1010,6 +1039,18 @@ export default function SearchDiscoveryView({
           </div>
 
         </div>
+      )}
+
+      {/* Stage 9.9: Smart Collection View-All Modal */}
+      {viewAllCollection && (
+        <SmartCollectionViewAllModal
+          collection={viewAllCollection}
+          onClose={() => setViewAllCollection(null)}
+          onSelectApp={(item) => {
+            setViewAllCollection(null);
+            onSelectApp(item.slug || item.appId);
+          }}
+        />
       )}
     </div>
   );

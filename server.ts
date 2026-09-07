@@ -12,6 +12,9 @@ import { adminRouter } from './server/routes/adminRoutes';
 import { internalRouter } from './server/routes/internalRoutes';
 import { authRouter } from './server/routes/authRoutes';
 import { developerRouter } from './server/routes/developerRoutes';
+import { smartCollectionsRouter } from './server/routes/smartCollections';
+import { adminIntelligenceRouter } from './server/routes/adminIntelligence';
+import { developerIntelligenceRouter } from './server/routes/developerIntelligence';
 import { initializeBackgroundWorkers } from './server/jobs';
 import { runReconciliation } from './server/reconciliation';
 
@@ -83,10 +86,13 @@ setInterval(() => {
 
 // Mount Stage 8.8 & 8.9 API Routers
 app.use('/api/public', publicRouter);
+app.use('/api/admin/intelligence', adminIntelligenceRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/developer/intelligence', developerIntelligenceRouter);
 app.use('/api/developer', developerRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api/auth', authRouter);
+app.use('/api', smartCollectionsRouter);
 
 // Aliases for legacy clients
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString(), uptime: process.uptime() }));
