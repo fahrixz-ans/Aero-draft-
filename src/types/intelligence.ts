@@ -459,6 +459,26 @@ export interface DownloadDiagnosticBreakdown {
   averageSpeedMBps?: number;
 }
 
+export interface SecurityIncident {
+  id: string;
+  versionId?: string;
+  appId?: string;
+  appName?: string;
+  version?: string;
+  threatSeverity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'INFO';
+  threatType?: string;
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'INFO';
+  findingsCount?: number;
+  scannedAt?: string;
+  detectedAt?: string;
+  type?: string;
+  description?: string;
+  status?: 'OPEN' | 'INVESTIGATING' | 'MITIGATED' | 'RESOLVED' | 'DISMISSED';
+  evidence?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SecurityScanInsight {
   totalScanned: number;
   verifiedCount: number;
@@ -467,13 +487,32 @@ export interface SecurityScanInsight {
   revokedCount: number;
   pendingScans: number;
   virusTotalHealth: 'HEALTHY' | 'RATE_LIMITED' | 'UNAVAILABLE';
-  recentIncidents: {
-    versionId: string;
-    appId: string;
-    appName: string;
-    severity: 'INFO' | 'WARNING' | 'CRITICAL';
-    findingsCount: number;
-    scannedAt: string;
+  recentIncidents: SecurityIncident[];
+  overview?: {
+    totalEvents: number;
+    blockedCount: number;
+    rateLimitEvents: number;
+    botCount: number;
+    openIncidents: number;
+    flaggedEntitiesCount: number;
+  };
+  abuseScores?: {
+    entityType: string;
+    entityId: string;
+    score: number;
+    level: string;
+    reasons: string[];
+    updatedAt: string;
+  }[];
+  securityEvents?: {
+    id: string;
+    type: string;
+    severity: string;
+    actorId?: string;
+    ipHash?: string;
+    endpoint?: string;
+    createdAt: string;
+    metadata?: Record<string, unknown>;
   }[];
 }
 

@@ -6,7 +6,8 @@ export async function fetchSystemHealth(): Promise<SystemHealthStatus> {
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
-    return await res.json();
+    const body = await res.json();
+    return body.data || body;
   } catch (err: any) {
     return {
       status: 'degraded',
@@ -37,7 +38,8 @@ export async function fetchStorageAudit(): Promise<StorageAuditReport> {
   try {
     const res = await fetch('/api/admin/storage-audit');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const body = await res.json();
+    return body.data || body;
   } catch (err: any) {
     return {
       scannedAt: new Date().toISOString(),

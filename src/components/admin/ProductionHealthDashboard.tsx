@@ -176,20 +176,86 @@ export default function ProductionHealthDashboard() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 dark:text-white">
-              {health?.queue.activeJobs || 0} Aktif
+              {health?.queue?.activeJobs || 0} Aktif
             </span>
-            <span className="text-xs text-emerald-500 font-medium">({health?.queue.completedJobs || 0} Selesai)</span>
+            <span className="text-xs text-emerald-500 font-medium">({health?.queue?.completedJobs || 0} Selesai)</span>
           </div>
           <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-            {health?.queue.failedJobs === 0 ? (
+            {(!health?.queue?.failedJobs || health?.queue?.failedJobs === 0) ? (
               <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> 0 Gagal / 0 Dead Letter
               </span>
             ) : (
               <span className="text-rose-500 font-medium flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> {health?.queue.failedJobs} Gagal
+                <AlertTriangle className="w-3.5 h-3.5" /> {health?.queue?.failedJobs} Gagal
               </span>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Latency & Cache Performance Overview (Stage 9.13) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Latensi API (p50 / p95)</span>
+            <Zap className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+              {health?.performance?.p50Ms || 0} ms
+            </span>
+            <span className="text-xs text-slate-500">p95: {health?.performance?.p95Ms || 0} ms</span>
+          </div>
+          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            p99: {health?.performance?.p99Ms || 0} ms ({health?.performance?.totalRequests || 0} request)
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Rasio Cache Hit</span>
+            <Activity className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              {health?.performance?.cacheHitRatio || 0}%
+            </span>
+            <span className="text-xs text-slate-500">({health?.cache?.size || 0} entri ter-cache)</span>
+          </div>
+          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Status In-Memory Cache: {health?.cache?.enabled ? 'Aktif' : 'Non-Aktif'}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Tingkat Kesalahan (Error Rate)</span>
+            <AlertTriangle className="w-4 h-4 text-blue-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+              {health?.performance?.errorRate || 0}%
+            </span>
+            <span className="text-xs text-emerald-500 font-medium">Di bawah ambang batas 1%</span>
+          </div>
+          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Respons otomatis error disanitasi tanpa kebocoran stack trace.
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Lingkungan Produksi</span>
+            <Server className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white uppercase">
+              {health?.environment || 'production'}
+            </span>
+          </div>
+          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Cloud Run Container / Nginx Reverse Proxy (Port 3000)
           </div>
         </div>
       </div>

@@ -17,6 +17,7 @@ service cloud.firestore {
       return isSignedIn() && (
         request.auth.token.email == 'fantrastore.id@gmail.com' ||
         request.auth.token.email == 'fahriandriansaputra123@gmail.com' ||
+        request.auth.token.email == 'fahriandriansptr@gmail.com' ||
         request.auth.token.email == 'admin@aeroapk.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
@@ -47,7 +48,8 @@ service cloud.firestore {
     match /applications/{applicationId} {
       allow read: if true;
       allow write: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingAverage', 'ratingCount', 'ratingDistribution', 'ratingValue', 'downloads', 'healthStatus']));
+      // Metrics aggregates (downloads, ratingAverage, ratingCount, healthStatus) can ONLY be updated by Admin/Backend
+      allow update: if isAdmin();
       
       match /appVersions/{versionId} {
         allow read: if true;
@@ -167,6 +169,30 @@ service cloud.firestore {
     match /analytics/{eventId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
+    }
+
+    // Stage 9.11 Security & Abuse Prevention Collections
+    // Immutable Security Events
+    match /securityEvents/{eventId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false; // Immutable
+    }
+
+    // Security Incidents
+    match /securityIncidents/{incidentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Abuse Scores & Threat Ratings
+    match /abuseScores/{scoreId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Developer Submissions (IDOR Protection)
+    match /developerSubmissions/{submissionId} {
+      allow read: if (isSignedIn() && resource.data.developerEmail == request.auth.token.email) || isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -17,11 +17,21 @@ import { adminIntelligenceRouter } from './server/routes/adminIntelligence';
 import { developerIntelligenceRouter } from './server/routes/developerIntelligence';
 import { initializeBackgroundWorkers } from './server/jobs';
 import { runReconciliation } from './server/reconciliation';
+import { SecurityService, createRateLimiter as createAdaptiveLimiter } from './server/services/securityService';
+
+import { validateProductionConfig } from './server/config/production';
+import { CloudinaryService } from './server/storage/cloudinary';
+import { getSession } from '@auth/express';
+import { authConfig } from './auth';
+import { resolveOrCreateFirestoreUser } from './server/auth';
 
 // Initialize Express App
 const app = express();
 const PORT = 3000;
 const START_TIME = Date.now();
+
+// Validate production environment configuration
+validateProductionConfig();
 
 // ---------------------------------------------------------------------------
 // 1. STORAGE DIRECTORIES SETUP
@@ -37,7 +47,7 @@ if (!fs.existsSync(APKS_DIR)) fs.mkdirSync(APKS_DIR, { recursive: true });
 if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
 
 // ---------------------------------------------------------------------------
-// 2. SECURITY HEADERS & REQUEST ID MIDDLEWARE
+// 2. SECURITY HEADERS, REQUEST ID & BOT PROTECTION (Stage 9.11)
 // ---------------------------------------------------------------------------
 app.use((req: any, res, next) => {
   const requestId = req.headers['x-request-id'] || `req_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -45,16 +55,77 @@ app.use((req: any, res, next) => {
   res.setHeader('X-Request-ID', requestId);
 
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Allow framing for AI Studio preview environment
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+
+  // Stage 9.11 Automated Bot & Scanner Tool Protection
+  const botCheck = SecurityService.detectBotOrScraper(req);
+  if (botCheck.isBot) {
+    SecurityService.recordSecurityEvent({
+      type: 'BOT_DETECTED',
+      severity: 'MEDIUM',
+      ip: (req.ip || req.socket.remoteAddress || '').replace(/^.*:/, ''),
+      userAgent: req.headers['user-agent'],
+      requestId,
+      endpoint: req.originalUrl || req.path,
+      metadata: { reason: botCheck.reason }
+    });
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: `Akses ditolak: ${botCheck.reason}`
+      },
+      meta: { requestId, timestamp: new Date().toISOString() }
+    });
+  }
+
   next();
 });
 
 // JSON body parser with strict size limit
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// Global Auth.js session resolution middleware
+app.use(async (req: any, res, next) => {
+  try {
+    const session = await getSession(req, authConfig);
+    if (session?.user?.email) {
+      const dbUser = await resolveOrCreateFirestoreUser(
+        session.user.email,
+        session.user.name || session.user.email.split('@')[0],
+        session.user.image || undefined
+      );
+      req.user = dbUser;
+      req.session = session;
+    }
+  } catch (error) {
+    console.error('[Session Resolution Error]', error);
+  }
+  next();
+});
+
+// Custom Google OAuth callback success handler for iframe/popup sign-in
+app.get('/api/auth/callback-success', (req, res) => {
+  res.send(`
+    <html>
+      <body>
+        <script>
+          if (window.opener) {
+            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+            window.close();
+          } else {
+            window.location.href = '/';
+          }
+        </script>
+        <p>Autentikasi berhasil. Jendela ini akan tertutup secara otomatis.</p>
+      </body>
+    </html>
+  `);
+});
 
 app.use('/uploads/images', express.static(IMAGES_DIR, {
   maxAge: '7d',
@@ -74,7 +145,7 @@ app.use('/uploads/apks', express.static(APKS_DIR, {
 }));
 
 // ---------------------------------------------------------------------------
-// 2.5 STAGE 8.8 & STAGE 8.9 CORE SUBSYSTEMS & ROUTERS
+// 2.5 STAGE 8.8 & STAGE 8.9 CORE SUBSYSTEMS & ROUTERS (Protected by Stage 9.11 Rate Limiters)
 // ---------------------------------------------------------------------------
 // Initialize background workers for asynchronous APK processing and integrity scans
 initializeBackgroundWorkers();
@@ -84,18 +155,35 @@ setInterval(() => {
   runReconciliation().catch(err => console.error('[Reconciliation Error]', err));
 }, 15 * 60 * 1000);
 
-// Mount Stage 8.8 & 8.9 API Routers
-app.use('/api/public', publicRouter);
-app.use('/api/admin/intelligence', adminIntelligenceRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/developer/intelligence', developerIntelligenceRouter);
-app.use('/api/developer', developerRouter);
-app.use('/api/internal', internalRouter);
-app.use('/api/auth', authRouter);
-app.use('/api', smartCollectionsRouter);
+import { healthRouter } from './server/routes/healthRoutes';
+import { seoRouter } from './server/routes/seoRoutes';
+import { aiDiscoveryRouter } from './server/routes/aiDiscoveryRoutes';
+import { performanceMiddleware } from './server/middleware/performance';
+import { cacheMiddleware } from './server/middleware/cache';
+import { timeoutMiddleware } from './server/middleware/timeout';
 
-// Aliases for legacy clients
-app.get('/api/health', (req, res) => res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString(), uptime: process.uptime() }));
+// Mount performance & timeout middlewares for all API requests
+app.use('/api', performanceMiddleware);
+app.use('/api', timeoutMiddleware(30000));
+
+// Mount SEO & Sitemap Endpoints
+app.use(seoRouter);
+
+// Mount AI Discovery Endpoints
+app.use(aiDiscoveryRouter);
+
+// Mount Health Endpoints (Requirement 27)
+app.use('/api/health', healthRouter);
+
+// Mount API Routers with Category-Appropriate Adaptive Rate Limiting & Cache
+app.use('/api/public', createAdaptiveLimiter('PUBLIC_APP_DETAIL'), cacheMiddleware(300), publicRouter);
+app.use('/api/admin/intelligence', createAdaptiveLimiter('ADMIN'), adminIntelligenceRouter);
+app.use('/api/admin', createAdaptiveLimiter('ADMIN'), adminRouter);
+app.use('/api/developer/intelligence', createAdaptiveLimiter('ADMIN'), developerIntelligenceRouter);
+app.use('/api/developer', createAdaptiveLimiter('DEVELOPER_UPLOAD'), developerRouter);
+app.use('/api/internal', internalRouter);
+app.use('/api/auth', createAdaptiveLimiter('AUTH'), authRouter);
+app.use('/api', smartCollectionsRouter);
 
 // ---------------------------------------------------------------------------
 // 3. ERROR CODE REGISTRY & RESPONSE CONTRACT HELPERS
@@ -1125,7 +1213,7 @@ function parseApkBuffer(buffer: Buffer) {
 }
 
 // POST /api/upload-image
-app.post('/api/upload-image', memoryUpload.single('image') as any, (req: any, res) => {
+app.post('/api/upload-image', memoryUpload.single('image') as any, async (req: any, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Tidak ada berkas gambar yang diunggah.' });
@@ -1138,19 +1226,57 @@ app.post('/api/upload-image', memoryUpload.single('image') as any, (req: any, re
       return res.status(400).json({ error: 'Format berkas tidak didukung. Gunakan JPG, PNG, WebP, atau AVIF.' });
     }
 
-    const filename = `img_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`;
-    const filePath = path.join(IMAGES_DIR, filename);
-    fs.writeFileSync(filePath, req.file.buffer);
+    // Try to upload to Cloudinary
+    try {
+      const uploadType = req.body.type || 'upload'; // 'icon', 'screenshot', 'banner', 'avatar'
+      const result = await CloudinaryService.uploadImage(req.file.buffer, uploadType);
+      
+      return res.status(200).json({
+        success: true,
+        url: result.secure_url,
+        secure_url: result.secure_url,
+        cloudinary_public_id: result.public_id,
+        resource_type: result.resource_type,
+        format: result.format,
+        width: result.width,
+        height: result.height,
+        size: req.file.size
+      });
+    } catch (clErr: any) {
+      console.warn('[Cloudinary] Failed to upload to Cloudinary, falling back to local storage:', clErr.message || clErr);
+      
+      // Local fallback
+      const filename = `img_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`;
+      const filePath = path.join(IMAGES_DIR, filename);
+      fs.writeFileSync(filePath, req.file.buffer);
 
-    return res.status(200).json({
-      success: true,
-      url: `/uploads/images/${filename}`,
-      filename,
-      size: req.file.size
-    });
+      return res.status(200).json({
+        success: true,
+        url: `/uploads/images/${filename}`,
+        filename,
+        size: req.file.size,
+        warning: 'Menggunakan penyimpanan lokal karena Cloudinary tidak terkonfigurasi atau bermasalah.'
+      });
+    }
   } catch (err: any) {
     console.error('Image upload error:', err);
     return res.status(500).json({ error: err.message || 'Gagal mengunggah gambar.' });
+  }
+});
+
+// POST /api/delete-image
+app.post('/api/delete-image', express.json(), async (req: any, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'URL gambar wajib disertakan.' });
+    }
+
+    const deleted = await CloudinaryService.deleteImage(url);
+    return res.status(200).json({ success: deleted });
+  } catch (err: any) {
+    console.error('Image deletion error:', err);
+    return res.status(500).json({ error: err.message || 'Gagal menghapus gambar.' });
   }
 });
 

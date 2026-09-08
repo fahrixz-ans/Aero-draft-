@@ -56,6 +56,8 @@ import AdminExportModal from './admin/AdminExportModal';
 import AdminDashboardOverview from './admin/AdminDashboardOverview';
 import AdminNewAppForm from './admin/AdminNewAppForm';
 import AdminModerationHub from './admin/AdminModerationHub';
+import AdminSeoIntelligenceView from './admin/AdminSeoIntelligenceView';
+import AdminAiDiscoveryIntelligenceView from './admin/AdminAiDiscoveryIntelligenceView';
 import AdminLayout from './admin/common/AdminLayout';
 import { BreadcrumbItem } from './admin/common/Breadcrumb';
 import { logAdminAction } from '../services/admin/auditLogService';
@@ -959,6 +961,8 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
       case 'system-health': case 'production-health': return 'System Health & Telemetri Produksi';
       case 'access-admins': case 'users-roles': return 'Manajemen Pengguna & Hak Akses (RBAC)';
       case 'settings-general': case 'settings': return 'Konfigurasi Global Sistem';
+      case 'seo': return 'SEO & Organic Discovery Control Center';
+      case 'ai-discovery': return 'AI Discovery & Search Intelligence Control';
       default: return tab.replace(/-/g, ' ').toUpperCase();
     }
   };
@@ -2831,6 +2835,20 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
               {activeTab === 'settings' && (
                 <div className="animate-fade-in">
                   <AdminSettingsView />
+                </div>
+              )}
+
+              {/* STAGE 9.15: SEO INTELLIGENCE */}
+              {activeTab === 'seo' && (
+                <div className="animate-fade-in">
+                  <AdminSeoIntelligenceView />
+                </div>
+              )}
+
+              {/* STAGE 9.16: AI DISCOVERY INTELLIGENCE */}
+              {activeTab === 'ai-discovery' && (
+                <div className="animate-fade-in">
+                  <AdminAiDiscoveryIntelligenceView />
                 </div>
               )}
             </>

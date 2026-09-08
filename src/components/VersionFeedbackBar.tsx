@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ThumbsUp, Meh, ThumbsDown, Loader2 } from 'lucide-react';
-import { VersionFeedback, VersionFeedbackChoice } from '../types';
+import { VersionFeedback, VersionFeedbackChoice, AeroUser as User } from '../types';
+import { doc, getDoc, collection, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
-import { User } from 'firebase/auth';
 
 interface VersionFeedbackBarProps {
   appId: string;

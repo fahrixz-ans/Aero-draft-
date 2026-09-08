@@ -52,7 +52,7 @@ export default function Navbar({
   }, []);
 
   const isOwnerOrAdmin = userRole === 'owner' || userRole === 'admin' || 
-    (user && (user.email === 'fantrastore.id@gmail.com' || user.email === 'fahriandriansaputra123@gmail.com' || user.email === 'admin@aeroapk.com'));
+    (user && (user.email === 'fahriandriansptr@gmail.com' || user.email === 'fantrastore.id@gmail.com' || user.email === 'fahriandriansaputra123@gmail.com' || user.email === 'admin@aeroapk.com'));
 
   const navItems = [
     { label: 'Beranda', view: 'home' },

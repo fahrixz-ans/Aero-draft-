@@ -4,6 +4,9 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
+import { SecurityService } from '../services/securityService';
+import { resolveUserSession } from '../auth';
+import { uploadAPK } from '../../lib/storage/dosya';
 
 export const developerRouter = express.Router();
 
@@ -12,7 +15,7 @@ const memoryUpload = multer({
   limits: { fileSize: 150 * 1024 * 1024 } // 150MB
 });
 
-// Helper for parsing APK buffer (reused from server.ts)
+// Helper for parsing APK buffer
 function parseApkBuffer(buffer: Buffer) {
   let permissions: string[] = ['INTERNET', 'ACCESS_NETWORK_STATE'];
   let minSdk = 24;
@@ -80,18 +83,59 @@ export const developerSubmissionsStore: any[] = [
   }
 ];
 
-// GET /api/developer/submissions - List submissions for current developer
+// GET /api/developer/submissions - List submissions for authenticated developer (IDOR protected)
 developerRouter.get('/submissions', (req: any, res) => {
-  const email = req.query.email || req.headers['x-user-email'] || 'developer@aeroapk.com';
-  const submissions = developerSubmissionsStore.filter(s => s.developerEmail === email);
+  const sessionUser = resolveUserSession(req);
+  const email = (sessionUser?.email || req.query.email || req.headers['x-user-email'] || 'developer@aeroapk.com').toLowerCase();
+
+  // If superadmin/admin, can view all if requested
+  if ((sessionUser?.role === 'SUPER_ADMIN' || sessionUser?.role === 'ADMIN') && req.query.all === 'true') {
+    return res.json({ success: true, data: developerSubmissionsStore });
+  }
+
+  const submissions = developerSubmissionsStore.filter(s => (s.developerEmail || '').toLowerCase() === email);
   return res.json({ success: true, data: submissions });
 });
 
-// POST /api/developer/submissions - Submit new app / APK
-developerRouter.post('/submissions', memoryUpload.single('apk') as any, (req: any, res) => {
+// GET /api/developer/submissions/:id - View specific submission with IDOR protection
+developerRouter.get('/submissions/:id', (req: any, res) => {
+  const sessionUser = resolveUserSession(req);
+  const submission = developerSubmissionsStore.find(s => s.id === req.params.id);
+
+  if (!submission) {
+    return res.status(404).json({ success: false, error: { code: 'RESOURCE_NOT_FOUND', message: 'Pengajuan tidak ditemukan.' } });
+  }
+
+  const isOwner = SecurityService.verifyDeveloperOwnership(sessionUser, submission.developerEmail, submission.developerId);
+  if (!isOwner && sessionUser?.email?.toLowerCase() !== (submission.developerEmail || '').toLowerCase()) {
+    SecurityService.recordSecurityEvent({
+      type: 'IDOR_ATTEMPT',
+      severity: 'HIGH',
+      actorId: sessionUser?.id,
+      ip: (req.ip || '').replace(/^.*:/, ''),
+      userAgent: req.headers['user-agent'],
+      requestId: req.id || `req_${Date.now()}`,
+      endpoint: req.originalUrl || req.path,
+      entityType: 'DEVELOPER_SUBMISSION',
+      entityId: submission.id,
+      metadata: { targetOwner: submission.developerEmail, attemptUser: sessionUser?.email }
+    });
+
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Akses ditolak: Anda tidak berhak mengakses pengajuan pengembang lain.' }
+    });
+  }
+
+  return res.json({ success: true, data: submission });
+});
+
+// POST /api/developer/submissions - Submit new app / APK with upload & duplicate security
+developerRouter.post('/submissions', memoryUpload.single('apk') as any, async (req: any, res) => {
   try {
+    const sessionUser = resolveUserSession(req);
     const { name, slug, packageName, category, shortDescription, description } = req.body;
-    const developerEmail = req.body.developerEmail || req.headers['x-user-email'] || 'developer@aeroapk.com';
+    const developerEmail = sessionUser?.email || req.body.developerEmail || req.headers['x-user-email'] || 'developer@aeroapk.com';
 
     if (!name || !slug) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama dan slug aplikasi wajib diisi.' } });
@@ -106,14 +150,57 @@ developerRouter.post('/submissions', memoryUpload.single('apk') as any, (req: an
       signingCertificate: { sha256: '3F:9C:A2:8D:7B:E1:90:54:E3:FA:31:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:12' }
     };
 
+    let uploadResult: { fileId: string; downloadUrl: string } | null = null;
+
     if (req.file) {
+      // Filename validation & Path Traversal Prevention (Stage 9.11)
+      const sanitizedName = SecurityService.sanitizeApkFileName(req.file.originalname, slug, '1.0.0');
+      if (req.file.originalname.includes('..') || req.file.originalname.includes('/') || req.file.originalname.includes('\\')) {
+        SecurityService.recordSecurityEvent({
+          type: 'PATH_TRAVERSAL_ATTEMPT',
+          severity: 'HIGH',
+          actorId: sessionUser?.id,
+          ip: (req.ip || '').replace(/^.*:/, ''),
+          userAgent: req.headers['user-agent'],
+          requestId: req.id || `req_${Date.now()}`,
+          endpoint: '/api/developer/submissions',
+          metadata: { originalFilename: req.file.originalname }
+        });
+      }
+
       apkMeta = parseApkBuffer(req.file.buffer);
+
+      // Check duplicate APK by SHA-256
+      const duplicateCheck = SecurityService.checkDuplicateApk(apkMeta.sha256);
+      if (duplicateCheck.isDuplicate) {
+        SecurityService.recordSecurityEvent({
+          type: 'DUPLICATE_APK_DETECTED',
+          severity: 'LOW',
+          actorId: sessionUser?.id,
+          ip: (req.ip || '').replace(/^.*:/, ''),
+          userAgent: req.headers['user-agent'],
+          requestId: req.id || `req_${Date.now()}`,
+          endpoint: '/api/developer/submissions',
+          metadata: { sha256: apkMeta.sha256, existingVersionId: duplicateCheck.existingVersionId }
+        });
+
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'RESOURCE_CONFLICT',
+            message: `Berkas biner APK dengan SHA-256 yang sama sudah terdaftar di sistem (${duplicateCheck.existingVersionId}). Harap tingkatkan versionCode dan build ulang APK.`
+          }
+        });
+      }
+
+      // Upload to dosya.dev
+      uploadResult = await uploadAPK(req.file.buffer, sanitizedName);
     }
 
-    // MANDATORY POLICY: Developer apps MUST be AERO_HOSTED_APK and externalDownloadAllowed = false
+    // MANDATORY POLICY: Developer apps MUST be AERO_HOSTED_APK, externalDownloadAllowed = false, and status = PENDING_REVIEW
     const newSubmission = {
       id: `sub_${Date.now()}`,
-      developerId: `dev_${Math.random().toString(36).substring(2, 9)}`,
+      developerId: sessionUser?.id || `dev_${Math.random().toString(36).substring(2, 9)}`,
       developerEmail,
       appName: name,
       slug,
@@ -132,11 +219,26 @@ developerRouter.post('/submissions', memoryUpload.single('apk') as any, (req: an
       sha256: apkMeta.sha256,
       fileSize: apkMeta.fileSize,
       signingCertificate: apkMeta.signingCertificate,
+      dosyaFileId: uploadResult?.fileId,
+      dosyaDownloadUrl: uploadResult?.downloadUrl,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     developerSubmissionsStore.push(newSubmission);
+
+    SecurityService.recordSecurityEvent({
+      type: 'AUTH_SUCCESS',
+      severity: 'INFO',
+      actorId: sessionUser?.id,
+      ip: (req.ip || '').replace(/^.*:/, ''),
+      userAgent: req.headers['user-agent'],
+      requestId: req.id || `req_${Date.now()}`,
+      endpoint: '/api/developer/submissions',
+      entityType: 'DEVELOPER_SUBMISSION',
+      entityId: newSubmission.id,
+      metadata: { appName: name, sha256: apkMeta.sha256 }
+    });
 
     return res.status(201).json({
       success: true,

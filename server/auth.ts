@@ -4,6 +4,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { ERROR_CODES, sendError } from './errors';
+import { db } from '../src/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export interface AuthSessionUser {
   id: string;
@@ -22,6 +24,7 @@ export interface AuthSession {
 export const SUPER_ADMIN_EMAILS = [
   'fantrastore.id@gmail.com',
   'fahriandriansaputra123@gmail.com',
+  'fahriandriansptr@gmail.com',
   'admin@aeroapk.com'
 ];
 
@@ -75,7 +78,81 @@ const defaultSuperAdminSession: AuthSession = {
 activeSessions.set('aero_admin_token_master', defaultSuperAdminSession);
 activeSessions.set('sess_default_admin', defaultSuperAdminSession);
 
+/**
+ * Resolves or creates a user profile in Firestore.
+ */
+export async function resolveOrCreateFirestoreUser(email: string, name: string, image?: string): Promise<AuthSessionUser> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const userId = `usr_${Buffer.from(normalizedEmail).toString('hex').slice(0, 10)}`;
+  const userDocRef = doc(db, 'users', userId);
+
+  try {
+    const docSnap = await getDoc(userDocRef);
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+    const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
+    const permissions = getRolePermissions(role);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Update last login
+      await setDoc(userDocRef, {
+        lastLogin: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      return {
+        id: userId,
+        email: normalizedEmail,
+        name: data.name || name,
+        image: data.image || image,
+        role: (data.role || role) as any,
+        permissions: getRolePermissions(data.role || role)
+      };
+    } else {
+      // Create profile
+      const newUser = {
+        id: userId,
+        email: normalizedEmail,
+        name: name || normalizedEmail.split('@')[0],
+        image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || normalizedEmail)}&background=0D8ABC&color=fff`,
+        role: role,
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(userDocRef, newUser);
+      return {
+        id: userId,
+        email: normalizedEmail,
+        name: newUser.name,
+        image: newUser.image,
+        role: newUser.role as any,
+        permissions
+      };
+    }
+  } catch (error) {
+    console.error("Firestore user resolution error:", error);
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
+    const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
+    return {
+      id: userId,
+      email: normalizedEmail,
+      name,
+      image,
+      role,
+      permissions: getRolePermissions(role)
+    };
+  }
+}
+
 export function resolveUserSession(req: Request): AuthSessionUser | null {
+  // If already resolved by express global middleware
+  if ((req as any).user) {
+    return (req as any).user;
+  }
+
   // Check Authorization header
   const authHeader = req.headers.authorization;
   let token = '';

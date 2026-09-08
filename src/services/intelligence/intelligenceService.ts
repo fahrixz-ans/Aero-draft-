@@ -32,7 +32,7 @@ import { AppData } from '../../types';
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('aero_auth_token') || sessionStorage.getItem('aero_auth_token');
   const role = localStorage.getItem('aero_user_role') || 'SUPER_ADMIN';
-  const email = localStorage.getItem('aero_user_email') || 'fantrastore.id@gmail.com';
+  let email = localStorage.getItem('aero_user_email') || 'fahriandriansptr@gmail.com';
   
   return {
     'Content-Type': 'application/json',

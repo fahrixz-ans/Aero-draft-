@@ -10,6 +10,7 @@ import {
   CollectionService,
   AnalyticsService
 } from '../services';
+import { SecurityService, createRateLimiter } from '../services/securityService';
 import { sendSuccess, sendList, sendError, ERROR_CODES } from '../errors';
 import fs from 'fs';
 import path from 'path';
@@ -53,7 +54,7 @@ publicRouter.get('/apps/:slug/versions', async (req, res) => {
 });
 
 // GET /api/public/apps/:slug/versions/:versionId/download
-publicRouter.get('/apps/:slug/versions/:versionId/download', async (req, res) => {
+publicRouter.get('/apps/:slug/versions/:versionId/download', createRateLimiter('DOWNLOAD'), async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress;
     const sessionId = (req.headers['x-session-id'] as string) || 'guest_session';
@@ -73,60 +74,15 @@ publicRouter.get('/apps/:slug/versions/:versionId/download', async (req, res) =>
       return sendSuccess(res, result.data);
     }
 
-    const downloadData = result.data!;
-    const fileName = downloadData.fileName;
-    const sha256 = downloadData.sha256;
-
-    const r2Path = path.join(process.cwd(), 'uploads', 'r2_storage', 'apps', downloadData.app.id, 'versions', downloadData.version.id, fileName);
-    const altPath = path.join(process.cwd(), 'uploads', 'apks', `${sha256}.apk`);
-    let finalPath = '';
-
-    if (fs.existsSync(r2Path)) {
-      finalPath = r2Path;
-    } else if (fs.existsSync(altPath)) {
-      finalPath = altPath;
-    } else {
-      const targetDir = path.dirname(r2Path);
-      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-      const AdmZip = (await import('adm-zip')).default;
-      const zip = new AdmZip();
-      zip.addFile('AndroidManifest.xml', Buffer.from(`<manifest package="${downloadData.app.packageName || 'com.aero.app'}"><uses-permission android:name="android.permission.INTERNET"/></manifest>`));
-      zip.writeZip(r2Path);
-      finalPath = r2Path;
-    }
-
-    const stat = fs.statSync(finalPath);
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('X-APK-SHA256', sha256);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
-      if (start >= stat.size || end >= stat.size || start > end) {
-        res.setHeader('Content-Range', `bytes */${stat.size}`);
-        return res.status(416).end();
-      }
-      res.status(206);
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader('Content-Length', end - start + 1);
-      fs.createReadStream(finalPath, { start, end }).pipe(res);
-    } else {
-      res.status(200);
-      res.setHeader('Content-Length', stat.size);
-      fs.createReadStream(finalPath).pipe(res);
-    }
+    // Direct redirection to the GCS Signed URL to prevent server streaming
+    return res.redirect(result.data!.downloadUrl);
   } catch (err: any) {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }
 });
 
 // GET /api/public/apps/:slug/download
-publicRouter.get('/apps/:slug/download', async (req, res) => {
+publicRouter.get('/apps/:slug/download', createRateLimiter('DOWNLOAD'), async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress;
     const sessionId = (req.headers['x-session-id'] as string) || 'guest_session';
@@ -142,62 +98,13 @@ publicRouter.get('/apps/:slug/download', async (req, res) => {
       return sendError(res, result.error, result.message || 'Gagal mengunduh APK.', statusCode);
     }
 
-    // Check if client expects JSON metadata or direct binary attachment
     const acceptsJson = req.headers.accept && req.headers.accept.includes('application/json');
     if (acceptsJson) {
       return sendSuccess(res, result.data);
     }
 
-    // Provide immediate streaming binary download with HTTP Range Support
-    const downloadData = result.data!;
-    const fileName = downloadData.fileName;
-    const sha256 = downloadData.sha256;
-
-    // Resolve binary on disk
-    const r2Path = path.join(process.cwd(), 'uploads', 'r2_storage', 'apps', downloadData.app.id, 'versions', downloadData.version.id, fileName);
-    const altPath = path.join(process.cwd(), 'uploads', 'apks', `${sha256}.apk`);
-    let finalPath = '';
-
-    if (fs.existsSync(r2Path)) {
-      finalPath = r2Path;
-    } else if (fs.existsSync(altPath)) {
-      finalPath = altPath;
-    } else {
-      // Auto-generate verified APK archive on-the-fly for seamless preview testing
-      const targetDir = path.dirname(r2Path);
-      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-      const AdmZip = (await import('adm-zip')).default;
-      const zip = new AdmZip();
-      zip.addFile('AndroidManifest.xml', Buffer.from(`<manifest package="${downloadData.app.packageName || 'com.aero.app'}"><uses-permission android:name="android.permission.INTERNET"/></manifest>`));
-      zip.writeZip(r2Path);
-      finalPath = r2Path;
-    }
-
-    const stat = fs.statSync(finalPath);
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('X-APK-SHA256', sha256);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
-      if (start >= stat.size || end >= stat.size || start > end) {
-        res.setHeader('Content-Range', `bytes */${stat.size}`);
-        return res.status(416).end();
-      }
-      res.status(206);
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader('Content-Length', end - start + 1);
-      fs.createReadStream(finalPath, { start, end }).pipe(res);
-    } else {
-      res.status(200);
-      res.setHeader('Content-Length', stat.size);
-      fs.createReadStream(finalPath).pipe(res);
-    }
+    // Direct redirection to the GCS Signed URL to prevent server streaming
+    return res.redirect(result.data!.downloadUrl);
   } catch (err: any) {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }
@@ -305,16 +212,44 @@ publicRouter.get('/homepage', async (req, res) => {
 });
 
 // GET /api/public/search
-publicRouter.get('/search', async (req, res) => {
+publicRouter.get('/search', createRateLimiter('SEARCH'), async (req, res) => {
   try {
+    const rawQuery = (req.query.q as string) || '';
+    const cleanQuery = SecurityService.sanitizeSearchQuery(rawQuery);
+    const pageSize = Math.min(50, Math.max(1, parseInt(req.query.pageSize as string, 10) || 20));
+
     const result = await PublicAppService.list({
-      search: req.query.q as string,
+      search: cleanQuery,
       category: req.query.category as string,
       sort: req.query.sort as string,
       page: req.query.page,
-      pageSize: req.query.pageSize
+      pageSize
     });
     return sendList(res, result.data, result.page, result.pageSize, result.total);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+// POST /api/public/analytics/event (Protected by Stage 9.11 Analytics Validator)
+publicRouter.post('/analytics/event', createRateLimiter('ANALYTICS'), async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const validation = SecurityService.validateAnalyticsEvent(payload);
+    if (!validation.valid) {
+      SecurityService.recordSecurityEvent({
+        type: 'SUSPICIOUS_REQUEST',
+        severity: 'LOW',
+        ip: (req.ip || '').replace(/^.*:/, ''),
+        userAgent: req.headers['user-agent'],
+        requestId: (req as any).id || `req_${Date.now()}`,
+        endpoint: '/api/public/analytics/event',
+        metadata: { reason: validation.reason, payload }
+      });
+      return sendError(res, ERROR_CODES.VALIDATION_ERROR, validation.reason || 'Event analitik tidak valid.', 400);
+    }
+
+    return sendSuccess(res, { recorded: true, eventId: payload.eventId });
   } catch (err: any) {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }
@@ -347,6 +282,60 @@ publicRouter.get('/new-releases', async (req, res) => {
   try {
     const result = await PublicAppService.list({ sort: 'new_releases', pageSize: 20 });
     return sendSuccess(res, result.data);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+// GET /api/public/gcs-fallback/*
+publicRouter.get('/gcs-fallback/*', (req, res) => {
+  try {
+    const relativePath = req.params[0] || '';
+    if (!relativePath) {
+      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'File tidak ditemukan.', 404);
+    }
+
+    // Resolve file path safely under uploads/gcs_storage
+    const targetFile = path.resolve(process.cwd(), 'uploads', 'gcs_storage', relativePath.replace(/\//g, path.sep));
+    if (!targetFile.startsWith(path.resolve(process.cwd(), 'uploads', 'gcs_storage'))) {
+      return sendError(res, ERROR_CODES.FORBIDDEN, 'Akses ditolak.', 403);
+    }
+
+    if (!fs.existsSync(targetFile)) {
+      // If file doesn't exist, check alternative fallback directory
+      const altFile = path.join(process.cwd(), 'uploads', 'apks', path.basename(relativePath));
+      if (fs.existsSync(altFile)) {
+        return res.download(altFile, path.basename(relativePath));
+      }
+      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'File tidak ditemukan di penyimpanan simulasi.', 404);
+    }
+
+    return res.download(targetFile, path.basename(relativePath));
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+// GET /api/public/dosya/download/:fileId
+publicRouter.get('/dosya/download/:fileId', (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    const simDir = path.join(process.cwd(), 'uploads', 'dosya_storage');
+    
+    if (!fs.existsSync(simDir)) {
+      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Simulasi penyimpanan dosya tidak ditemukan.', 404);
+    }
+
+    const files = fs.readdirSync(simDir);
+    const matchedFile = files.find(f => f.startsWith(fileId));
+
+    if (!matchedFile) {
+      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Berkas dosya tidak ditemukan.', 404);
+    }
+
+    const targetFile = path.join(simDir, matchedFile);
+    const originalName = matchedFile.replace(`${fileId}_`, '');
+    return res.download(targetFile, originalName);
   } catch (err: any) {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }

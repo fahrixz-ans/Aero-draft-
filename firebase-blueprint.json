@@ -194,9 +194,57 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "title", "type", "source", "placement", "enabled", "priority", "state"]
+    },
+    "SecurityIncident": {
+      "title": "SecurityIncident",
+      "description": "Security incident record tracked across the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED", "FALSE_POSITIVE"] },
+        "detectedAt": { "type": "string" },
+        "resolvedAt": { "type": "string" },
+        "resolvedBy": { "type": "string" },
+        "resolutionNotes": { "type": "string" }
+      },
+      "required": ["id", "type", "severity", "title", "status", "detectedAt"]
+    },
+    "AbuseScore": {
+      "title": "AbuseScore",
+      "description": "Threat assessment and rate limiting tracker for IPs, users, and developers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["IP", "USER", "DEVELOPER"] },
+        "targetId": { "type": "string" },
+        "score": { "type": "number" },
+        "level": { "type": "string", "enum": ["NORMAL", "WATCH", "RESTRICTED", "BLOCKED"] },
+        "blockExpiresAt": { "type": "string" },
+        "lastIncidentAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "targetType", "targetId", "score", "level", "updatedAt"]
     }
   },
   "firestore": {
+    "/securityIncidents/{incidentId}": {
+      "schema": "SecurityIncident",
+      "description": "Platform-wide security incidents tracked by security service."
+    },
+    "/abuseScores/{scoreId}": {
+      "schema": "AbuseScore",
+      "description": "Adaptive abuse scores determining rate limits and temporary blocks."
+    },
+    "/securityEvents/{eventId}": {
+      "description": "Immutable security event stream for audit and forensic analysis."
+    },
+    "/developerSubmissions/{submissionId}": {
+      "description": "Developer APK uploads and app submissions under review."
+    },
     "/smartCollections/{collectionId}": {
       "schema": "SmartCollection",
       "description": "Collection of smart application shelves."

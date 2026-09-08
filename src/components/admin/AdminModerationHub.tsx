@@ -6,7 +6,7 @@ import {
   Check, X, ChevronRight, User, Sparkles, ExternalLink
 } from 'lucide-react';
 import { AppData, AppReport, ReportStatus, ReviewReport, AdminAuditLog } from '../../types';
-import { db, auth } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { 
   collection, getDocs, doc, updateDoc, query, orderBy, 
   onSnapshot, deleteDoc, setDoc 

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertCircle, CheckCircle2, ShieldAlert, Clock, Loader2 } from 'lucide-react';
-import { AppData, AppReport, ReportType, ReportPriority } from '../types';
+import { AppData, AppReport, ReportType, ReportPriority, AeroUser as User } from '../types';
+import { collection, query, where, limit, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, getDocs, limit } from 'firebase/firestore';
-import { User } from 'firebase/auth';
 
 interface ReportIssueModalProps {
   isOpen: boolean;

@@ -683,18 +683,31 @@ adminRouter.get('/uploads/:uploadId/status', requirePermission('uploads.create')
 adminRouter.put('/uploads/direct-storage/:uploadId', (req, res) => {
   const uploadId = req.params.uploadId;
   const session = uploadsDb.find(u => u.uploadId === uploadId);
-  const fileName = session ? session.fileName : 'application.apk';
-  const targetDir = path.join(process.cwd(), 'uploads', 'r2_storage', 'temporary', uploadId);
+  const key = (req.query.key as string) || (session ? session.objectKey : `temporary/${uploadId}/application.apk`);
+  
+  // Resolve target in GCS local fallback storage directory
+  const targetFile = path.join(process.cwd(), 'uploads', 'gcs_storage', key.replace(/\//g, path.sep));
+  const targetDir = path.dirname(targetFile);
+  
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  const targetFile = path.join(targetDir, fileName);
   const fileStream = fs.createWriteStream(targetFile);
 
   req.pipe(fileStream);
 
   fileStream.on('finish', () => {
+    // Also copy to uploads/apks for fallback/compatibility if needed
+    try {
+      const fallbackDir = path.join(process.cwd(), 'uploads', 'apks');
+      if (!fs.existsSync(fallbackDir)) {
+        fs.mkdirSync(fallbackDir, { recursive: true });
+      }
+      fs.copyFileSync(targetFile, path.join(fallbackDir, path.basename(key)));
+    } catch (e) {
+      // ignore
+    }
     return res.status(200).json({ success: true, message: 'Berkas berhasil disimpan ke penyimpanan.' });
   });
 

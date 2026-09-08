@@ -78,15 +78,24 @@ export function calculateBackoffDelay(attempt: number): number {
 }
 
 export async function submitBackgroundJob(params: {
-  type: 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION';
+  type: 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION' | 'GENERATE_SITEMAP' | 'VALIDATE_SEO' | 'REFRESH_METADATA' | 'CHECK_INTERNAL_LINKS' | 'CHECK_STALE_PAGES' | 'REBUILD_COLLECTION_SEO';
   uploadId?: string;
   appId?: string;
   versionId?: string;
+  entityId?: string;
+  entityType?: string;
   maxAttempts?: number;
-}): Promise<JobEntity> {
+} | string, payload?: any): Promise<JobEntity> {
+  const typeStr = typeof params === 'string' ? params : params.type;
+  const uploadIdVal = typeof params === 'object' ? params.uploadId : payload?.uploadId;
+  const appIdVal = typeof params === 'object' ? params.appId : payload?.appId;
+  const versionIdVal = typeof params === 'object' ? params.versionId : payload?.versionId;
+  const entityIdVal = typeof params === 'object' ? params.entityId : payload?.entityId;
+  const maxAttemptsVal = typeof params === 'object' ? params.maxAttempts : 5;
+
   const existingJob = jobsDb.find(j => 
-    j.type === params.type &&
-    j.uploadId === params.uploadId &&
+    j.type === typeStr &&
+    (uploadIdVal ? j.uploadId === uploadIdVal : true) &&
     (j.status === 'QUEUED' || j.status === 'PROCESSING')
   );
   if (existingJob) {
@@ -95,13 +104,14 @@ export async function submitBackgroundJob(params: {
 
   const job: JobEntity = {
     jobId: `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    type: params.type,
+    type: typeStr as any,
     status: 'QUEUED',
-    uploadId: params.uploadId,
-    appId: params.appId,
-    versionId: params.versionId,
+    uploadId: uploadIdVal,
+    appId: appIdVal || entityIdVal,
+    versionId: versionIdVal,
+    entityId: entityIdVal,
     attempt: 0,
-    maxAttempts: params.maxAttempts || 5,
+    maxAttempts: maxAttemptsVal || 5,
     createdAt: new Date().toISOString()
   };
 

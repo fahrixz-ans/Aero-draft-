@@ -1,6 +1,8 @@
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { User } from 'firebase/auth';
+import { db, messagingPromise } from '../lib/firebase';
+import { getToken } from 'firebase/messaging';
+import config from '../../firebase-applet-config.json';
+
 import { 
   AppData, 
   UserPreferences, 
@@ -10,7 +12,8 @@ import {
   DownloadHistoryRecord, 
   SearchHistoryRecord, 
   RecentlyViewedRecord, 
-  NotificationItem 
+  NotificationItem,
+  AeroUser as User
 } from '../types';
 
 // ==========================================
@@ -540,6 +543,35 @@ export async function requestPushPermission(): Promise<boolean> {
   return false;
 }
 
+export async function getFcmToken(userId?: string): Promise<string | null> {
+  try {
+    const granted = await requestPushPermission();
+    if (!granted) return null;
+
+    const messaging = await messagingPromise;
+    if (!messaging) return null;
+
+    const token = await getToken(messaging, {
+      vapidKey: config.vapidKey
+    });
+
+    if (token && userId) {
+      const tokenRef = doc(db, 'users', userId, 'fcm_tokens', token);
+      await setDoc(tokenRef, {
+        token,
+        updatedAt: new Date().toISOString(),
+        deviceType: 'web'
+      }, { merge: true });
+    }
+
+    return token;
+  } catch (err) {
+    console.error('Error getting FCM token:', err);
+    return null;
+  }
+}
+
+
 export function showBrowserNotification(title: string, options?: NotificationOptions): void {
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
@@ -566,8 +598,8 @@ export async function exportUserData(user: User): Promise<Record<string, any>> {
       displayName: user.displayName,
       email: user.email,
       photoURL: user.photoURL,
-      createdAt: user.metadata.creationTime,
-      lastSignInTime: user.metadata.lastSignInTime
+      createdAt: (user as any).metadata?.creationTime || new Date().toISOString(),
+      lastSignInTime: (user as any).metadata?.lastSignInTime || new Date().toISOString()
     },
     preferences: await getUserPreferences(user),
     savedApps: [],

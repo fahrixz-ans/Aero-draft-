@@ -47,8 +47,22 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setLoading(true);
     const formData = new FormData();
     formData.append('image', file);
+    formData.append('type', type);
 
     try {
+      // If there is an existing image, delete it from Cloudinary before uploading the replacement
+      if (currentUrl) {
+        try {
+          await fetch('/api/delete-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: currentUrl }),
+          });
+        } catch (delErr) {
+          console.error('[Cloudinary] Failed to delete old image during replacement:', delErr);
+        }
+      }
+
       const response = await fetch('/api/upload-image', {
         method: 'POST',
         body: formData,
@@ -99,7 +113,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
+    if (currentUrl) {
+      try {
+        await fetch('/api/delete-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: currentUrl }),
+        });
+      } catch (delErr) {
+        console.error('[Cloudinary] Failed to delete image during removal:', delErr);
+      }
+    }
     onUpload('');
   };
 

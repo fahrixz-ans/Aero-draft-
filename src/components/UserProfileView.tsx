@@ -13,25 +13,17 @@ import {
   UserPreferences,
   DownloadHistoryRecord,
   FollowedCategoryEntry,
-  ReportIssue
+  ReportIssue,
+  AeroUser as User
 } from '../types';
-import { db } from '../lib/firebase';
-import { 
-  collection, 
-  collectionGroup, 
-  getDocs, 
-  query, 
-  where, 
-  doc, 
-  deleteDoc, 
-  orderBy 
-} from 'firebase/firestore';
-import { User } from 'firebase/auth';
 import AppCard from './AppCard';
+import { collection, collectionGroup, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { 
   getUserPreferences, 
   saveUserPreferences, 
   requestPushPermission,
+  getFcmToken,
   exportUserData,
   deleteUserAccountData,
   clearDownloadHistory,
@@ -97,6 +89,10 @@ export default function UserProfileView({
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_USER_PREFERENCES);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [prefsSavedToast, setPrefsSavedToast] = useState(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [loadingFcm, setLoadingFcm] = useState<boolean>(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
 
   // Modals & Actions
   const [exportingData, setExportingData] = useState(false);
@@ -108,6 +104,17 @@ export default function UserProfileView({
   useEffect(() => {
     getUserPreferences(user).then(setPreferences);
   }, [user]);
+
+  // Load FCM Token if push is enabled
+  useEffect(() => {
+    if (activeTab === 'notifications' && preferences.notifications.pushEnabled) {
+      setLoadingFcm(true);
+      getFcmToken(user?.uid)
+        .then(setFcmToken)
+        .finally(() => setLoadingFcm(false));
+    }
+  }, [activeTab, preferences.notifications.pushEnabled, user?.uid]);
+
 
   // Load reviews
   useEffect(() => {
@@ -191,6 +198,14 @@ export default function UserProfileView({
 
   const handleTogglePush = async () => {
     const granted = await requestPushPermission();
+    if (granted) {
+      setLoadingFcm(true);
+      const token = await getFcmToken(user?.uid);
+      setFcmToken(token);
+      setLoadingFcm(false);
+    } else {
+      setFcmToken(null);
+    }
     handleUpdatePreferences({
       notifications: {
         ...preferences.notifications,
@@ -729,6 +744,52 @@ export default function UserProfileView({
                   className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                 />
               </div>
+
+              {preferences.notifications.pushEnabled && (
+                <div className="pt-6 border-t border-slate-100 dark:border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-400">
+                      Token Registrasi FCM V1
+                    </h4>
+                    {loadingFcm && <span className="text-xs text-blue-500 animate-pulse">Menghubungkan...</span>}
+                  </div>
+                  {fcmToken ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Gunakan token unik ini untuk mengirim dan menguji performa real-time pesan push melalui Firebase Cloud Messaging API (V1).
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          readOnly
+                          value={fcmToken}
+                          className="flex-1 px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl focus:outline-none select-all text-slate-600 dark:text-slate-300 overflow-ellipsis"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(fcmToken);
+                            setTokenCopied(true);
+                            setTimeout(() => setTokenCopied(false), 2000);
+                          }}
+                          className={`px-3 py-2 text-xs font-bold rounded-xl cursor-pointer transition-colors shrink-0 ${
+                            tokenCopied 
+                              ? 'bg-emerald-600 text-white' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          {tokenCopied ? 'Tersalin' : 'Salin'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    !loadingFcm && (
+                      <p className="text-[11px] text-red-500">
+                        Gagal memuat Token Registrasi FCM. Pastikan izin notifikasi diaktifkan di browser Anda.
+                      </p>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

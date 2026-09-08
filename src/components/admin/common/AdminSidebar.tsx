@@ -4,7 +4,8 @@ import {
   Layout, Flag, Sparkles, ShieldAlert, FileText, Star,
   ShieldCheck, ScanLine, AlertTriangle, BarChart3, TrendingUp,
   Download, Search, HardDrive, Cpu, Database, Activity,
-  Users, Key, History, Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft
+  Users, Key, History, Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft,
+  Globe, Brain
 } from 'lucide-react';
 
 export interface AdminSidebarProps {
@@ -128,7 +129,9 @@ export default function AdminSidebar({
         { id: 'system-storage', label: 'Storage', icon: HardDrive },
         { id: 'system-jobs', label: 'Jobs', icon: Cpu },
         { id: 'system-search', label: 'Search Index', icon: Database },
-        { id: 'system-health', label: 'System Health', icon: Activity }
+        { id: 'system-health', label: 'System Health', icon: Activity },
+        { id: 'seo', label: 'SEO Intelligence', icon: Globe },
+        { id: 'ai-discovery', label: 'AI Discovery', icon: Brain }
       ]
     },
     {

@@ -1,0 +1,34 @@
+name: Aero CI - Test & Quality Verification
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Lint, Typecheck, Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Linter Verification
+        run: npm run lint
+
+      - name: Run Vitest Unit & Integration Suites
+        run: npx vitest run
+
+      - name: Validate Production Build
+        run: npm run build

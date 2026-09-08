@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Star, MessageSquare, Flag, Edit3, Trash2, CheckCircle2, AlertCircle, Loader2, ChevronLeft, ChevronRight, User as UserIcon } from 'lucide-react';
-import { AppData, AppRating, AppReview, ReviewReportReason } from '../types';
+import { AppData, AppRating, AppReview, ReviewReportReason, AeroUser as User } from '../types';
+import { doc, getDoc, collection, query, where, limit, getDocs, updateDoc, setDoc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { 
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, 
-  query, where, orderBy, limit, addDoc 
-} from 'firebase/firestore';
-import { User } from 'firebase/auth';
 
 interface RatingReviewSectionProps {
   app: AppData;

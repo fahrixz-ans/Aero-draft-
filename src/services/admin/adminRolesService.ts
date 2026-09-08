@@ -37,8 +37,18 @@ export const INITIAL_ADMINS: AdminUser[] = [
   },
   {
     id: 'admin_primary',
-    email: 'fahriandriansaputra123@gmail.com',
+    email: 'fahriandriansptr@gmail.com',
     displayName: 'Fahri Andrian (Super Administrator)',
+    role: 'super_admin',
+    permissions: ROLE_PERMISSIONS.super_admin,
+    isActive: true,
+    lastLoginAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'admin_secondary',
+    email: 'fahriandriansaputra123@gmail.com',
+    displayName: 'Fahri Andrian (Backup Admin)',
     role: 'super_admin',
     permissions: ROLE_PERMISSIONS.super_admin,
     isActive: true,

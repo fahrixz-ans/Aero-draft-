@@ -46,6 +46,10 @@ export interface VersionEntity {
   analysisStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   storageKey?: string;
   r2ObjectKey?: string;
+  storageObjectKey?: string;
+  storageProvider?: string;
+  dosyaFileId?: string;
+  dosyaDownloadUrl?: string;
   changelog: string;
   minSdk: number;
   targetSdk: number;
@@ -113,11 +117,15 @@ export interface UploadEntity {
 
 export interface JobEntity {
   jobId: string;
-  type: 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION';
+  type: 
+    | 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION' 
+    | 'GENERATE_SITEMAP' | 'VALIDATE_SEO' | 'REFRESH_METADATA' | 'CHECK_INTERNAL_LINKS' | 'CHECK_STALE_PAGES' | 'REBUILD_COLLECTION_SEO'
+    | 'CLASSIFY_QUERY' | 'EXPAND_QUERY' | 'GENERATE_EMBEDDING' | 'UPDATE_APP_EMBEDDING' | 'REBUILD_SEMANTIC_INDEX' | 'GENERATE_RECOMMENDATION' | 'REBUILD_COLLECTION' | 'EVALUATE_DISCOVERY' | 'GENERATE_AI_REPORT' | 'DETECT_DISCOVERY_OPPORTUNITY';
   status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'DEAD_LETTERED';
   uploadId?: string;
   appId?: string;
   versionId?: string;
+  entityId?: string;
   attempt: number;
   maxAttempts: number;
   lastErrorCode?: string;
@@ -387,13 +395,15 @@ export class AppRepository {
     }
 
     if (filters.search) {
-      const q = filters.search.toLowerCase();
-      list = list.filter(a =>
-        a.name.toLowerCase().includes(q) ||
-        a.slug.toLowerCase().includes(q) ||
-        a.packageName.toLowerCase().includes(q) ||
-        a.developerName.toLowerCase().includes(q)
-      );
+      const q = filters.search.trim().toLowerCase();
+      if (q) {
+        list = list.filter(a =>
+          a.name.toLowerCase().includes(q) ||
+          a.slug.toLowerCase().includes(q) ||
+          a.packageName.toLowerCase().includes(q) ||
+          a.developerName.toLowerCase().includes(q)
+        );
+      }
     }
 
     const sortField = filters.sort || 'popular';

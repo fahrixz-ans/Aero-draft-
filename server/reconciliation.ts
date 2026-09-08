@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
 // AERO RECONCILIATION WORKER (STAGE 8.9)
-// Periodically audits consistency between Firestore, Cloudflare R2, and Queue
+// Periodically audits consistency between Firestore, Google Cloud Storage, and Queue
 // ---------------------------------------------------------------------------
 
 import { appsDb, versionsDb, jobsDb, uploadsDb } from './repositories';
-import { verifyR2Object } from './cloudflareR2';
+import { storage } from './storage/storage';
 
 export interface ReconciliationReport {
   timestamp: string;
@@ -20,17 +20,18 @@ export async function runReconciliation(): Promise<ReconciliationReport> {
   const staleJobs: string[] = [];
   const details: any[] = [];
 
-  // 1. Audit Published Versions: Ensure R2 object actually exists
+  // 1. Audit Published Versions: Ensure GCS object actually exists
   for (const ver of versionsDb) {
-    if (ver.status === 'PUBLISHED' && ver.r2ObjectKey) {
-      const obj = await verifyR2Object(ver.r2ObjectKey);
-      if (!obj) {
-        missingObjects.push(ver.r2ObjectKey);
+    const key = (ver as any).storageObjectKey || ver.storageKey || (ver as any).r2ObjectKey;
+    if (ver.status === 'PUBLISHED' && key) {
+      const exists = await storage.exists(key);
+      if (!exists) {
+        missingObjects.push(key);
         details.push({
-          type: 'MISSING_R2_OBJECT',
+          type: 'MISSING_GCS_OBJECT',
           versionId: ver.id,
           appId: ver.appId,
-          key: ver.r2ObjectKey
+          key
         });
       }
     }

@@ -20,6 +20,13 @@ import {
 } from '../../repositories';
 
 import {
+  SecurityService,
+  securityEventsDb,
+  abuseScoresDb,
+  securityIncidentsDb
+} from '../securityService';
+
+import {
   DataFreshness,
   IntelligenceDataQuality,
   IntelligenceAction,
@@ -701,18 +708,47 @@ export class IntelligenceService {
     const quarantined = versionsDb.filter(v => v.securityStatus === 'QUARANTINED').length;
     const revoked = versionsDb.filter(v => v.status === 'REVOKED').length;
 
-    const recentIncidents = securityScansDb.map(s => {
+    const scanIncidents = securityScansDb.map(s => {
       const ver = versionsDb.find(v => v.id === s.versionId);
       const app = ver ? appsDb.find(a => a.id === ver.appId) : null;
       return {
+        id: `inc_scan_${s.versionId}`,
         versionId: s.versionId,
         appId: ver?.appId || 'unknown',
         appName: app?.name || 'Aplikasi Android',
+        version: ver?.versionName || '1.0.0',
         severity: (s.severity || 'INFO') as any,
+        threatSeverity: (s.severity || 'INFO') as any,
+        threatType: s.vulnerabilitiesCount && s.vulnerabilitiesCount > 0 ? 'Potensi Kerentanan Terdeteksi' : 'Pemeriksaan Integritas Bersih',
         findingsCount: s.vulnerabilitiesCount || 0,
-        scannedAt: s.scannedAt
+        scannedAt: s.scannedAt,
+        detectedAt: s.scannedAt,
+        status: 'RESOLVED' as const
       };
     });
+
+    const realIncidents = securityIncidentsDb.map(inc => ({
+      id: inc.id,
+      versionId: inc.entityType === 'APP_VERSION' ? inc.entityId : undefined,
+      appId: inc.entityType === 'APP' ? inc.entityId : undefined,
+      appName: inc.entityId || 'Platform Security',
+      version: '-',
+      severity: inc.severity,
+      threatSeverity: inc.severity,
+      threatType: inc.type,
+      findingsCount: 1,
+      scannedAt: inc.createdAt,
+      detectedAt: inc.createdAt,
+      type: inc.type,
+      description: inc.description,
+      status: inc.status,
+      evidence: inc.evidence,
+      createdAt: inc.createdAt,
+      updatedAt: inc.updatedAt
+    }));
+
+    const allIncidents = [...realIncidents, ...scanIncidents];
+    const secOverview = SecurityService.getSecurityOverview();
 
     return {
       totalScanned: securityScansDb.length,
@@ -722,7 +758,10 @@ export class IntelligenceService {
       revokedCount: revoked,
       pendingScans: jobsDb.filter(j => j.type === 'SECURITY_SCAN' && (j.status === 'QUEUED' || j.status === 'PROCESSING')).length,
       virusTotalHealth: 'HEALTHY',
-      recentIncidents
+      recentIncidents: allIncidents,
+      overview: secOverview.metrics,
+      abuseScores: secOverview.abuseScores,
+      securityEvents: secOverview.recentEvents
     };
   }
 
@@ -894,6 +933,25 @@ export class IntelligenceService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+    }
+
+    // Check open security incidents (Stage 9.11)
+    const openIncidents = securityIncidentsDb.filter(i => i.status === 'OPEN' || i.status === 'INVESTIGATING');
+    for (const inc of openIncidents) {
+      if (!actions.some(a => a.id === `act_sec_${inc.id}`)) {
+        actions.push({
+          id: `act_sec_${inc.id}`,
+          type: 'SECURITY_SCAN_PENDING',
+          title: `Insiden Keamanan: ${inc.type}`,
+          description: inc.description,
+          severity: inc.severity === 'CRITICAL' || inc.severity === 'HIGH' ? 'CRITICAL' : 'HIGH',
+          entityType: 'SECURITY',
+          entityId: inc.id,
+          status: 'OPEN',
+          createdAt: inc.createdAt,
+          updatedAt: inc.updatedAt
+        });
+      }
     }
 
     return actions;

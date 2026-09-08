@@ -441,7 +441,7 @@ export interface LocalUser {
   displayName: string;
   email: string;
   photoURL?: string;
-  role?: 'admin' | 'user';
+  role?: 'admin' | 'user' | 'owner';
   isAdmin?: boolean;
 }
 
@@ -453,10 +453,10 @@ export const getStoredUser = (): LocalUser | null => {
     // Default logged in admin profile for instant management
     const defaultAdmin: LocalUser = {
       uid: 'admin_local_01',
-      displayName: 'Administrator AeroAPK',
-      email: 'admin@aeroapk.com',
+      displayName: 'Fahri Andrian (Owner & Administrator)',
+      email: 'fahriandriansptr@gmail.com',
       photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&h=128&fit=crop&q=80',
-      role: 'admin',
+      role: 'owner',
       isAdmin: true
     };
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(defaultAdmin));

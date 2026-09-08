@@ -393,18 +393,137 @@ export interface SystemHealthStatus {
     heapTotalMB: number;
     rssMB: number;
   };
-  storage: {
+  storage?: {
     status: 'ok' | 'error';
     writable: boolean;
     uploadsDirExists: boolean;
   };
-  queue: {
+  queue?: {
     activeJobs: number;
     completedJobs: number;
     failedJobs: number;
     deadLetterJobs: number;
   };
+  performance?: {
+    totalRequests: number;
+    p50Ms: number;
+    p95Ms: number;
+    p99Ms: number;
+    errorRate: number;
+    cacheHitRatio: number;
+  };
+  cache?: {
+    size: number;
+    enabled: boolean;
+  };
   environment: string;
+}
+
+// ----------------------------------------------------
+// STAGE 9.15: SEO, GROWTH & DISCOVERY OPTIMIZATION TYPES
+// ----------------------------------------------------
+
+export type SeoJobType = 
+  | 'GENERATE_SITEMAP'
+  | 'VALIDATE_SEO'
+  | 'REFRESH_METADATA'
+  | 'CHECK_INTERNAL_LINKS'
+  | 'CHECK_STALE_PAGES'
+  | 'REBUILD_COLLECTION_SEO';
+
+export type SeoEntityType = 'APP' | 'VERSION' | 'CATEGORY' | 'COLLECTION' | 'SITEMAP' | 'SITE';
+
+export interface SeoJob {
+  jobId: string;
+  jobType: SeoJobType;
+  entityType: SeoEntityType;
+  entityId?: string;
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'DEAD_LETTER';
+  attempt: number;
+  maxAttempts: number;
+  priority: 'HIGH' | 'NORMAL' | 'LOW';
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  lastError?: string;
+  idempotencyKey: string;
+}
+
+export type SeoIssueSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface SeoIssue {
+  id: string;
+  severity: SeoIssueSeverity;
+  type: string;
+  message: string;
+  entityType: SeoEntityType;
+  entityId?: string;
+  url?: string;
+  detectedAt: string;
+  status: 'OPEN' | 'RESOLVED' | 'IGNORED';
+}
+
+export interface SeoHealthScore {
+  overall: number; // 0 - 100
+  technical: number;
+  indexability: number;
+  discovery: number;
+  ratingLabel: 'Critical' | 'Needs Improvement' | 'Good' | 'Excellent';
+  scannedAt: string;
+}
+
+export interface SeoReport {
+  reportId: string;
+  reportType: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_DEMAND';
+  period: {
+    start: string;
+    end: string;
+  };
+  generatedAt: string;
+  generatedBy: string;
+  health: {
+    overall: number;
+    technical: number;
+    indexability: number;
+    discovery: number;
+  };
+  indexation: {
+    indexable: number;
+    indexed?: number;
+    excluded: number;
+  };
+  issues: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  discovery: {
+    organicSessions: number;
+    organicUsers: number;
+    organicViews: number;
+    organicDownloads: number;
+    downloadConversion: number;
+  };
+  worker: {
+    queued: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    deadLetter: number;
+    retryCount: number;
+    averageProcessingMs: number;
+  };
+  performance: {
+    pageP95Ms: number;
+    metadataP95Ms: number;
+    sitemapGenerationMs: number;
+    cacheHitRate: number;
+    errorRate: number;
+  };
+  opportunities: string[];
+  recommendations: string[];
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
 }
 
 // ----------------------------------------------------
@@ -649,6 +768,17 @@ export type ReportIssue = AppReport;
 // TAHAP 9.1: CORE IDENTITY, ROLE & SUBSCRIPTION MODELS
 // ----------------------------------------------------
 
+export interface AeroUser {
+  uid: string;
+  id?: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+  image?: string | null;
+  name?: string | null;
+  role?: string;
+}
+
 export type UserRole = 'user' | 'developer' | 'admin' | 'owner';
 export type SubscriptionPlan = 'free' | 'premium';
 
@@ -827,6 +957,105 @@ export interface SearchQualityScore {
   noResultRateScore: number;
   abandonmentScore: number;
   recommendations: string[];
+}
+
+// ----------------------------------------------------
+// TAHAP 9.16: ADVANCED AI DISCOVERY INTELLIGENCE TYPES
+// ----------------------------------------------------
+
+export type DistributionType = 'AERO_HOSTED_APK' | 'EXTERNAL_LINK' | 'INFO_ONLY';
+
+export type AiSearchIntentType = 
+  | 'APP_LOOKUP'
+  | 'CATEGORY_DISCOVERY'
+  | 'RECOMMENDATION'
+  | 'SIMILAR_APP'
+  | 'VERSION_DISCOVERY'
+  | 'USE_CASE_DISCOVERY'
+  | 'GENERAL_DISCOVERY';
+
+export interface SearchIntent {
+  type: AiSearchIntentType;
+  confidence: number; // 0.0 - 1.0
+  entityName?: string;
+  categoryName?: string;
+  targetAppSlug?: string;
+  useCaseKeywords?: string[];
+  versionName?: string;
+}
+
+export interface DiscoveryConfidence {
+  score: number; // 0.0 - 1.0
+  level: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface AiFeatureFlagConfig {
+  AI_DISCOVERY_ENABLED: boolean;
+  AI_SEARCH_INTENT_ENABLED: boolean;
+  AI_QUERY_EXPANSION_ENABLED: boolean;
+  AI_SEMANTIC_MATCHING_ENABLED: boolean;
+  AI_PERSONALIZATION_ENABLED: boolean;
+  AI_RECOMMENDATION_ENABLED: boolean;
+  AI_EXPERIMENTS_ENABLED: boolean;
+  AI_AUTO_OPTIMIZATION_ENABLED: boolean;
+}
+
+export interface AIDiscoveryReport {
+  reportId: string;
+  reportType: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_DEMAND';
+  period: {
+    start: string;
+    end: string;
+  };
+  generatedAt: string;
+  algorithmVersion: string;
+  modelVersion: string;
+  health: {
+    overall: number;
+    search: number;
+    recommendation: number;
+    semantic: number;
+    personalization: number;
+  };
+  search: {
+    totalQueries: number;
+    uniqueQueries: number;
+    zeroResultQueries: number;
+    reformulationRate: number;
+  };
+  recommendation: {
+    impressions: number;
+    ctr: number;
+    conversion: number;
+    coverage: number;
+    diversity: number;
+    novelty: number;
+  };
+  ai: {
+    requests: number;
+    success: number;
+    failures: number;
+    timeout: number;
+    fallback: number;
+    averageLatencyMs: number;
+    cacheHitRate: number;
+    averageConfidence: number;
+  };
+  worker: {
+    queued: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    deadLetter: number;
+    retries: number;
+  };
+  performance: {
+    p95Ms: number;
+    errorRate: number;
+  };
+  opportunities: string[];
+  recommendations: string[];
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
 }
 
 // ----------------------------------------------------

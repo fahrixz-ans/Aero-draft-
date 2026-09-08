@@ -5,7 +5,7 @@ import {
   Sparkles, Check, AlertCircle, Eye, HelpCircle, HardDrive
 } from 'lucide-react';
 import { AppData, AppStatus, PublishMode } from '../../types';
-import { db, auth } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { CATEGORIES } from '../../data/appsData';
 import { logAdminAction } from '../../services/admin/auditLogService';

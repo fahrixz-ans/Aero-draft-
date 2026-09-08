@@ -95,10 +95,9 @@ import {
   requestPushPermission
 } from './services/userService';
 
-// Firebase Authentication & Firestore imports
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { AeroUser as User } from './types';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
-import { auth, db, googleProvider } from './lib/firebase';
+import { db } from './lib/firebase';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('home');
@@ -145,6 +144,7 @@ export default function App() {
   // Calculate user role dynamically based on account verification
   const isOwnerOrAdmin = Boolean(
     user && (
+      user.email === 'fahriandriansptr@gmail.com' ||
       user.email === 'fantrastore.id@gmail.com' || 
       user.email === 'fahriandriansaputra123@gmail.com' || 
       user.email === 'admin@aeroapk.com'
@@ -246,75 +246,55 @@ export default function App() {
     }
   };
 
-  // Synchronize Firebase Auth state and real-time Firestore bookmarks
+  // Synchronize Auth.js session state and real-time Firestore user preferences
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        const savedFallback = localStorage.getItem('aero_fallback_user');
-        if (savedFallback) {
-          try {
-            const parsed = JSON.parse(savedFallback);
-            const fallbackUser = {
-              uid: 'preview_admin_user_999',
-              email: parsed.email || 'fantrastore.id@gmail.com',
-              displayName: parsed.name || 'Aero Administrator',
-              photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-              getIdToken: async () => 'mock_token_preview'
-            } as unknown as User;
-            setUser(fallbackUser);
-            refreshUserData(fallbackUser);
+    let unmounted = false;
+    async function loadAuthSession() {
+      try {
+        const res = await fetch('/api/auth/session');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.user && !unmounted) {
+            const activeUser: User = {
+              uid: data.user.id || 'usr_default',
+              email: data.user.email,
+              displayName: data.user.name,
+              photoURL: data.user.image,
+              role: data.user.role
+            };
+            setUser(activeUser);
+            refreshUserData(activeUser);
             return;
-          } catch (e) {}
+          }
         }
+      } catch (e) {
+        console.warn('Auth.js session fetch error:', e);
       }
 
-      setUser(currentUser);
-      if (currentUser) {
-        // Record login profile to Firestore securely
-        setDoc(doc(db, 'users', currentUser.uid), {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          email: currentUser.email,
-          photoURL: currentUser.photoURL,
-          lastActive: new Date().toISOString()
-        }, { merge: true }).catch(err => {
-          console.error("Firestore save user error:", err);
-        });
-
-        // Merge guest bookmarks, followed apps, and download history to account
-        await mergeGuestDataToAccount(currentUser);
-
-        // Real-time Firestore subscription for bookmarks
-        const bookmarksRef = collection(db, 'users', currentUser.uid, 'bookmarks');
-        const unsubBookmarks = onSnapshot(bookmarksRef, (snapshot) => {
-          const ids = snapshot.docs.map(d => d.id);
-          setBookmarks(ids);
-        }, (err) => {
-          console.error("Firestore read bookmarks error:", err);
-        });
-
-        // Real-time Firestore subscription for followed apps
-        const followedRef = collection(db, 'users', currentUser.uid, 'followed_apps');
-        const unsubFollowed = onSnapshot(followedRef, (snapshot) => {
-          const ids = snapshot.docs.map(d => d.id);
-          setFollowedApps(ids);
-        }, (err) => {
-          console.error("Firestore read followed apps error:", err);
-        });
-
-        // Refresh other collections
-        refreshUserData(currentUser);
-
-        return () => {
-          unsubBookmarks();
-          unsubFollowed();
-        };
-      } else {
+      if (!unmounted) {
+        setUser(null);
         refreshUserData(null);
       }
-    });
+    }
 
-    return () => unsubscribe();
+    loadAuthSession();
+
+    // Listen for cross-origin OAuth messages from the popup
+    const handleMessage = async (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+        return;
+      }
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        await loadAuthSession();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      unmounted = true;
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   // Real-time Firestore subscription for user notifications
@@ -379,34 +359,25 @@ export default function App() {
     }
   };
 
-  // Google Sign-In trigger with Popup
+  // Google Sign-In trigger with Auth.js (Real Popup OAuth)
   const handleSignIn = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      console.warn("Google Sign-In failed:", err);
-      if (err?.code === 'auth/unauthorized-domain' || err?.code === 'auth/popup-blocked' || err?.code === 'auth/cancelled-popup-request') {
-        const fallbackUser = {
-          uid: 'preview_admin_user_999',
-          email: 'fantrastore.id@gmail.com',
-          displayName: 'Aero Administrator',
-          photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          getIdToken: async () => 'mock_token_preview'
-        } as unknown as User;
-        setUser(fallbackUser);
-        refreshUserData(fallbackUser);
-        localStorage.setItem('aero_fallback_user', JSON.stringify({ email: fallbackUser.email, name: fallbackUser.displayName }));
-      } else {
-        alert(`Google Sign-In Gagal: ${err?.message || 'Unauthorized domain or configuration error'}`);
+      const callbackUrl = encodeURIComponent(`${window.location.origin}/api/auth/callback-success`);
+      const authUrl = `/api/auth/signin/google?callbackUrl=${callbackUrl}`;
+      
+      const authWindow = window.open(authUrl, 'oauth_popup', 'width=600,height=700');
+      if (!authWindow) {
+        alert('Silakan aktifkan pop-up untuk melakukan login.');
       }
+    } catch (err) {
+      console.error("Sign-In failed:", err);
     }
   };
 
   // Sign-Out trigger
   const handleSignOut = async () => {
     try {
-      localStorage.removeItem('aero_fallback_user');
-      await signOut(auth);
+      await fetch('/api/auth/signout', { method: 'POST' });
       setUser(null);
       refreshUserData(null);
     } catch (err) {

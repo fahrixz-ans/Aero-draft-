@@ -1,5 +1,5 @@
 import { AppRevision, AppData } from '../../types';
-import { db, auth } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { collection, doc, getDocs, setDoc, query, orderBy, limit as firestoreLimit } from 'firebase/firestore';
 
 export async function logAppRevision(params: {
@@ -11,9 +11,8 @@ export async function logAppRevision(params: {
   reason?: string;
 }): Promise<void> {
   try {
-    const adminUser = auth.currentUser;
-    const editorId = adminUser?.uid || 'admin_system';
-    const editorEmail = adminUser?.email || 'admin@aeroapk.com';
+    const editorId = 'admin_system';
+    const editorEmail = 'admin@aeroapk.com';
 
     const revisionId = `rev_${Date.now()}`;
     const docRef = doc(db, 'applications', params.appId, 'revisions', revisionId);

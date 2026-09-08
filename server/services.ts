@@ -30,13 +30,7 @@ import {
   PublicAppDTO
 } from './dto';
 import { emitAeroEvent, submitBackgroundJob } from './events';
-import {
-  generateR2UploadSession,
-  verifyR2Object,
-  promoteToPublishedR2Object,
-  generateSignedDownloadUrl,
-  getPublishedObjectKey
-} from './cloudflareR2';
+import { storage, sanitizeFileName } from './storage/storage';
 import { analyzeApkBuffer } from './apkAnalyzer';
 import fs from 'fs';
 import path from 'path';
@@ -134,12 +128,13 @@ export class PublicAppService {
       return { error: 'SECURITY_CHECK_REQUIRED', message: 'Berkas APK belum lolos verifikasi keamanan AeroShield.' };
     }
 
-    // R2 Object Existence Verification
-    const objectKey = (latestVersion as any).storageObjectKey || getPublishedObjectKey(app.id, latestVersion.id, `${app.slug}.apk`);
-    const r2Meta = await verifyR2Object(objectKey);
-    if (!r2Meta) {
+    // GCS Object Existence Verification
+    const sanitizedFileName = sanitizeFileName(`${app.slug}_${latestVersion.versionName}.apk`);
+    const objectKey = (latestVersion as any).storageObjectKey || `apps/${app.id}/versions/${latestVersion.id}/${sanitizedFileName}`;
+    const gcsMeta = await storage.getMetadata(objectKey);
+    if (!gcsMeta) {
       emitAeroEvent('DOWNLOAD_DENIED', app.id, { slug, versionId: latestVersion.id, reason: 'APK_UNAVAILABLE', requestId });
-      return { error: 'APK_UNAVAILABLE', message: 'Berkas APK fisik tidak ditemukan di Cloudflare R2 storage.' };
+      return { error: 'APK_UNAVAILABLE', message: 'Berkas APK fisik tidak ditemukan di Google Cloud Storage.' };
     }
 
     // Authorized successfully
@@ -152,7 +147,8 @@ export class PublicAppService {
       emitAeroEvent('DOWNLOAD_STARTED', app.id, { versionId: latestVersion.id, requestId });
     });
 
-    const signedUrl = generateSignedDownloadUrl(app.slug, latestVersion.id);
+    const fileName = `${app.slug}_${latestVersion.versionName}.apk`;
+    const signedUrl = await storage.createDownloadUrl(objectKey, { filename: fileName, expiresInSeconds: 600 });
 
     return {
       success: true,
@@ -160,10 +156,10 @@ export class PublicAppService {
         app: toPublicAppDTO(app),
         version: toPublicVersionDTO(latestVersion),
         downloadUrl: signedUrl,
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         sha256: latestVersion.sha256,
-        fileName: `${app.slug}_${latestVersion.versionName}.apk`,
-        fileSize: latestVersion.fileSize || r2Meta.size
+        fileName,
+        fileSize: latestVersion.fileSize || gcsMeta.size
       }
     };
   }
@@ -203,11 +199,12 @@ export class PublicAppService {
       return { error: 'APK_QUARANTINED', message: 'Berkas APK masuk dalam karantina keamanan dan diblokir.' };
     }
 
-    const objectKey = (version as any).storageObjectKey || (version as any).r2ObjectKey || getPublishedObjectKey(app.id, version.id, `${app.slug}.apk`);
-    const r2Meta = await verifyR2Object(objectKey);
-    if (!r2Meta) {
+    const sanitizedFileName = sanitizeFileName(`${app.slug}_${version.versionName}.apk`);
+    const objectKey = (version as any).storageObjectKey || `apps/${app.id}/versions/${version.id}/${sanitizedFileName}`;
+    const gcsMeta = await storage.getMetadata(objectKey);
+    if (!gcsMeta) {
       emitAeroEvent('version_download_denied', app.id, { slug, versionId, reason: 'APK_UNAVAILABLE', requestId });
-      return { error: 'APK_UNAVAILABLE', message: 'Berkas APK fisik tidak ditemukan di Cloudflare R2 storage.' };
+      return { error: 'APK_UNAVAILABLE', message: 'Berkas APK fisik tidak ditemukan di Google Cloud Storage.' };
     }
 
     emitAeroEvent('version_download_authorized', app.id, { versionId, requestId, sessionId, userId });
@@ -217,7 +214,8 @@ export class PublicAppService {
       emitAeroEvent('DOWNLOAD_RECORDED', app.id, { versionId });
     });
 
-    const signedUrl = generateSignedDownloadUrl(app.slug, version.id);
+    const fileName = `${app.slug}_${version.versionName}.apk`;
+    const signedUrl = await storage.createDownloadUrl(objectKey, { filename: fileName, expiresInSeconds: 600 });
 
     return {
       success: true,
@@ -225,10 +223,10 @@ export class PublicAppService {
         app: toPublicAppDTO(app),
         version: toPublicVersionDTO(version),
         downloadUrl: signedUrl,
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         sha256: version.sha256,
-        fileName: `${app.slug}_${version.versionName}.apk`,
-        fileSize: version.fileSize || r2Meta.size
+        fileName,
+        fileSize: version.fileSize || gcsMeta.size
       }
     };
   }
@@ -938,7 +936,7 @@ export class UploadService {
     }
 
     const uploadId = `upl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const session = await generateR2UploadSession({
+    const session = await storage.createUploadUrl({
       uploadId,
       fileName,
       contentType: contentType || 'application/vnd.android.package-archive',
@@ -969,10 +967,10 @@ export class UploadService {
       return { error: 'UPLOAD_ALREADY_COMPLETED', message: 'Sesi unggah ini sudah selesai diproses.' };
     }
 
-    // Verify object existence in R2
-    const objMeta = await verifyR2Object(record.objectKey);
+    // Verify object existence in GCS
+    const objMeta = await storage.getMetadata(record.objectKey);
     if (!objMeta) {
-      return { error: 'R2_OBJECT_NOT_FOUND', message: 'Objek APK belum ditemukan pada penyimpanan Cloudflare R2.' };
+      return { error: 'STORAGE_OBJECT_NOT_FOUND', message: 'Objek APK belum ditemukan pada penyimpanan Google Cloud Storage.' };
     }
 
     record.actualSize = objMeta.size;

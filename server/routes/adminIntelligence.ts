@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { requireAuth, requirePermission } from '../auth';
 import { IntelligenceService } from '../services/intelligence/intelligenceService';
+import { SecurityService, securityEventsDb, securityIncidentsDb, abuseScoresDb } from '../services/securityService';
 import { sendSuccess, sendList, sendError, ERROR_CODES } from '../errors';
 
 export const adminIntelligenceRouter = Router();
@@ -296,3 +297,99 @@ adminIntelligenceRouter.post('/emergency', requirePermission('settings.update'),
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }
 });
+
+/**
+ * Stage 9.11 Security & Abuse Observability Endpoints
+ */
+
+/**
+ * GET /api/admin/intelligence/security/events
+ */
+adminIntelligenceRouter.get('/security/events', requirePermission('audit.read'), (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string, 10) || 50;
+    const severity = req.query.severity as string;
+    let events = [...securityEventsDb];
+    if (severity) {
+      events = events.filter(e => e.severity === severity);
+    }
+    return sendSuccess(res, events.slice(0, limit));
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+/**
+ * GET /api/admin/intelligence/security/incidents
+ */
+adminIntelligenceRouter.get('/security/incidents', requirePermission('audit.read'), (req, res) => {
+  try {
+    const status = req.query.status as string;
+    let incidents = [...securityIncidentsDb];
+    if (status) {
+      incidents = incidents.filter(i => i.status === status);
+    }
+    return sendSuccess(res, incidents);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+/**
+ * POST /api/admin/intelligence/security/incidents/:id/status
+ */
+adminIntelligenceRouter.post('/security/incidents/:id/status', requirePermission('apps.update'), (req, res) => {
+  try {
+    const { status, note } = req.body;
+    if (!status || !['OPEN', 'INVESTIGATING', 'MITIGATED', 'RESOLVED', 'DISMISSED'].includes(status)) {
+      return sendError(res, ERROR_CODES.VALIDATION_ERROR, 'Status insiden keamanan tidak valid.', 400);
+    }
+    if (!note || typeof note !== 'string') {
+      return sendError(res, ERROR_CODES.VALIDATION_ERROR, 'Catatan penanganan insiden wajib diisi.', 400);
+    }
+    const actor = (req as any).user;
+    const incident = SecurityService.updateIncidentStatus(req.params.id, status, note, actor);
+    if (!incident) {
+      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Insiden keamanan tidak ditemukan.', 404);
+    }
+    return sendSuccess(res, incident);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+/**
+ * GET /api/admin/intelligence/security/abuse-scores
+ */
+adminIntelligenceRouter.get('/security/abuse-scores', requirePermission('audit.read'), (req, res) => {
+  try {
+    const scores = Array.from(abuseScoresDb.values());
+    return sendSuccess(res, scores);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+
+/**
+ * POST /api/admin/intelligence/security/abuse-scores/reset
+ */
+adminIntelligenceRouter.post('/security/abuse-scores/reset', requirePermission('apps.update'), (req, res) => {
+  try {
+    const { entityType, entityId, reason } = req.body;
+    if (!entityType || !entityId || !reason) {
+      return sendError(res, ERROR_CODES.VALIDATION_ERROR, 'Parameter entityType, entityId, dan reason wajib diisi.', 400);
+    }
+    const key = `${entityType}:${entityId}`;
+    const score = abuseScoresDb.get(key);
+    if (score) {
+      score.score = 0;
+      score.level = 'NORMAL';
+      score.reasons = [`Direset oleh admin: ${reason}`];
+      score.updatedAt = new Date().toISOString();
+    }
+    return sendSuccess(res, { success: true, message: `Skor abuse untuk ${key} berhasil direset.` });
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
+  }
+});
+

@@ -1,12 +1,13 @@
 {
-  "projectId": "aero-apk",
-  "appId": "1:456423311338:web:e7dc693208c0d3e006d493",
-  "apiKey": "AIzaSyDe0EszmKMZagMFhJv47I2DAe-J1xKhyTI",
-  "authDomain": "aero-apk.firebaseapp.com",
+  "projectId": "aero-apk-6d2bc",
+  "appId": "1:970327467039:web:9e2c33770e9455d4fd612a",
+  "apiKey": "AIzaSyCVpKqKNvJvC4vqWr9RMW8mj1H23tdT2-0",
+  "authDomain": "aero-apk-6d2bc.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-aeroapk-ec6f67f9-f252-49c5-b270-25dfeed5f061",
-  "storageBucket": "aero-apk.firebasestorage.app",
-  "messagingSenderId": "456423311338",
-  "measurementId": "",
+  "storageBucket": "aero-apk-6d2bc.firebasestorage.app",
+  "messagingSenderId": "970327467039",
+  "measurementId": "G-9NT7E1SD4T",
   "oAuthClientId": "456423311338-salq9ukpn7567htrk3cfsorlp3lt3koh.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "recaptchaSiteKey": "",
+  "vapidKey": "BKN_kCZHsLHtVmt_70BmKRAMsmmT1fsSksLzm8MCNXMN9MWFKMKtEsM6L_WaXdqrQ6vURxp-yJd1aeNlDnbQqu0"
 }

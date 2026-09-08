@@ -12,7 +12,11 @@ import {
   Calendar,
   Smartphone,
   CheckCircle2,
-  Clock
+  Clock,
+  Users,
+  Download,
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 
 import {
@@ -28,7 +32,13 @@ import {
   IntelligenceDataQuality,
   EmergencyControlsState,
   DataFreshness,
-  ActionStatus
+  ActionStatus,
+  DeveloperIntelligenceSummary,
+  DownloadDiagnosticBreakdown,
+  VersionIntelligenceItem,
+  SecurityScanInsight,
+  IntelligenceAnomaly,
+  IntelligenceAuditEntry
 } from '../../types/intelligence';
 
 import { AppData } from '../../types';
@@ -42,13 +52,32 @@ import { RankingIntelligencePanel } from './RankingIntelligencePanel';
 import { OperationalIntelligence } from './OperationalIntelligence';
 import { IntelligenceActionCenter } from './IntelligenceActionCenter';
 import { EmergencyControlsModal } from './EmergencyControlsModal';
+import { DeveloperIntelligencePanel } from './DeveloperIntelligencePanel';
+import { DownloadIntelligencePanel } from './DownloadIntelligencePanel';
+import { SecurityIntelligencePanel } from './SecurityIntelligencePanel';
+import { VersionIntelligencePanel } from './VersionIntelligencePanel';
+import { IntelligenceAnomalies } from './IntelligenceAnomalies';
+import { IntelligenceAuditLog } from './IntelligenceAuditLog';
 
 interface AdminIntelligenceDashboardProps {
   id?: string;
   initialApps?: AppData[];
 }
 
-type TabType = 'overview' | 'apps' | 'search' | 'recommendations' | 'ranking' | 'actions' | 'operations';
+type TabType = 
+  | 'overview' 
+  | 'apps' 
+  | 'developers'
+  | 'search' 
+  | 'recommendations' 
+  | 'ranking' 
+  | 'downloads'
+  | 'versions'
+  | 'security'
+  | 'anomalies'
+  | 'actions' 
+  | 'audit'
+  | 'operations';
 
 export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProps> = ({
   id = 'admin-intelligence-dashboard',
@@ -68,6 +97,7 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
   const [appsTotal, setAppsTotal] = useState<number>(0);
   const [appsPage, setAppsPage] = useState<number>(1);
   const [appsSearch, setAppsSearch] = useState<string>('');
+  const [developers, setDevelopers] = useState<DeveloperIntelligenceSummary[]>([]);
   const [topQueries, setTopQueries] = useState<SearchQueryInsight[]>([]);
   const [zeroQueries, setZeroQueries] = useState<SearchQueryInsight[]>([]);
   const [searchCtr, setSearchCtr] = useState<number>(68.2);
@@ -75,6 +105,11 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
   const [shelvesCtr, setShelvesCtr] = useState<number>(28.5);
   const [feedbackStatus, setFeedbackStatus] = useState<'HEALTHY' | 'EVALUATING' | 'RECALIBRATING'>('HEALTHY');
   const [leaderboard, setLeaderboard] = useState<RankingMovementSignal[]>([]);
+  const [downloads, setDownloads] = useState<DownloadDiagnosticBreakdown | null>(null);
+  const [versions, setVersions] = useState<VersionIntelligenceItem[]>([]);
+  const [security, setSecurity] = useState<SecurityScanInsight | null>(null);
+  const [anomalies, setAnomalies] = useState<IntelligenceAnomaly[]>([]);
+  const [auditLogs, setAuditLogs] = useState<IntelligenceAuditEntry[]>([]);
   const [actions, setActions] = useState<IntelligenceAction[]>([]);
   const [health, setHealth] = useState<OperationalHealthIndicator[]>([]);
   const [dataQuality, setDataQuality] = useState<IntelligenceDataQuality[]>([]);
@@ -96,9 +131,15 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
         discoveryRes,
         searchFunnelRes,
         appsRes,
+        devsRes,
         searchRes,
         recsRes,
         rankingRes,
+        downloadsRes,
+        versionsRes,
+        securityRes,
+        anomaliesRes,
+        auditRes,
         actionsRes,
         operationsRes,
         emergencyRes
@@ -107,9 +148,15 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
         ClientIntelligenceService.getDiscoveryFunnel(targetPeriod),
         ClientIntelligenceService.getSearchFunnel(targetPeriod),
         ClientIntelligenceService.getApps({ page: appsPage, limit: 20, search: appsSearch }),
+        ClientIntelligenceService.getDevelopers(),
         ClientIntelligenceService.getSearch(),
         ClientIntelligenceService.getRecommendations(),
         ClientIntelligenceService.getRanking(),
+        ClientIntelligenceService.getDownloads(),
+        ClientIntelligenceService.getVersions(),
+        ClientIntelligenceService.getSecurity(),
+        ClientIntelligenceService.getAnomalies(),
+        ClientIntelligenceService.getAuditLogs(),
         ClientIntelligenceService.getActions(),
         ClientIntelligenceService.getOperations(),
         ClientIntelligenceService.getEmergencyControls()
@@ -121,6 +168,7 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
       setSearchFunnel(searchFunnelRes);
       setApps(appsRes.items);
       setAppsTotal(appsRes.total);
+      setDevelopers(devsRes);
       setTopQueries(searchRes.topQueries);
       setZeroQueries(searchRes.zeroResultQueries);
       setSearchCtr(searchRes.overallCtr);
@@ -128,6 +176,11 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
       setShelvesCtr(recsRes.overallCtr);
       setFeedbackStatus(recsRes.feedbackLoopStatus);
       setLeaderboard(rankingRes.leaderboard);
+      setDownloads(downloadsRes);
+      setVersions(versionsRes);
+      setSecurity(securityRes);
+      setAnomalies(anomaliesRes);
+      setAuditLogs(auditRes);
       setActions(actionsRes);
       setHealth(operationsRes.health);
       setDataQuality(operationsRes.dataQuality);
@@ -167,10 +220,16 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
   const tabs: { id: TabType; label: string; icon: any; count?: number }[] = [
     { id: 'overview', label: 'Ringkasan', icon: Activity },
     { id: 'apps', label: 'Aplikasi', icon: Smartphone, count: appsTotal || undefined },
+    { id: 'developers', label: 'Pengembang', icon: Users, count: developers.length || undefined },
     { id: 'search', label: 'Pencarian', icon: Search },
     { id: 'recommendations', label: 'Rekomendasi', icon: Sparkles },
     { id: 'ranking', label: 'Peringkat', icon: Award },
-    { id: 'actions', label: 'Pusat Aksi', icon: AlertTriangle, count: actions.filter(a => a.status === 'OPEN').length || undefined },
+    { id: 'downloads', label: 'Unduhan', icon: Download },
+    { id: 'versions', label: 'Versi', icon: Layers, count: versions.length || undefined },
+    { id: 'security', label: 'Keamanan', icon: ShieldCheck },
+    { id: 'anomalies', label: 'Anomali', icon: AlertTriangle, count: anomalies.filter(a => a.status === 'OPEN').length || undefined },
+    { id: 'actions', label: 'Pusat Aksi', icon: CheckCircle2, count: actions.filter(a => a.status === 'OPEN').length || undefined },
+    { id: 'audit', label: 'Audit Trail', icon: FileText },
     { id: 'operations', label: 'Operasional', icon: Server }
   ];
 
@@ -300,6 +359,13 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
         />
       )}
 
+      {activeTab === 'developers' && (
+        <DeveloperIntelligencePanel
+          developers={developers}
+          loading={loading}
+        />
+      )}
+
       {activeTab === 'search' && (
         <SearchIntelligencePanel
           topQueries={topQueries}
@@ -327,10 +393,45 @@ export const AdminIntelligenceDashboard: React.FC<AdminIntelligenceDashboardProp
         />
       )}
 
+      {activeTab === 'downloads' && (
+        <DownloadIntelligencePanel
+          downloads={downloads}
+          loading={loading}
+        />
+      )}
+
+      {activeTab === 'versions' && (
+        <VersionIntelligencePanel
+          versions={versions}
+          loading={loading}
+        />
+      )}
+
+      {activeTab === 'security' && (
+        <SecurityIntelligencePanel
+          security={security}
+          loading={loading}
+        />
+      )}
+
+      {activeTab === 'anomalies' && (
+        <IntelligenceAnomalies
+          anomalies={anomalies}
+          loading={loading}
+        />
+      )}
+
       {activeTab === 'actions' && (
         <IntelligenceActionCenter
           actions={actions}
           onStatusChange={handleActionStatusChange}
+          loading={loading}
+        />
+      )}
+
+      {activeTab === 'audit' && (
+        <IntelligenceAuditLog
+          logs={auditLogs}
           loading={loading}
         />
       )}

@@ -1,5 +1,5 @@
 import { AdminAuditLog, AdminAuditAction } from '../../types';
-import { db, auth } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit as firestoreLimit, onSnapshot } from 'firebase/firestore';
 
 export async function logAdminAction(params: {
@@ -9,9 +9,8 @@ export async function logAdminAction(params: {
   entityName?: string;
   metadata?: Record<string, any>;
 }): Promise<void> {
-  const adminUser = auth.currentUser;
-  const adminId = adminUser?.uid || 'admin_master';
-  const adminEmail = adminUser?.email || 'fahriandriansaputra123@gmail.com';
+  const adminId = 'admin_master';
+  const adminEmail = 'fahriandriansaputra123@gmail.com';
 
   const logPayload = {
     adminId,
