@@ -25,6 +25,14 @@ import { CloudinaryService } from './server/storage/cloudinary';
 import { getSession } from '@auth/express';
 import { authConfig } from './auth';
 import { resolveOrCreateFirestoreUser } from './server/auth';
+import { generateRobotsTxt } from './server/seo/robots';
+import { 
+  generateSitemapIndexXml, 
+  generateAppsSitemapXml, 
+  generateGamesSitemapXml, 
+  generateCategoriesSitemapXml, 
+  generateBlogSitemapXml 
+} from './server/seo/sitemap';
 
 // Initialize Express App
 const app = express();
@@ -1091,12 +1099,61 @@ app.post('/api/internal/worker/process-apk', (req, res) => {
 // ---------------------------------------------------------------------------
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain');
-  res.send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n`);
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.send(generateRobotsTxt(baseUrl));
+});
+
+app.get('/ads.txt', (req, res) => {
+  res.type('text/plain');
+  const pubId = process.env.ADSENSE_PUBLISHER_ID || 
+                process.env.VITE_ADSENSE_CLIENT_ID?.replace(/^ca-/, '') || 
+                'pub-XXXXXXXXXXXXXXXX';
+  res.send(`google.com, ${pubId}, DIRECT, f08c47fec0942fa0\n`);
 });
 
 app.get('/sitemap.xml', (req, res) => {
   res.type('application/xml');
-  res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://aeroapk.com/</loc></url></urlset>`);
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.send(generateSitemapIndexXml(baseUrl));
+});
+
+app.get(['/sitemap-apps.xml', '/sitemaps/apps.xml'], async (req, res) => {
+  res.type('application/xml');
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  try {
+    const xml = await generateAppsSitemapXml(undefined, baseUrl);
+    res.send(xml);
+  } catch (err) {
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
+app.get(['/sitemap-games.xml', '/sitemaps/games.xml'], async (req, res) => {
+  res.type('application/xml');
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  try {
+    const xml = await generateGamesSitemapXml(undefined, baseUrl);
+    res.send(xml);
+  } catch (err) {
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
+app.get(['/sitemap-categories.xml', '/sitemaps/categories.xml'], (req, res) => {
+  res.type('application/xml');
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.send(generateCategoriesSitemapXml(undefined, baseUrl));
+});
+
+app.get(['/sitemap-blog.xml', '/sitemaps/blog.xml'], async (req, res) => {
+  res.type('application/xml');
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  try {
+    const xml = await generateBlogSitemapXml(undefined, baseUrl);
+    res.send(xml);
+  } catch (err) {
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
 });
 
 // ---------------------------------------------------------------------------

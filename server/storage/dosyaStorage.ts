@@ -101,6 +101,20 @@ export class DosyaStorage implements APKStorage {
       };
     }
 
+    // Support legacy/integration test r2_storage path
+    const r2Path = path.join(process.cwd(), 'uploads', 'r2_storage', objectKey.replace(/\//g, path.sep));
+    if (fs.existsSync(r2Path)) {
+      const stats = fs.statSync(r2Path);
+      const fileBuffer = fs.readFileSync(r2Path);
+      return {
+        key: objectKey,
+        size: stats.size,
+        contentType: 'application/vnd.android.package-archive',
+        eTag: crypto.createHash('md5').update(fileBuffer).digest('hex'),
+        lastModified: stats.mtime,
+      };
+    }
+
     // Try alternate search in uploads/apks
     const fallbackPath = path.join(process.cwd(), 'uploads', 'apks', path.basename(objectKey));
     if (fs.existsSync(fallbackPath)) {
@@ -239,7 +253,9 @@ export class DosyaStorage implements APKStorage {
       return true;
     }
     const localFilePath = path.join(this.localStorageDir, objectKey.replace(/\//g, path.sep));
-    return fs.existsSync(localFilePath);
+    if (fs.existsSync(localFilePath)) return true;
+    const r2Path = path.join(process.cwd(), 'uploads', 'r2_storage', objectKey.replace(/\//g, path.sep));
+    return fs.existsSync(r2Path);
   }
 
   /**

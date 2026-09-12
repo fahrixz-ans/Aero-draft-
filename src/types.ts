@@ -27,6 +27,8 @@ export interface AppData {
   screenshots: string[];
   description: string;
   category: string;
+  categories?: string[];
+  secondaryCategory?: string;
   categoryId?: string;
   version: string;
   size: string;

@@ -38,13 +38,13 @@ export function normalizeAppData(app: any): AppData {
   };
 }
 
-export function getAppPageSeo(rawApp: any): PageSeoMetadata {
+export function getAppPageSeo(rawApp: any, baseUrl: string = BASE_URL): PageSeoMetadata {
   const app = normalizeAppData(rawApp);
   const isEligible = app.status === 'published' && app.securityStatus !== 'QUARANTINED';
-  const canonicalUrl = `${BASE_URL}/apps/${app.slug || app.id}`;
-  const title = `${app.name} APK v${app.version} — Download & Info Android | AERO`;
-  const description = `Unduh APK ${app.name} versi ${app.version} resmi karya ${app.developer}. Ukuran ${app.size || 'N/A'}, terverifikasi aman di AERO.`;
-  const ogImage = app.icon || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&h=630&fit=crop&q=80';
+  const canonicalUrl = `${baseUrl}/apps/${app.slug || app.id}`;
+  const title = `${app.name} APK — Download & Info | Mod Station`;
+  const description = `Unduh APK ${app.name} versi ${app.version} karya ${app.developer}. Ukuran ${app.size || 'N/A'}, kategori ${app.category}. Bebas malware dan terverifikasi aman di Mod Station.`;
+  const ogImage = app.icon || `${baseUrl}/assets/mod-station-logo.svg`;
 
   return {
     title,
@@ -58,12 +58,12 @@ export function getAppPageSeo(rawApp: any): PageSeoMetadata {
   };
 }
 
-export function getCategoryPageSeo(categoryName: string): PageSeoMetadata {
+export function getCategoryPageSeo(categoryName: string, baseUrl: string = BASE_URL): PageSeoMetadata {
   const slug = encodeURIComponent(categoryName.toLowerCase().replace(/\s+/g, '-'));
-  const canonicalUrl = `${BASE_URL}/categories/${slug}`;
-  const title = `Aplikasi Android Kategori ${categoryName} Terbaik — AERO`;
-  const description = `Temukan dan unduh APK Android terpopuler di kategori ${categoryName}. Gratis, cepat, dan terverifikasi aman di AERO.`;
-  const ogImage = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&h=630&fit=crop&q=80';
+  const canonicalUrl = `${baseUrl}/categories/${slug}`;
+  const title = `Aplikasi ${categoryName} Android — Mod Station`;
+  const description = `Temukan dan unduh aplikasi APK kategori ${categoryName} Android terbaik, resmi, dan terverifikasi di Mod Station.`;
+  const ogImage = `${baseUrl}/assets/mod-station-logo.svg`;
 
   return {
     title,
@@ -77,12 +77,31 @@ export function getCategoryPageSeo(categoryName: string): PageSeoMetadata {
   };
 }
 
-export function getCollectionPageSeo(collection: AppCollection): PageSeoMetadata {
+export function getDeveloperPageSeo(developerName: string, slug?: string, baseUrl: string = BASE_URL): PageSeoMetadata {
+  const devSlug = slug || encodeURIComponent(developerName.toLowerCase().replace(/\s+/g, '-'));
+  const canonicalUrl = `${baseUrl}/developer/${devSlug}`;
+  const title = `${developerName} — Unduh Aplikasi & Game Android | Mod Station`;
+  const description = `Daftar aplikasi dan game Android resmi yang dikembangkan oleh ${developerName} di Mod Station.`;
+  const ogImage = `${baseUrl}/assets/mod-station-logo.svg`;
+
+  return {
+    title,
+    description,
+    canonicalUrl,
+    ogTitle: title,
+    ogDescription: description,
+    ogImage,
+    ogType: 'profile',
+    robots: 'index, follow'
+  };
+}
+
+export function getCollectionPageSeo(collection: AppCollection, baseUrl: string = BASE_URL): PageSeoMetadata {
   const isEligible = collection.isPublished;
-  const canonicalUrl = `${BASE_URL}/collections/${collection.slug || collection.id}`;
-  const title = `${collection.title} — Koleksi APK Android | AERO`;
-  const description = collection.description || `Koleksi aplikasi Android pilihan: ${collection.title} di AERO.`;
-  const ogImage = collection.bannerUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&h=630&fit=crop&q=80';
+  const canonicalUrl = `${baseUrl}/collections/${collection.slug || collection.id}`;
+  const title = `${collection.title} — Koleksi APK Android | Mod Station`;
+  const description = collection.description || `Koleksi aplikasi Android pilihan: ${collection.title} di Mod Station.`;
+  const ogImage = collection.bannerUrl || `${baseUrl}/assets/mod-station-logo.svg`;
 
   return {
     title,
@@ -96,10 +115,11 @@ export function getCollectionPageSeo(collection: AppCollection): PageSeoMetadata
   };
 }
 
-export function getSearchPageSeo(query?: string): PageSeoMetadata {
-  const canonicalUrl = `${BASE_URL}/search${query ? `?q=${encodeURIComponent(query)}` : ''}`;
-  const title = query ? `Hasil Pencarian untuk "${query}" — AERO` : 'Cari Aplikasi & Game Android — AERO';
-  const description = query ? `Hasil pencarian APK Android untuk ${query} di AERO.` : 'Cari dan temukan aplikasi Android resmi terverifikasi di AERO.';
+export function getBlogPageSeo(blog: any, baseUrl: string = BASE_URL): PageSeoMetadata {
+  const canonicalUrl = `${baseUrl}/blog/${blog.slug || blog.id}`;
+  const title = `${blog.title} — Mod Station Blog`;
+  const description = blog.excerpt || blog.description || blog.title;
+  const ogImage = blog.coverImage || `${baseUrl}/assets/mod-station-logo.svg`;
 
   return {
     title,
@@ -107,7 +127,24 @@ export function getSearchPageSeo(query?: string): PageSeoMetadata {
     canonicalUrl,
     ogTitle: title,
     ogDescription: description,
-    ogImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&h=630&fit=crop&q=80',
+    ogImage,
+    ogType: 'article',
+    robots: 'index, follow'
+  };
+}
+
+export function getSearchPageSeo(query?: string, baseUrl: string = BASE_URL): PageSeoMetadata {
+  const canonicalUrl = `${baseUrl}/search${query ? `?q=${encodeURIComponent(query)}` : ''}`;
+  const title = query ? `Hasil Pencarian untuk "${query}" — Mod Station` : 'Cari Aplikasi & Game Android — Mod Station';
+  const description = query ? `Hasil pencarian aplikasi APK Android untuk ${query} di Mod Station.` : 'Cari dan temukan aplikasi Android resmi terverifikasi di Mod Station.';
+
+  return {
+    title,
+    description,
+    canonicalUrl,
+    ogTitle: title,
+    ogDescription: description,
+    ogImage: `${baseUrl}/assets/mod-station-logo.svg`,
     ogType: 'website',
     robots: 'noindex, follow'
   };

@@ -66,7 +66,7 @@ export default function AppDetailHeader({
     if (onNavigateCategory) {
       onNavigateCategory(catSlug);
     } else {
-      window.location.hash = `/apps/category/${catSlug}`;
+      window.location.hash = `/detail${catSlug}`;
     }
   };
 

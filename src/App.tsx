@@ -19,6 +19,7 @@ import DeveloperDetailView from './components/views/DeveloperDetailView';
 import CategoryDetailView from './components/views/CategoryDetailView';
 import AllDevelopersView from './components/views/AllDevelopersView';
 import AllCategoriesView from './components/views/AllCategoriesView';
+import { categoryToSlug } from './utils/categoryUtils';
 import DeveloperRegisterView from './components/DeveloperRegisterView';
 import DeveloperDashboard from './components/developer/DeveloperDashboard';
 import SearchBar from './components/SearchBar';
@@ -31,10 +32,9 @@ import EmptyState from './components/EmptyState';
 import AdminPanel from './components/AdminPanel';
 import RecentlyUpdatedPage from './components/RecentlyUpdatedPage';
 import DynamicSEO from './components/DynamicSEO';
-import DonateView from './components/DonateView';
+import DonateView from './components/views/DonateView';
 import SavedAppsView from './components/SavedAppsView';
 import AdSenseBanner from './components/common/AdSenseBanner';
-import UserProfileView from './components/UserProfileView';
 import DownloadHistoryView from './components/DownloadHistoryView';
 import NotificationCenterView from './components/NotificationCenterView';
 import AppComparisonView from './components/AppComparisonView';
@@ -85,7 +85,6 @@ import SocialMediaView from './components/views/SocialMediaView';
 import HelpCenterView from './components/views/HelpCenterView';
 import HelpAIAssistantView from './components/views/HelpAIAssistantView';
 import HelpArticlesView from './components/views/HelpArticlesView';
-import ChangePasswordView from './components/views/ChangePasswordView';
 import ErrorViews from './components/views/ErrorViews';
 import BackButton from './components/navigation/BackButton';
 import { articlesData } from './data/articlesData';
@@ -537,6 +536,21 @@ export default function App() {
         const slug = hash.replace('#/developer/', '');
         setSelectedDeveloperSlug(slug);
         setCurrentView('developer-detail');
+      } else if (hash.startsWith('#/detail')) {
+        let slug = '';
+        if (hash.startsWith('#/detail/')) {
+          slug = hash.slice(9);
+        } else {
+          slug = hash.slice(8);
+        }
+        slug = slug.split('?')[0].split('/')[0].trim().toLowerCase();
+        if (slug) {
+          setSelectedCategorySlug(slug);
+          setCurrentView('category-detail');
+        } else {
+          setSelectedCategorySlug(null);
+          setCurrentView('all-categories');
+        }
       } else if (hash.startsWith('#/apps/category/')) {
         const slug = hash.replace('#/apps/category/', '');
         setSelectedCategorySlug(slug);
@@ -1001,8 +1015,8 @@ export default function App() {
         window.location.hash = `/apps/developer/${slug}`;
         setSelectedDeveloperSlug(slug);
         setCurrentView('developer-detail');
-      } else if (view === 'category-detail' && slug) {
-        window.location.hash = `/apps/category/${slug}`;
+      } else if ((view === 'category-detail' || view === 'category') && slug) {
+        window.location.hash = `/detail${slug}`;
         setSelectedCategorySlug(slug);
         setCurrentView('category-detail');
       } else if (view === 'all-developers' || view === 'developer' || view === 'developers') {
@@ -1270,6 +1284,11 @@ export default function App() {
         currentView={currentView} 
         selectedApp={selectedAppObj} 
         categoryFilter={filters.category} 
+        categorySlug={selectedCategorySlug}
+        developerSlug={selectedDeveloperSlug}
+        blogSlug={selectedBlogSlug}
+        blogCategory={selectedBlogCategory}
+        searchQuery={searchQuery}
       />
 
       {/* Navigation Header bar - Hidden on dedicated internal views */}
@@ -1344,8 +1363,7 @@ export default function App() {
                   onNavigate={navigateTo}
                   onDownloadApp={handleDirectDownload}
                   onSelectCategory={(cat) => {
-                    setFilters(prev => ({ ...prev, category: cat }));
-                    navigateTo('all');
+                    navigateTo('category-detail', categoryToSlug(cat));
                   }}
                 />
 
@@ -1658,8 +1676,7 @@ export default function App() {
                             appCount={count}
                             isSelected={filters.category === cat}
                             onSelect={(c) => {
-                              setFilters(prev => ({ ...prev, category: c }));
-                              navigateTo('all');
+                              navigateTo('category-detail', categoryToSlug(c));
                             }}
                           />
                         );
@@ -1952,9 +1969,8 @@ export default function App() {
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
                 <CategoriesView
                   apps={apps}
-                  onSelectCategory={(cat) => {
-                    setFilters(prev => ({ ...prev, category: cat }));
-                    navigateTo('all');
+                  onSelectCategory={(catSlug) => {
+                    navigateTo('category-detail', catSlug);
                   }}
                 />
               </div>
@@ -2171,7 +2187,7 @@ export default function App() {
 
             {currentView === 'change-password' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
-                <ChangePasswordView
+                <SettingsChangePasswordView
                   onNavigate={navigateTo}
                   onBack={() => handleBack('help-center')}
                 />

@@ -30,6 +30,7 @@ import RecommendationShelf from './recommendations/RecommendationShelf';
 import { recordRecentlyViewed, recordDownloadHistory } from '../services/userService';
 import AppTrustIndicators from './AppTrustIndicators';
 
+import Breadcrumb from './Breadcrumb';
 import { developerToSlug } from '../utils/developerUtils';
 import { categoryToSlug } from '../utils/categoryUtils';
 import { useLanguage } from '../context/LanguageContext';
@@ -365,21 +366,38 @@ export default function AppDetail({
         </div>
       )}
 
-      {/* Top Back Action Button */}
-      <div className="flex items-center">
-        <BackButton
-          onBack={() => {
-            if (onBack) {
-              onBack();
-            } else if (window.history && window.history.length > 1) {
-              window.history.back();
-            } else {
-              onNavigate('apps');
-            }
-          }}
-          label={t('common.back', 'Kembali')}
-          showText={true}
+      {/* Top Breadcrumb Navigation & Back Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-100 dark:border-white/5">
+        <Breadcrumb
+          paths={[
+            { 
+              label: (app.category && (app.category.toLowerCase().includes('game') || ['action', 'arcade', 'adventure', 'strategy', 'rpg', 'casual', 'simulation', 'sports', 'racing', 'puzzle', 'board'].includes(app.category.toLowerCase()))) ? 'Game' : 'Aplikasi', 
+              view: (app.category && (app.category.toLowerCase().includes('game') || ['action', 'arcade', 'adventure', 'strategy', 'rpg', 'casual', 'simulation', 'sports', 'racing', 'puzzle', 'board'].includes(app.category.toLowerCase()))) ? 'games' : 'apps' 
+            },
+            { 
+              label: app.category || 'Utilities', 
+              view: 'category', 
+              slug: categoryToSlug(app.category || 'Utilities') 
+            },
+            { label: app.name }
+          ]}
+          onNavigate={onNavigate}
         />
+        <div className="hidden sm:flex items-center">
+          <BackButton
+            onBack={() => {
+              if (onBack) {
+                onBack();
+              } else if (window.history && window.history.length > 1) {
+                window.history.back();
+              } else {
+                onNavigate((app.category && app.category.toLowerCase().includes('game')) ? 'games' : 'apps');
+              }
+            }}
+            label={t('common.back', 'Kembali')}
+            showText={true}
+          />
+        </div>
       </div>
 
       {/* Main Grid Layout */}

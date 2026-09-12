@@ -1,14 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Grid, ArrowLeft, Download, Star, Filter, 
-  Layers, ArrowUpDown, Flame, Clock, Sparkles
+  ArrowLeft, Star, ChevronDown, ChevronUp, ChevronRight, 
+  ChevronLeft, Sparkles, Layers, ShieldCheck, ArrowRight
 } from 'lucide-react';
 import { AppData } from '../../types';
-import AppCard from '../AppCard';
 import Breadcrumb from '../Breadcrumb';
 import FollowSocialSection from '../FollowSocialSection';
-import { slugToCategoryName, categoryToSlug } from '../../utils/categoryUtils';
-import { CATEGORIES_METADATA } from './CategoriesView';
+import { 
+  slugToCategoryName, 
+  categoryToSlug, 
+  appMatchesCategory, 
+  getAppCategories,
+  getRelatedAppsForCategory
+} from '../../utils/categoryUtils';
+import { getForYouRecommendations } from '../../services/recommendations/recommendationService';
 
 interface CategoryDetailViewProps {
   categorySlug?: string;
@@ -20,7 +25,228 @@ interface CategoryDetailViewProps {
   onBack: () => void;
 }
 
-const ALPHABET = ['Semua', '#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+/**
+ * Reusable single-row horizontal carousel for Category Detail layout
+ * - Horizontal single-line
+ * - Mobile swipe friendly
+ * - Does not break items to second line
+ * - Smooth scroll with clean hidden scrollbars
+ */
+interface HorizontalCarouselProps {
+  items: AppData[];
+  onSelectApp: (slug: string) => void;
+  emptyMessage?: string;
+  id?: string;
+}
+
+function HorizontalCarousel({ items, onSelectApp, emptyMessage, id }: HorizontalCarouselProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setCanScrollLeft(scrollLeft > 5);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [items]);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return;
+    const offset = 320;
+    scrollRef.current.scrollBy({
+      left: direction === 'left' ? -offset : offset,
+      behavior: 'smooth'
+    });
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="py-8 px-4 text-center rounded-2xl bg-slate-50 dark:bg-white/[0.02] border border-dashed border-slate-200 dark:border-white/10">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {emptyMessage || 'Belum ada aplikasi yang tersedia pada bagian ini.'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative group/carousel" id={id}>
+      {/* Scroll controls for desktop */}
+      {canScrollLeft && (
+        <button
+          onClick={() => handleScroll('left')}
+          aria-label="Scroll ke kiri"
+          className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-20 w-8 h-8 rounded-full bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-white/10 items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition-all cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      )}
+
+      {canScrollRight && (
+        <button
+          onClick={() => handleScroll('right')}
+          aria-label="Scroll ke kanan"
+          className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-20 w-8 h-8 rounded-full bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-white/10 items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition-all cursor-pointer"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Single-row horizontal container */}
+      <div
+        ref={scrollRef}
+        onScroll={checkScroll}
+        className="flex items-start gap-4 overflow-x-auto overflow-y-hidden scroll-smooth scrollbar-none py-1 px-0.5 select-none"
+        style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+      >
+        {items.map((app) => (
+          <div
+            key={app.id}
+            onClick={() => onSelectApp(app.slug || app.id)}
+            style={{ scrollSnapAlign: 'start' }}
+            className="flex flex-col items-center sm:items-start shrink-0 w-24 sm:w-28 cursor-pointer group/item text-center sm:text-left transition-transform active:scale-95"
+          >
+            {/* Logo */}
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 overflow-hidden shadow-xs group-hover/item:scale-105 group-hover/item:shadow-md transition-all shrink-0">
+              <img
+                src={app.iconUrl || app.icon}
+                alt={app.name}
+                referrerPolicy="no-referrer"
+                loading="lazy"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&h=128&fit=crop&q=80';
+                }}
+              />
+            </div>
+
+            {/* Nama App */}
+            <h3 className="w-full text-xs font-semibold text-slate-900 dark:text-white truncate mt-2 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors">
+              {app.name}
+            </h3>
+
+            {/* Ukuran */}
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5">
+              {app.size || '35 MB'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Reusable vertical list component for Section 2 and Section 5
+ * - Default 4 items
+ * - In-place expand/collapse ("Lihat lainnya ˅" / "Lihat lainnya ^")
+ * - Does not change views
+ */
+interface VerticalListProps {
+  items: AppData[];
+  onSelectApp: (slug: string) => void;
+  emptyMessage?: string;
+  id?: string;
+}
+
+function VerticalList({ items, onSelectApp, emptyMessage, id }: VerticalListProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const DEFAULT_COUNT = 4;
+  const displayItems = isExpanded ? items : items.slice(0, DEFAULT_COUNT);
+
+  if (items.length === 0) {
+    return (
+      <div className="py-8 px-4 text-center rounded-2xl bg-slate-50 dark:bg-white/[0.02] border border-dashed border-slate-200 dark:border-white/10">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {emptyMessage || 'Belum ada aplikasi yang tersedia pada daftar ini.'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5" id={id}>
+      <div className="divide-y divide-slate-100 dark:divide-white/5 bg-white dark:bg-[#131924] rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden shadow-xs">
+        {displayItems.map((app) => {
+          const categories = getAppCategories(app);
+          const categoriesText = categories.slice(0, 3).join(' • ');
+          const ratingValue = (app.ratingAverage || app.rating || 4.5).toFixed(1);
+
+          return (
+            <div
+              key={app.id}
+              onClick={() => onSelectApp(app.slug || app.id)}
+              className="p-3 sm:p-4 flex items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors cursor-pointer group select-none"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                {/* Logo */}
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-white/10 overflow-hidden shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                  <img
+                    src={app.iconUrl || app.icon}
+                    alt={app.name}
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&h=128&fit=crop&q=80';
+                    }}
+                  />
+                </div>
+
+                {/* Details */}
+                <div className="min-w-0">
+                  <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {app.name}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    {categoriesText}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    <span className="flex items-center gap-1 font-semibold text-amber-500">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      {ratingValue}
+                    </span>
+                    <span>•</span>
+                    <span className="font-medium text-slate-400 dark:text-slate-500">
+                      {app.size || '35 MB'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <div className="shrink-0">
+                <span className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center gap-1">
+                  Detail
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Expand / Collapse Button */}
+      {items.length > DEFAULT_COUNT && (
+        <div className="pt-1 text-center">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors cursor-pointer"
+          >
+            <span>{isExpanded ? 'Lihat lainnya ^' : 'Lihat lainnya ˅'}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CategoryDetailView({
   categorySlug,
@@ -31,97 +257,147 @@ export default function CategoryDetailView({
   onNavigate,
   onBack
 }: CategoryDetailViewProps) {
-  const [selectedType, setSelectedType] = useState<'all' | 'apps' | 'games'>('all');
-  const [selectedSort, setSelectedSort] = useState<'popular' | 'latest' | 'rating' | 'downloads'>('popular');
-  const [selectedLetter, setSelectedLetter] = useState('Semua');
+  const [recommendedApps, setRecommendedApps] = useState<AppData[]>([]);
+  const [activeSort, setActiveSort] = useState<'activity' | 'popular' | 'rating'>('activity');
 
-  // Resolve category name from slug or name prop
+  // 1. Resolve canonical category name from slug or name prop
   const categoryName = useMemo(() => {
     if (categorySlug) {
-      return slugToCategoryName(categorySlug, apps);
+      const resolved = slugToCategoryName(categorySlug, apps);
+      if (resolved) return resolved;
     }
-    return initialCategoryName || 'Kategori';
+    if (initialCategoryName) {
+      const slug = categoryToSlug(initialCategoryName);
+      const resolved = slugToCategoryName(slug, apps);
+      if (resolved) return resolved;
+      return initialCategoryName;
+    }
+    return null;
   }, [categorySlug, initialCategoryName, apps]);
 
-  // Metadata description
-  const categoryMeta = useMemo(() => {
-    return CATEGORIES_METADATA.find(m => m.name.toLowerCase() === categoryName.toLowerCase());
-  }, [categoryName]);
-
-  // Filter apps strictly in this category
+  // 2. Filter apps that match this category via multi-label system
   const categoryApps = useMemo(() => {
-    const slug = categoryToSlug(categoryName);
-    return apps.filter(app => {
-      const appCat = (app.category || '').trim();
-      return categoryToSlug(appCat) === slug || appCat.toLowerCase() === categoryName.toLowerCase();
-    });
+    if (!categoryName) return [];
+    return apps.filter(app => appMatchesCategory(app, categoryName));
   }, [apps, categoryName]);
 
-  // Compute category statistics
-  const stats = useMemo(() => {
-    const totalApps = categoryApps.length;
-    const totalDownloads = categoryApps.reduce((acc, a) => acc + (a.downloads || 0), 0);
-    const rated = categoryApps.filter(a => (a.ratingAverage || a.rating || 0) > 0);
-    const avgRating = rated.length > 0
-      ? rated.reduce((acc, a) => acc + (a.ratingAverage || a.rating || 0), 0) / rated.length
-      : 4.7;
-
-    return {
-      totalApps,
-      totalDownloads,
-      avgRating: Math.round(avgRating * 10) / 10
-    };
+  // 3. Section 1: Berdasarkan Aktivitas Terbaru (Horizontal Carousel)
+  const recentActivityApps = useMemo(() => {
+    return [...categoryApps].sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.releaseDate || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.releaseDate || 0).getTime();
+      return timeB - timeA;
+    });
   }, [categoryApps]);
 
-  // Filtered and sorted apps
-  const processedApps = useMemo(() => {
-    let list = [...categoryApps];
+  // 4. Section 2: Aplikasi Gratis Terpopuler (Vertical List, top 12)
+  const generalPopularApps = useMemo(() => {
+    return [...categoryApps].sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
+  }, [categoryApps]);
 
-    // Filter by type
-    if (selectedType === 'games') {
-      list = list.filter(a => a.category?.toLowerCase() === 'games' || a.category?.toLowerCase().includes('game'));
-    } else if (selectedType === 'apps') {
-      list = list.filter(a => a.category?.toLowerCase() !== 'games' && !a.category?.toLowerCase().includes('game'));
+  // 5. Section 3: Disarankan Untuk Anda (Real Recommendation Engine)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRecommendations() {
+      try {
+        const scored = await getForYouRecommendations(apps, undefined, 8);
+        if (isMounted) {
+          const recs = scored.map(s => s.app);
+          // Prioritize category affinity in recommendations
+          if (categoryName) {
+            recs.sort((a, b) => {
+              const aMatches = appMatchesCategory(a, categoryName) ? 1 : 0;
+              const bMatches = appMatchesCategory(b, categoryName) ? 1 : 0;
+              return bMatches - aMatches;
+            });
+          }
+          setRecommendedApps(recs);
+        }
+      } catch (err) {
+        if (isMounted) {
+          // Fallback to high rating apps in current catalog
+          setRecommendedApps(apps.filter(a => (a.ratingAverage || a.rating || 0) >= 4.5).slice(0, 8));
+        }
+      }
     }
+    loadRecommendations();
+    return () => { isMounted = false; };
+  }, [apps, categoryName]);
 
-    // Filter by alphabet
-    if (selectedLetter !== 'Semua') {
-      if (selectedLetter === '#') {
-        list = list.filter(app => /^[0-9]/.test(app.name.trim()));
-      } else {
-        list = list.filter(app => app.name.trim().toUpperCase().startsWith(selectedLetter));
-      }
-    }
+  // 6. Section 4: Yang berkaitan dengan {Kategori} (Horizontal Carousel)
+  const relatedApps = useMemo(() => {
+    if (!categoryName) return [];
+    return getRelatedAppsForCategory(categoryName, apps, categoryApps);
+  }, [categoryName, apps, categoryApps]);
 
-    // Sort
-    list.sort((a, b) => {
-      if (selectedSort === 'downloads') {
-        return (b.downloads || 0) - (a.downloads || 0);
-      }
-      if (selectedSort === 'latest') {
-        return new Date(b.updatedAt || b.releaseDate || 0).getTime() - new Date(a.updatedAt || a.releaseDate || 0).getTime();
-      }
-      if (selectedSort === 'rating') {
-        return (b.ratingAverage || b.rating || 0) - (a.ratingAverage || a.rating || 0);
-      }
-      // default: popular
-      const scoreA = (a.downloads || 0) + ((a.ratingAverage || a.rating || 4) * 100);
-      const scoreB = (b.downloads || 0) + ((b.ratingAverage || b.rating || 4) * 100);
+  // 7. Section 5: Aplikasi {Kategori} Gratis Terpopuler (Vertical List)
+  const categorySpecificPopularApps = useMemo(() => {
+    return [...categoryApps].sort((a, b) => {
+      const scoreA = (a.downloads || 0) + ((a.ratingAverage || a.rating || 4) * 50);
+      const scoreB = (b.downloads || 0) + ((b.ratingAverage || b.rating || 4) * 50);
       return scoreB - scoreA;
     });
+  }, [categoryApps]);
 
-    return list;
-  }, [categoryApps, selectedType, selectedLetter, selectedSort]);
+  // 8. Section 6: Fitur {Kategori} (Horizontal Carousel)
+  const featuredCategoryApps = useMemo(() => {
+    const explicitlyFeatured = categoryApps.filter(a => a.featured);
+    if (explicitlyFeatured.length >= 3) return explicitlyFeatured;
+    // Or highest rated in this category
+    return [...categoryApps]
+      .sort((a, b) => (b.ratingAverage || b.rating || 0) - (a.ratingAverage || a.rating || 0));
+  }, [categoryApps]);
 
-  const formatDownloadCount = (num: number) => {
-    if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}Miliar+`;
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}Jt+`;
-    if (num >= 1000) return `${(num / 1000).toFixed(0)}Rb+`;
-    return `${num}`;
+  // Smooth scroll to Section 1 if user clicks "Berdasarkan aktivitas terbaru →"
+  const scrollToRecent = () => {
+    const section = document.getElementById('section-1-aktivitas-terbaru');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
+  // If slug is invalid or category not recognized in 100 list
+  if (!categoryName) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8 animate-fade-in" id="category-not-found">
+        <Breadcrumb
+          paths={[
+            { label: 'Beranda', view: 'home' },
+            { label: 'Kategori', view: 'all-categories' },
+            { label: 'Tidak Ditemukan' }
+          ]}
+          onNavigate={onNavigate}
+        />
+
+        <div className="p-12 text-center bg-white dark:bg-[#131924] rounded-3xl border border-slate-200/80 dark:border-white/10 space-y-4 max-w-xl mx-auto shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <Layers className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              Kategori Tidak Ditemukan
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Kategori dengan URL <code className="text-blue-600">#/detail{categorySlug || ''}</code> tidak terdaftar dalam direktori resmi Mod Station.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('all-categories')}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors inline-flex items-center gap-2 cursor-pointer shadow-sm"
+          >
+            <span>Buka Direktori Kategori</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If category is valid but has 0 apps
+  const hasApps = categoryApps.length > 0;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 animate-fade-in" id="category-detail-container">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-10 animate-fade-in" id="category-detail-container">
       {/* Breadcrumb Navigation */}
       <Breadcrumb
         paths={[
@@ -132,171 +408,158 @@ export default function CategoryDetailView({
         onNavigate={onNavigate}
       />
 
-      {/* Header / Category Identity Hero */}
-      <div className="p-6 sm:p-8 bg-gradient-to-br from-white via-slate-50 to-blue-50/40 dark:from-[#131924] dark:via-[#111620] dark:to-blue-950/20 border border-slate-200/80 dark:border-white/10 rounded-3xl shadow-sm relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-start sm:items-center gap-5">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-600 text-white flex items-center justify-center shadow-md border-2 border-white dark:border-slate-800 shrink-0 select-none">
-              <Grid className="w-8 h-8 sm:w-10 sm:h-10" />
-            </div>
+      {/* HEADER: "← Nama Kategori" & "Berdasarkan aktivitas terbaru →" */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-white/10">
+        <button
+          onClick={onBack}
+          aria-label={`Kembali dari kategori ${categoryName}`}
+          className="flex items-center gap-2 text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group self-start"
+        >
+          <ArrowLeft className="w-6 h-6 sm:w-7 sm:h-7 group-hover:-translate-x-1 transition-transform" />
+          <span>{categoryName}</span>
+        </button>
 
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-                <Layers className="w-3 h-3" />
-                Kategori Resmi
-              </div>
-
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                {categoryName}
-              </h1>
-
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl">
-                {categoryMeta?.description || `Katalog aplikasi dan game Android terverifikasi aman untuk kategori ${categoryName}.`}
-              </p>
-            </div>
-          </div>
-
+        {hasApps && (
           <button
-            onClick={onBack}
-            className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors self-start sm:self-auto cursor-pointer"
+            onClick={scrollToRecent}
+            className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer self-start sm:self-auto"
           >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali
+            <span>Berdasarkan aktivitas terbaru</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
-        </div>
-
-        {/* Category Quick Stats */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-6 pt-6 border-t border-slate-200/80 dark:border-white/10 text-center">
-          <div className="p-3 bg-white/80 dark:bg-white/[0.03] rounded-2xl border border-slate-150 dark:border-white/5">
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Aplikasi</p>
-            <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5">
-              {stats.totalApps}
-            </p>
-          </div>
-
-          <div className="p-3 bg-white/80 dark:bg-white/[0.03] rounded-2xl border border-slate-150 dark:border-white/5">
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Unduhan</p>
-            <p className="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 mt-0.5">
-              {formatDownloadCount(stats.totalDownloads)}
-            </p>
-          </div>
-
-          <div className="p-3 bg-white/80 dark:bg-white/[0.03] rounded-2xl border border-slate-150 dark:border-white/5">
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Rata-Rata Rating</p>
-            <p className="text-lg sm:text-xl font-black text-amber-500 mt-0.5 flex items-center justify-center gap-1">
-              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-              {stats.avgRating}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter and Sorting Toolbar */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {/* Type Filter */}
-          <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-white/5 self-start sm:self-auto">
-            <button
-              onClick={() => setSelectedType('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                selectedType === 'all'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Semua ({categoryApps.length})
-            </button>
-            <button
-              onClick={() => setSelectedType('apps')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                selectedType === 'apps'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Aplikasi
-            </button>
-            <button
-              onClick={() => setSelectedType('games')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                selectedType === 'games'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              Games
-            </button>
-          </div>
-
-          {/* Sort Selector */}
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="w-4 h-4 text-slate-400" />
-            <select
-              value={selectedSort}
-              onChange={(e) => setSelectedSort(e.target.value as any)}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer"
-            >
-              <option value="popular">Terpopuler</option>
-              <option value="latest">Terbaru Rilis</option>
-              <option value="rating">Rating Tertinggi</option>
-              <option value="downloads">Unduhan Terbanyak</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Alphabet Filter Bar */}
-        <div className="p-2 bg-white dark:bg-[#131924] rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-x-auto scrollbar-none flex items-center gap-1 shadow-sm">
-          {ALPHABET.map(letter => (
-            <button
-              key={letter}
-              onClick={() => setSelectedLetter(letter)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                selectedLetter === letter
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              {letter}
-            </button>
-          ))}
-        </div>
-
-        {/* Apps Grid */}
-        {processedApps.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {processedApps.map(app => (
-              <AppCard
-                key={app.id}
-                app={app}
-                onSelect={onSelectApp}
-                onDownload={onDownloadApp}
-                showUpdatedTime={true}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="p-12 text-center bg-white dark:bg-[#131924] rounded-2xl border border-slate-200/80 dark:border-white/10 space-y-2">
-            <Filter className="w-8 h-8 text-slate-400 mx-auto" />
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              Tidak ada aplikasi ditemukan dengan filter yang dipilih.
-            </p>
-            <p className="text-xs text-slate-500">
-              Coba ganti filter tipe aplikasi atau pilih abjad 'Semua'.
-            </p>
-            <button
-              onClick={() => {
-                setSelectedLetter('Semua');
-                setSelectedType('all');
-              }}
-              className="mt-2 px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer"
-            >
-              Reset Filter
-            </button>
-          </div>
         )}
-      </div>
+      </header>
 
-      {/* Follow Mod Station */}
+      {/* When category has no apps: clean empty state */}
+      {!hasApps ? (
+        <div className="p-12 text-center bg-white dark:bg-[#131924] rounded-3xl border border-slate-200/80 dark:border-white/10 space-y-4 max-w-xl mx-auto shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              Belum Ada Aplikasi di Kategori {categoryName}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Aplikasi untuk kategori {categoryName} sedang dalam proses verifikasi dan penambahan katalog oleh tim Mod Station.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => onNavigate('all-categories')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer shadow-sm"
+            >
+              Jelajahi Kategori Lainnya
+            </button>
+            <button
+              onClick={() => onNavigate('home')}
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              Ke Beranda
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-12">
+          {/* SECTION 1 — BERDASARKAN AKTIVITAS TERBARU */}
+          <section className="space-y-4" id="section-1-aktivitas-terbaru">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                <span>Berdasarkan Aktivitas Terbaru</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <HorizontalCarousel
+              items={recentActivityApps}
+              onSelectApp={onSelectApp}
+              emptyMessage={`Belum ada rilis terbaru di kategori ${categoryName}.`}
+              id="carousel-recent-activity"
+            />
+          </section>
+
+          {/* SECTION 2 — APLIKASI GRATIS TERPOPULER */}
+          <section className="space-y-4" id="section-2-aplikasi-gratis-terpopuler">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Aplikasi Gratis Terpopuler</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <VerticalList
+              items={generalPopularApps}
+              onSelectApp={onSelectApp}
+              emptyMessage={`Belum ada aplikasi populer di kategori ${categoryName}.`}
+              id="list-general-popular"
+            />
+          </section>
+
+          {/* SECTION 3 — DISARANKAN UNTUK ANDA */}
+          <section className="space-y-4" id="section-3-disarankan-untuk-anda">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Disarankan Untuk Anda</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <HorizontalCarousel
+              items={recommendedApps}
+              onSelectApp={onSelectApp}
+              emptyMessage="Belum ada data rekomendasi yang valid untuk ditampilkan saat ini."
+              id="carousel-recommended"
+            />
+          </section>
+
+          {/* SECTION 4 — SECTION BERKAITAN */}
+          <section className="space-y-4" id="section-4-berkaitan">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Yang berkaitan dengan {categoryName}</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <HorizontalCarousel
+              items={relatedApps}
+              onSelectApp={onSelectApp}
+              emptyMessage={`Belum ada aplikasi yang berkaitan dengan ${categoryName}.`}
+              id="carousel-related"
+            />
+          </section>
+
+          {/* SECTION 5 — APLIKASI {KATEGORI} GRATIS TERPOPULER */}
+          <section className="space-y-4" id="section-5-kategori-populer">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Aplikasi {categoryName} Gratis Terpopuler</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <VerticalList
+              items={categorySpecificPopularApps}
+              onSelectApp={onSelectApp}
+              emptyMessage={`Belum ada aplikasi populer khusus kategori ${categoryName}.`}
+              id="list-category-specific-popular"
+            />
+          </section>
+
+          {/* SECTION 6 — FITUR {KATEGORI} */}
+          <section className="space-y-4" id="section-6-fitur-kategori">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Fitur {categoryName}</span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </h2>
+            </div>
+            <HorizontalCarousel
+              items={featuredCategoryApps}
+              onSelectApp={onSelectApp}
+              emptyMessage={`Belum ada fitur aplikasi terpilih untuk kategori ${categoryName}.`}
+              id="carousel-featured-category"
+            />
+          </section>
+        </div>
+      )}
+
+      {/* Follow Social Section */}
       <FollowSocialSection />
     </div>
   );

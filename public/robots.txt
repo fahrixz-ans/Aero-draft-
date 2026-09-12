@@ -1,11 +1,33 @@
-# AeroAPK Robots.txt
+# Robots.txt for Mod Station
 User-agent: *
 Allow: /
-Disallow: /api/
-Disallow: /admin
+Allow: /apps/
+Allow: /games/
+Allow: /category/
+Allow: /categories/
+Allow: /developer/
+Allow: /blog/
+Allow: /assets/
 
-# Host
-Host: https://aeroapk.com
+# Disallow admin, owner, developer, and internal APIs
+Disallow: /admin
+Disallow: /admin/
+Disallow: /owner
+Disallow: /owner/
+Disallow: /developer-dashboard
+Disallow: /developer-dashboard/
+Disallow: /api/
+Disallow: /api/admin/
+Disallow: /api/internal/
+Disallow: /auth/
+Disallow: /account/
+Disallow: /temporary/
+Disallow: /uploads/
+
+# Block dynamic search results
+Disallow: /search
+Disallow: /search/
+Disallow: /search?*
 
 # Sitemaps
 Sitemap: https://aeroapk.com/sitemap.xml
