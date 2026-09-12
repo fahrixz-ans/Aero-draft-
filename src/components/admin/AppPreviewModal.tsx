@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   X, ExternalLink, Download, ShieldCheck, CheckCircle2, 
-  Smartphone, Calendar, HardDrive, FileText, ArrowLeft, Star, Globe, Tag
+  Smartphone, Calendar, HardDrive, FileText, Star, Globe, Tag
 } from 'lucide-react';
 import { AppData } from '../../types';
 

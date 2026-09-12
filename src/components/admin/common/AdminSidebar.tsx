@@ -5,7 +5,7 @@ import {
   ShieldCheck, ScanLine, AlertTriangle, BarChart3, TrendingUp,
   Download, Search, HardDrive, Cpu, Database, Activity,
   Users, Key, History, Settings, ChevronDown, ChevronRight, PanelLeftClose, PanelLeft,
-  Globe, Brain
+  Globe, Brain, Bell, Headphones
 } from 'lucide-react';
 
 export interface AdminSidebarProps {
@@ -80,6 +80,7 @@ export default function AdminSidebar({
       title: 'CONTENT',
       items: [
         { id: 'homepage', label: 'Homepage', icon: Layout },
+        { id: 'notifications', label: 'Notifikasi', icon: Bell },
         { id: 'recommendations', label: 'Recommendations', icon: Sparkles },
         { id: 'ranking-engine', label: 'Ranking & Trending', icon: BarChart3 },
         { id: 'banners', label: 'Banners', icon: Flag },
@@ -96,6 +97,7 @@ export default function AdminSidebar({
           badge: pendingModerationCount > 0 ? pendingModerationCount : undefined,
           badgeColor: 'bg-amber-500 text-white'
         },
+        { id: 'customer-service', label: 'Customer Service', icon: Headphones },
         { id: 'reports', label: 'Reports', icon: FileText },
         { id: 'reviews', label: 'Reviews', icon: Star }
       ]
@@ -163,16 +165,19 @@ export default function AdminSidebar({
       {/* Top Sidebar Header */}
       <div className="h-16 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-sm">
-            A
-          </div>
+          <img
+            src="/assets/mod-station-logo.svg"
+            alt="Mod Station"
+            className="w-8 h-8 object-contain shrink-0"
+            referrerPolicy="no-referrer"
+          />
           {!isCompact && (
             <div className="truncate">
               <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white block">
-                AEROAPK
+                MOD STATION
               </span>
               <span className="text-[10px] font-semibold text-slate-400 block -mt-0.5">
-                Control Center v8.1
+                Admin Control Center
               </span>
             </div>
           )}

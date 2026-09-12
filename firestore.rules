@@ -131,6 +131,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Banners & Promotional Items
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Events collection
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Smart Collections (Stage 9.9) - public read, admin write
     match /smartCollections/{collectionId} {
       allow read: if true;

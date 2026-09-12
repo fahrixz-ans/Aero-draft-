@@ -1,18 +1,24 @@
 {
-  "name": "AeroAPK - Pusat APK Downloader Android Modern",
-  "short_name": "AeroAPK",
+  "name": "Mod Station - Pusat APK Downloader Android Modern",
+  "short_name": "Mod Station",
   "description": "Unduh berkas aplikasi APK Android resmi secara aman, cepat, dan terverifikasi tanpa batas.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B0E14",
-  "theme_color": "#2563EB",
+  "background_color": "#070a1e",
+  "theme_color": "#070a1e",
   "orientation": "portrait-primary",
   "icons": [
+    {
+      "src": "/assets/mod-station-logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
   "categories": ["utilities", "productivity", "games", "entertainment"]

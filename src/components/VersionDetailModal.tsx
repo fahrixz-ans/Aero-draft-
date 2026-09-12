@@ -54,7 +54,7 @@ export default function VersionDetailModal({
           <button
             onClick={onClose}
             aria-label="Tutup"
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 btn-close-effect cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

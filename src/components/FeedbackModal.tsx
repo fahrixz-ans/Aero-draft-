@@ -125,7 +125,7 @@ export default function FeedbackModal({ isOpen, onClose, app }: FeedbackModalPro
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-all cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl btn-close-effect cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>

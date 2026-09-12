@@ -11,6 +11,7 @@ import {
   Star
 } from 'lucide-react';
 import { CollectionType } from '../types/smartCollections';
+import { AppBadge } from '../../../components/common/AppBadge';
 
 interface SmartCollectionHeaderProps {
   id?: string;
@@ -76,12 +77,12 @@ export const SmartCollectionHeader: React.FC<SmartCollectionHeaderProps> = ({
     <div id={id} className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 gap-2">
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-            {renderIcon()}
-          </div>
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/40">
-            {defaultBadgeText()}
-          </span>
+          <AppBadge
+            type="custom"
+            label={defaultBadgeText()}
+            icon={renderIcon()}
+            size="sm"
+          />
           {typeof totalItems === 'number' && totalItems > 0 && (
             <span className="text-xs text-gray-400 font-medium">
               {totalItems} Aplikasi

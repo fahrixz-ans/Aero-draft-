@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { 
   X, 
-  ArrowLeft, 
   Search, 
   ArrowUpDown, 
   Sparkles, 
@@ -10,6 +9,7 @@ import {
   Star,
   Layers
 } from 'lucide-react';
+import BackButton from '../../../components/navigation/BackButton';
 import { SmartCollection, SmartCollectionAppItem } from '../types/smartCollections';
 import { SmartCollectionCard } from './SmartCollectionCard';
 
@@ -71,13 +71,7 @@ export const CollectionViewAll: React.FC<CollectionViewAllProps> = ({
         {/* Modal Top Bar */}
         <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <button
-              onClick={onClose}
-              aria-label="Kembali"
-              className="p-2 -ml-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+            <BackButton onBack={onClose} className="-ml-2" />
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">

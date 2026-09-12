@@ -45,10 +45,10 @@ export default function AdBanner({
         <div className="py-2.5 px-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-600 dark:text-slate-400">
           <div className="text-left space-y-0.5">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Mendukung Ekosistem Aero Catalog
+              Mendukung Ekosistem Mod Station
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Iklan ini membantu server Aero menyediakan unduhan APK cepat dan terverifikasi secara gratis.
+              Iklan ini membantu server Mod Station menyediakan unduhan APK cepat dan terverifikasi secara gratis.
             </p>
           </div>
 

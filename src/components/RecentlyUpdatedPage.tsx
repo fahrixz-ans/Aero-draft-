@@ -6,6 +6,7 @@ import {
 import { AppData } from '../types';
 import { CATEGORIES } from '../data/appsData';
 import { calculateAppBadges, getRelativeTimeString } from '../utils/badges';
+import { AppBadge, AppBadgeType } from './common/AppBadge';
 
 interface RecentlyUpdatedPageProps {
   apps: AppData[];
@@ -237,16 +238,18 @@ export default function RecentlyUpdatedPage({
                   {/* Top Meta Bar */}
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md border border-blue-500/20">
-                        <Clock className="h-2.5 w-2.5" /> {relativeTime}
-                      </span>
+                      <AppBadge
+                        type="updated"
+                        label={relativeTime}
+                        size="sm"
+                      />
                       {badges.slice(0, 2).map((b, bi) => (
-                        <span
+                        <AppBadge
                           key={bi}
-                          className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${b.styleClasses}`}
-                        >
-                          {b.label}
-                        </span>
+                          type={b.type as AppBadgeType}
+                          label={b.label}
+                          size="sm"
+                        />
                       ))}
                     </div>
 

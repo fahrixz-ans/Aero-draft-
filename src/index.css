@@ -1,25 +1,33 @@
 @import "tailwindcss";
 
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
 @theme {
-  --color-brand-light-bg: #FFFFFF;
-  --color-brand-light-sec: #F7F7F8;
-  --color-brand-light-primary: #171717;
-  --color-brand-light-secondary: #737373;
-  --color-brand-light-border: #E5E5E5;
-  --color-brand-light-accent: #5B5BD6;
+  --color-brand-light-bg: #fbfbfd;
+  --color-brand-light-sec: #f5f5f7;
+  --color-brand-light-primary: #1d1d1f;
+  --color-brand-light-secondary: #86868b;
+  --color-brand-light-border: #d2d2d7;
+  --color-brand-light-accent: #0071e3;
 
-  --color-brand-dark-bg: #101010;
-  --color-brand-dark-sec: #181818;
-  --color-brand-dark-primary: #F5F5F5;
-  --color-brand-dark-secondary: #999999;
-  --color-brand-dark-border: #292929;
-  --color-brand-dark-accent: #7777E8;
+  --color-brand-dark-bg: #000000;
+  --color-brand-dark-sec: #161617;
+  --color-brand-dark-primary: #f5f5f7;
+  --color-brand-dark-secondary: #a1a1a6;
+  --color-brand-dark-border: #424245;
+  --color-brand-dark-accent: #2997ff;
 
-  --radius-modal: 14px;
+  --radius-modal: 18px;
   --radius-badge: 6px;
-  --radius-icon: 10px;
-  --radius-card: 12px;
-  --radius-btn: 8px;
+  --radius-icon: 14px;
+  --radius-card: 16px;
+  --radius-btn: 9999px;
 }
 
 @utility bg-brand-bg {
@@ -77,3 +85,98 @@
     border-color: var(--color-brand-dark-accent);
   }
 }
+
+/* ==========================================================================
+   Mod Station Micro-Interactions & Icon Animations
+   ========================================================================== */
+
+/* 1. Global Press Feedback */
+.btn-press-feedback {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.btn-press-feedback:active {
+  transform: scale(0.90);
+}
+
+/* 2. Notification Bell Ring (scale 1 -> 1.1 -> 1 + subtle shake 220ms) */
+@keyframes icon-bell-ring {
+  0% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(-8deg); }
+  50% { transform: scale(1.1) rotate(8deg); }
+  75% { transform: scale(1.05) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.animate-icon-bell {
+  animation: icon-bell-ring 220ms ease-out forwards;
+}
+
+/* 3. Icon Chevron 180deg smooth rotation */
+.icon-chevron-rotate {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.icon-chevron-rotate.is-open {
+  transform: rotate(180deg);
+}
+
+/* 4. Icon X Close Pop (scale 0.85 -> 1 + rotate 8deg -> 0deg 180ms) */
+@keyframes icon-close-pop {
+  0% { transform: scale(0.85) rotate(8deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.animate-icon-close {
+  animation: icon-close-pop 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.btn-close-effect {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.btn-close-effect:active {
+  transform: scale(0.85) rotate(8deg);
+}
+
+/* 5. Icon Arrow Left Push (translateX(0) -> -4px -> 0 180ms) */
+@keyframes icon-arrow-left-push {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}
+.animate-icon-arrow-left {
+  animation: icon-arrow-left-push 180ms ease-out forwards;
+}
+
+/* 6. Icon Arrow Right Push (translateX(0) -> 4px -> 0 180ms) */
+@keyframes icon-arrow-right-push {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+.animate-icon-arrow-right {
+  animation: icon-arrow-right-push 180ms ease-out forwards;
+}
+
+/* 7. Icon Refresh Spin 360deg (600ms smooth cubic-bezier) */
+@keyframes icon-spin-once {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.animate-icon-refresh {
+  animation: icon-spin-once 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* 8. Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-icon-bell,
+  .animate-icon-close,
+  .animate-icon-arrow-left,
+  .animate-icon-arrow-right,
+  .animate-icon-refresh,
+  .icon-chevron-rotate,
+  .btn-press-feedback {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+

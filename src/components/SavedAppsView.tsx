@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Bookmark, ArrowLeft, Trash2, Bell, Layers, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import { Bookmark, Trash2, Bell, Layers, Sparkles, RefreshCw, ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import BackButton from './navigation/BackButton';
 import { AppData, FollowedCategoryEntry, DownloadHistoryRecord } from '../types';
 import AppCard from './AppCard';
 
@@ -14,6 +15,7 @@ interface SavedAppsViewProps {
   onUnfollowCategory?: (categoryName: string) => void;
   onSelectCategory?: (categoryName: string) => void;
   onBackHome?: () => void;
+  onBack?: () => void;
   downloadHistory?: DownloadHistoryRecord[];
 }
 
@@ -31,6 +33,7 @@ export default function SavedAppsView({
   onUnfollowCategory,
   onSelectCategory,
   onBackHome,
+  onBack,
   downloadHistory
 }: SavedAppsViewProps) {
   const [activeTab, setActiveTab] = useState<MainTab>('saved');
@@ -52,15 +55,8 @@ export default function SavedAppsView({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-200 dark:border-white/10">
         <div>
-          {onBackHome && (
-            <button
-              onClick={onBackHome}
-              aria-label="Kembali ke beranda"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 mb-2 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Kembali ke Beranda</span>
-            </button>
+          {(onBack || onBackHome) && (
+            <BackButton onBack={onBack || onBackHome} label="Kembali" showText={true} className="mb-2" />
           )}
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
             <Bookmark className="w-7 h-7 text-blue-600 dark:text-blue-400" />

@@ -9,14 +9,14 @@ interface DynamicSEOProps {
 
 export default function DynamicSEO({ currentView, selectedApp, categoryFilter }: DynamicSEOProps) {
   useEffect(() => {
-    let title = 'AeroAPK - Pusat APK Downloader Android Resmi, Aman & Cepat';
-    let description = 'AeroAPK adalah platform download APK Android gratis, resmi, cepat, dan terpercaya di Indonesia. Unduh ribuan aplikasi, game, dan utilitas Android terverifikasi aman.';
+    let title = 'Mod Station - Pusat APK Downloader Android Resmi, Aman & Cepat';
+    let description = 'Mod Station adalah platform download APK Android gratis, resmi, cepat, dan terpercaya di Indonesia. Unduh ribuan aplikasi, game, dan utilitas Android terverifikasi aman.';
     let canonicalUrl = 'https://aeroapk.com/';
-    let ogImage = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&h=630&fit=crop&q=80';
+    let ogImage = '/assets/mod-station-logo.svg';
     let jsonLdData: any = null;
 
     if (currentView === 'detail' && selectedApp) {
-      title = `Download ${selectedApp.name} APK v${selectedApp.version} Terbaru untuk Android - AeroAPK`;
+      title = `Download ${selectedApp.name} APK v${selectedApp.version} Terbaru untuk Android - Mod Station`;
       description = `Unduh APK ${selectedApp.name} versi ${selectedApp.version} resmi dari pengembang ${selectedApp.developer}. Ukuran ${selectedApp.size}, aman, terverifikasi, dan siap pasang gratis di Android.`;
       canonicalUrl = `https://aeroapk.com/#/apps/${selectedApp.slug || selectedApp.id}`;
       ogImage = selectedApp.icon || ogImage;
@@ -37,7 +37,7 @@ export default function DynamicSEO({ currentView, selectedApp, categoryFilter }:
         },
         'publisher': {
           '@type': 'Organization',
-          'name': 'AeroAPK',
+          'name': 'Mod Station',
           'url': 'https://aeroapk.com'
         },
         'offers': {
@@ -60,7 +60,7 @@ export default function DynamicSEO({ currentView, selectedApp, categoryFilter }:
       };
     } else if (currentView === 'categories' || categoryFilter) {
       const activeCat = categoryFilter || 'Semua Kategori';
-      title = `Download APK Kategori ${activeCat} Android Terbaik & Terpopuler - AeroAPK`;
+      title = `Download APK Kategori ${activeCat} Android Terbaik & Terpopuler - Mod Station`;
       description = `Jelajahi dan unduh aplikasi APK Android terbaik di kategori ${activeCat}. Gratis, aman, dan versi terbaru terverifikasi.`;
       canonicalUrl = `https://aeroapk.com/#/category/${encodeURIComponent(activeCat.toLowerCase())}`;
 
@@ -72,7 +72,7 @@ export default function DynamicSEO({ currentView, selectedApp, categoryFilter }:
         'url': canonicalUrl,
         'isPartOf': {
           '@type': 'WebSite',
-          'name': 'AeroAPK',
+          'name': 'Mod Station',
           'url': 'https://aeroapk.com'
         },
         'breadcrumb': {
@@ -100,24 +100,24 @@ export default function DynamicSEO({ currentView, selectedApp, categoryFilter }:
         }
       };
     } else if (currentView === 'recently-updated') {
-      title = 'Aplikasi Android APK yang Baru Diperbarui - AeroAPK';
+      title = 'Aplikasi Android APK yang Baru Diperbarui - Mod Station';
       description = 'Daftar aplikasi dan game Android APK versi terbaru yang baru saja mendapatkan pembaruan dan rilis resmi.';
       canonicalUrl = 'https://aeroapk.com/#/recently-updated';
     } else if (currentView === 'dmca') {
-      title = 'DMCA & Hak Cipta - AeroAPK';
-      description = 'Kebijakan DMCA dan prosedur klaim pelanggaran hak cipta resmi AeroAPK.';
+      title = 'DMCA & Hak Cipta - Mod Station';
+      description = 'Kebijakan DMCA dan prosedur klaim pelanggaran hak cipta resmi Mod Station.';
       canonicalUrl = 'https://aeroapk.com/#/dmca';
     } else if (currentView === 'privacy') {
-      title = 'Kebijakan Privasi (Privacy Policy) - AeroAPK';
-      description = 'Kebijakan privasi AeroAPK mengenai perlindungan data dan keamanan privasi pengguna.';
+      title = 'Kebijakan Privasi (Privacy Policy) - Mod Station';
+      description = 'Kebijakan privasi Mod Station mengenai perlindungan data dan keamanan privasi pengguna.';
       canonicalUrl = 'https://aeroapk.com/#/privacy';
     } else if (currentView === 'terms') {
-      title = 'Syarat & Ketentuan Layanan - AeroAPK';
-      description = 'Syarat dan ketentuan penggunaan platform downloader APK AeroAPK.';
+      title = 'Syarat & Ketentuan Layanan - Mod Station';
+      description = 'Syarat dan ketentuan penggunaan platform downloader APK Mod Station.';
       canonicalUrl = 'https://aeroapk.com/#/terms';
     } else if (currentView === 'contact') {
-      title = 'Hubungi Kami - AeroAPK';
-      description = 'Layanan bantuan, pertanyaan kemitraan, dan kontak resmi tim AeroAPK.';
+      title = 'Hubungi Kami - Mod Station';
+      description = 'Layanan bantuan, pertanyaan kemitraan, dan kontak resmi tim Mod Station.';
       canonicalUrl = 'https://aeroapk.com/#/contact';
     }
 

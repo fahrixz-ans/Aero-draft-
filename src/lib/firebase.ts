@@ -5,7 +5,7 @@ import config from '../../firebase-applet-config.json';
 
 export const app = initializeApp(config);
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
 }, config.firestoreDatabaseId || '(default)');
 
 // Export messaging conditionally and handle promise resolution

@@ -282,40 +282,40 @@ export function scoreAndRankCandidate(
   let matchedField: RankedSearchResult['matchedField'] = 'name';
   let matched = false;
 
-  // 1. Exact Match (100)
+  // 1. Exact Name Match (200)
   if (appNameNorm === normalizedQuery) {
-    textRelevance = 100;
+    textRelevance = 200;
     matchedField = 'name';
     matched = true;
   }
-  // 2. Alias Match (95)
+  // 2. Alias Match (180)
   else if (aliasTarget && normalizeQuery(aliasTarget) === appNameNorm) {
-    textRelevance = 95;
+    textRelevance = 180;
     matchedField = 'alias';
     matched = true;
   }
-  // 3. Name Starts With / Prefix (85)
+  // 3. Name Starts With / Prefix (150)
   else if (appNameNorm.startsWith(normalizedQuery)) {
-    textRelevance = 85;
+    textRelevance = 150;
     matchedField = 'prefix';
     matched = true;
   }
-  // 4. Name Contains (75)
+  // 4. Name Contains (120)
   else if (appNameNorm.includes(normalizedQuery)) {
-    textRelevance = 75;
+    textRelevance = 120;
     matchedField = 'name';
     matched = true;
   }
-  // 5. Developer Exact / StartsWith (65)
-  else if (appDevNorm === normalizedQuery || appDevNorm.startsWith(normalizedQuery)) {
-    textRelevance = 65;
-    matchedField = 'developer';
+  // 5. Package Name Matches (100)
+  else if (appPkgNorm === normalizedQuery || appPkgNorm.includes(normalizedQuery)) {
+    textRelevance = 100;
+    matchedField = 'packageName';
     matched = true;
   }
-  // 6. Package Name Contains (60)
-  else if (appPkgNorm.includes(normalizedQuery)) {
-    textRelevance = 60;
-    matchedField = 'packageName';
+  // 6. Developer Exact / StartsWith (80)
+  else if (appDevNorm === normalizedQuery || appDevNorm.startsWith(normalizedQuery)) {
+    textRelevance = 80;
+    matchedField = 'developer';
     matched = true;
   }
   // 7. Category Matches (50)
@@ -328,24 +328,24 @@ export function scoreAndRankCandidate(
   else {
     let tokenMatches = 0;
     for (const t of tokens) {
-      if (appNameNorm.includes(t)) tokenMatches += 2;
-      else if (appDevNorm.includes(t)) tokenMatches += 1.5;
+      if (appNameNorm.includes(t)) tokenMatches += 4;
+      else if (appDevNorm.includes(t)) tokenMatches += 2;
       else if (appCatNorm.includes(t)) tokenMatches += 1;
       else if (appDescNorm.includes(t)) tokenMatches += 0.5;
     }
 
     if (tokenMatches > 0) {
-      textRelevance = Math.min(60, tokenMatches * 15);
+      textRelevance = Math.min(40, tokenMatches * 5);
       matchedField = appNameNorm.includes(tokens[0]) ? 'name' : 'description';
       matched = true;
     }
   }
 
-  // Fuzzy match fallback if not directly matched
+  // Fuzzy match fallback if not directly matched (30)
   if (!matched && normalizedQuery.length >= 4) {
     const dist = calculateLevenshteinDistance(normalizedQuery, appNameNorm);
     if (dist <= 2) {
-      textRelevance = 40;
+      textRelevance = 30;
       matchedField = 'fuzzy';
       matched = true;
     }

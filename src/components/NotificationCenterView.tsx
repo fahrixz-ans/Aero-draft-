@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Bell, ArrowLeft, CheckCheck, RefreshCw, Sparkles, Layers, ShieldCheck, User, Settings, ArrowUpRight } from 'lucide-react';
+import { Bell, CheckCheck, RefreshCw, Sparkles, Layers, ShieldCheck, User, Settings, ArrowUpRight } from 'lucide-react';
+import BackButton from './navigation/BackButton';
 import { NotificationItem, NotificationCategory } from '../types';
 
 interface NotificationCenterViewProps {
@@ -10,6 +11,7 @@ interface NotificationCenterViewProps {
   onNavigateToApp?: (slug: string) => void;
   onNavigateToPreferences?: () => void;
   onBackHome?: () => void;
+  onBack?: () => void;
   onEnablePush?: () => Promise<boolean>;
   pushEnabled?: boolean;
 }
@@ -22,12 +24,29 @@ export default function NotificationCenterView({
   onNavigateToApp,
   onNavigateToPreferences,
   onBackHome,
+  onBack,
   onEnablePush,
   pushEnabled
 }: NotificationCenterViewProps) {
   const handleAppSelect = onSelectApp || onNavigateToApp;
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [requestingPush, setRequestingPush] = useState(false);
+
+  const handleBackClick = () => {
+    if (onBack) {
+      onBack();
+    } else if (onBackHome) {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        onBackHome();
+      }
+    } else if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.hash = '';
+    }
+  };
 
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
@@ -74,16 +93,7 @@ export default function NotificationCenterView({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-200 dark:border-white/10">
         <div>
-          {onBackHome && (
-            <button
-              onClick={onBackHome}
-              aria-label="Kembali ke beranda"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 mb-2 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Kembali ke Beranda</span>
-            </button>
-          )}
+          <BackButton onBack={onBack} label="Kembali" showText={true} className="mb-3" />
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
             <Bell className="w-7 h-7 text-blue-600 dark:text-blue-400" />
             <span>Pusat Notifikasi</span>

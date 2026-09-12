@@ -7,7 +7,7 @@ import {
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AppData, AppVersion, ReportType, DownloadHistoryRecord } from '../types';
-import Breadcrumb from './Breadcrumb';
+import BackButton from './navigation/BackButton';
 import ScreenshotGallery from './ScreenshotGallery';
 import AppCard from './AppCard';
 import FeedbackModal from './FeedbackModal';
@@ -19,6 +19,9 @@ import LoginPromptModal from './LoginPromptModal';
 import VersionHistorySection from './VersionHistorySection';
 import VersionDetailModal from './VersionDetailModal';
 import VersionComparisonModal from './VersionComparisonModal';
+import DownloadSelectorModal from './DownloadSelectorModal';
+import AppExpandableSections from './AppExpandableSections';
+import AdBanner from './AdBanner';
 import QRCode from 'qrcode';
 import { calculateAppBadges } from '../utils/badges';
 import { trackEvent, recordUserInteraction } from '../services';
@@ -27,11 +30,16 @@ import RecommendationShelf from './recommendations/RecommendationShelf';
 import { recordRecentlyViewed, recordDownloadHistory } from '../services/userService';
 import AppTrustIndicators from './AppTrustIndicators';
 
+import { developerToSlug } from '../utils/developerUtils';
+import { categoryToSlug } from '../utils/categoryUtils';
+import { useLanguage } from '../context/LanguageContext';
+
 interface AppDetailProps {
   app: AppData;
   relatedApps: AppData[];
   allApps?: AppData[];
   onNavigate: (view: string, slug?: string) => void;
+  onBack?: () => void;
   onSelectRelated: (slug: string) => void;
   onDownloadRelated: (e: React.MouseEvent, app: AppData) => void;
   isBookmarked: boolean;
@@ -48,6 +56,7 @@ export default function AppDetail({
   relatedApps,
   allApps = [],
   onNavigate,
+  onBack,
   onSelectRelated,
   onDownloadRelated,
   isBookmarked,
@@ -58,6 +67,7 @@ export default function AppDetail({
   onSignIn,
   downloadHistory
 }: AppDetailProps) {
+  const { t, language } = useLanguage();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportInitialType, setReportInitialType] = useState<ReportType>('download_problem');
@@ -85,6 +95,7 @@ export default function AppDetail({
   const [versionDownloadStatuses, setVersionDownloadStatuses] = useState<Record<string, 'idle' | 'loading' | 'error'>>({});
   const [selectedVersionForDetail, setSelectedVersionForDetail] = useState<AppVersion | null>(null);
   const [comparisonModalOpen, setComparisonModalOpen] = useState(false);
+  const [downloadSelectorOpen, setDownloadSelectorOpen] = useState(false);
 
   // Fetch Version History on app ID change
   useEffect(() => {
@@ -270,6 +281,42 @@ export default function AppDetail({
     }, 1500);
   };
 
+  // 17. Disarankan untuk anda (2-row horizontal scroll)
+  const suggestedApps = (allApps && allApps.length > 0 ? allApps : relatedApps)
+    .filter(a => a.id !== app.id)
+    .slice(0, 12);
+
+  // 18. Aplikasi lain untuk dicoba (1-row horizontal scroll)
+  const otherAppsToTry = (allApps && allApps.length > 0 ? allApps : relatedApps)
+    .filter(a => a.category !== app.category && a.id !== app.id)
+    .slice(0, 10);
+
+  // 19. Aplikasi serupa
+  const similarAppsList = (relatedApps && relatedApps.length > 0 ? relatedApps : allApps)
+    .filter(a => a.id !== app.id)
+    .slice(0, 8);
+
+  // 20. Popularitas (Real Database metrics)
+  const popular30Days = [...(allApps || [])]
+    .sort((a, b) => {
+      const bDl = typeof b.downloads === 'number' ? b.downloads : parseInt(String(b.downloads).replace(/[^0-9]/g, '') || '0', 10);
+      const aDl = typeof a.downloads === 'number' ? a.downloads : parseInt(String(a.downloads).replace(/[^0-9]/g, '') || '0', 10);
+      return bDl - aDl;
+    })
+    .slice(0, 6);
+
+  const popular7Days = [...(allApps || [])]
+    .sort((a, b) => (Number(b.popular) - Number(a.popular)) || ((b.ratingAverage || b.rating || 0) - (a.ratingAverage || a.rating || 0)))
+    .slice(0, 6);
+
+  const popular24Hours = [...(allApps || [])]
+    .sort((a, b) => (b.ratingAverage || b.rating || 0) - (a.ratingAverage || a.rating || 0))
+    .slice(0, 6);
+
+  const lastUpdateApps = [...(allApps || [])]
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    .slice(0, 6);
+
   // Check if any security data is present
   const hasSecurityData = !!(
     (app.permissions && app.permissions.length > 0) || 
@@ -318,15 +365,22 @@ export default function AppDetail({
         </div>
       )}
 
-      {/* Breadcrumb pathing */}
-      <Breadcrumb
-        paths={[
-          { label: 'Semua Aplikasi', view: 'all' },
-          { label: app.category, view: 'all' },
-          { label: app.name }
-        ]}
-        onNavigate={onNavigate}
-      />
+      {/* Top Back Action Button */}
+      <div className="flex items-center">
+        <BackButton
+          onBack={() => {
+            if (onBack) {
+              onBack();
+            } else if (window.history && window.history.length > 1) {
+              window.history.back();
+            } else {
+              onNavigate('apps');
+            }
+          }}
+          label={t('common.back', 'Kembali')}
+          showText={true}
+        />
+      </div>
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -352,6 +406,9 @@ export default function AppDetail({
             isFollowed={isFollowed}
             onToggleFollow={onToggleFollow}
             onShare={handleShare}
+            onTriggerDownload={() => setDownloadSelectorOpen(true)}
+            onNavigateDeveloper={(slug) => onNavigate('developer-detail', slug)}
+            onNavigateCategory={(slug) => onNavigate('category-detail', slug)}
             onReport={(preselectedType) => {
               if (preselectedType) setReportInitialType(preselectedType);
               setReportModalOpen(true);
@@ -394,25 +451,139 @@ export default function AppDetail({
           {/* Changelog */}
           {app.whatsNew && (
             <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Zap className="h-5 w-5 text-blue-500 fill-blue-500/10" />
-                <span>Yang Baru di Versi Terbaru</span>
-              </h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium bg-slate-50 dark:bg-black/35 p-4 rounded-xl border border-slate-100 dark:border-white/5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-blue-500 fill-blue-500/10" />
+                  <span>{t('app.whatsNew', 'Yang Baru')}</span>
+                </h3>
+                <button 
+                  onClick={() => onNavigate('detailapps', app.slug)}
+                  className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  {t('app.aboutAppBtn', 'TENTANG APLIKASI')} →
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">{t('app.lastUpdated', 'Terakhir di update')}: {new Date(app.updatedAt).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium bg-slate-50 dark:bg-black/35 p-4 rounded-xl border border-slate-100 dark:border-white/5 line-clamp-3">
                 {app.whatsNew}
               </p>
             </div>
           )}
 
-          {/* Description */}
+          {/* 7. TENTANG APLIKASI */}
           <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Deskripsi Aplikasi
-            </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line font-medium">
+            <div className="flex items-center justify-between">
+              <button 
+                onClick={() => onNavigate('detailapps', app.slug)}
+                className="group text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left cursor-pointer"
+              >
+                <span>{t('app.aboutThisApp', 'Tentang aplikasi ini')}</span>
+                <span className="text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">→</span>
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line font-medium line-clamp-4">
               {app.description}
             </p>
+
+            {/* 8. TAGS / BADGES */}
+            {app.tags && app.tags.length > 0 && (
+              <div className="pt-2 border-t border-slate-100 dark:border-white/5">
+                <div className="flex flex-wrap gap-2">
+                  {app.tags.map((tag, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => onNavigate('search-results', tag)}
+                      className="px-3 py-1 bg-slate-100 dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* 15. VERSI APLIKASI */}
+          <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-blue-600" />
+                <span>Versi Aplikasi</span>
+              </h3>
+              <button
+                onClick={() => setDownloadSelectorOpen(true)}
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                Lihat Semua Versi →
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 dark:bg-black/30 rounded-xl border border-slate-100 dark:border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-black uppercase">
+                    Versi Saat Ini
+                  </span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">v{app.version}</span>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {new Date(app.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Ukuran download: <span className="font-semibold text-slate-700 dark:text-slate-300">{app.size || '30 MB'}</span>
+              </div>
+              {app.whatsNew && (
+                <div className="pt-2 border-t border-slate-200/60 dark:border-white/5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Apa yang baru:</span>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                    {app.whatsNew}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setDownloadSelectorOpen(true)}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors text-center cursor-pointer"
+            >
+              Lihat Semua Versi ({versionHistory.length > 0 ? versionHistory.length : 1} Versi Tersedia)
+            </button>
+          </div>
+
+          {/* 16. VERSI LAIN DARI APLIKASI */}
+          {versionHistory.length > 1 && (
+            <div className="space-y-4">
+              <AdBanner slot="feed-inline" />
+              <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-3">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Versi lain dari aplikasi ini:
+                </h4>
+                <div className="divide-y divide-slate-100 dark:divide-white/5">
+                  {versionHistory.filter(v => v.versionName !== app.version).slice(0, 4).map((ver) => (
+                    <div
+                      key={ver.id}
+                      onClick={() => setSelectedVersionForDetail(ver)}
+                      className="py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 px-2 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={app.iconUrl}
+                          alt={app.name}
+                          className="w-8 h-8 rounded-lg object-cover"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{app.name}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">v{ver.versionName}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Unduh</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* VERSION HISTORY & MANAGEMENT SECTION (Stage 9.8) */}
           <VersionHistorySection
@@ -441,141 +612,31 @@ export default function AppDetail({
             />
           )}
 
-          {/* TECHNICAL SECURITY METADATA SECTION */}
-          <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-3xl space-y-6">
-            <div className="flex items-center gap-2.5">
-              <ShieldAlert className="h-5.5 w-5.5 text-blue-500" />
-              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                Informasi Keamanan Aplikasi
-              </h3>
-            </div>
+          {/* Download Selector Modal */}
+          <DownloadSelectorModal
+            isOpen={downloadSelectorOpen}
+            onClose={() => setDownloadSelectorOpen(false)}
+            app={app}
+            versions={versionHistory.length > 0 ? versionHistory : [{
+              id: 'current',
+              versionName: app.version,
+              fileSize: app.size,
+              apkFileUrl: app.downloadUrl || app.apkFileUrl
+            } as any]}
+            onDownloadVersion={(ver) => {
+              setDownloadSelectorOpen(false);
+              triggerVersionDownload(ver);
+            }}
+          />
 
-            {hasSecurityData ? (
-              <div className="space-y-6">
-                {/* SDK Levels & Summary */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl border border-slate-150 dark:border-white/5 space-y-1">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest">SDK Target</span>
-                    <p className="text-lg font-black text-slate-800 dark:text-slate-100">Android {app.targetSdk || 'N/A'} (API {app.targetSdk || '34'})</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 dark:bg-white/[0.02] rounded-xl border border-slate-150 dark:border-white/5 space-y-1">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest">SDK Minimum</span>
-                    <p className="text-lg font-black text-slate-800 dark:text-slate-100">Android {app.minSdk || 'N/A'} (API {app.minSdk || '21'})</p>
-                  </div>
-                </div>
-
-                {/* Permissions tag chips */}
-                {app.permissions && app.permissions.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Daftar Android Permissions ({app.permissions.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {app.permissions.map((perm, idx) => (
-                        <span 
-                          key={idx} 
-                          className="px-2.5 py-1 text-[10px] font-mono font-bold bg-slate-100 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 text-slate-600 dark:text-slate-300 rounded-md select-all"
-                        >
-                          {perm.toUpperCase()}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Signing Certificate details */}
-                {app.signingCertificate && (
-                  <div className="space-y-3.5 border-t border-slate-100 dark:border-white/5 pt-4">
-                    <h4 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Signing Certificate
-                    </h4>
-                    
-                    <div className="space-y-3 text-xs">
-                      {/* SHA-256 */}
-                      {app.signingCertificate.sha256 && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase">
-                            <span>SHA-256 Fingerprint</span>
-                            <button 
-                              onClick={() => copyToClipboard(app.signingCertificate!.sha256!, 'sha256')}
-                              className="text-blue-500 hover:underline inline-flex items-center gap-1 cursor-pointer font-bold lowercase"
-                            >
-                              {copiedSha256 ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3 w-3" />}
-                              <span>{copiedSha256 ? 'tersalin' : 'salin'}</span>
-                            </button>
-                          </div>
-                          <div className="p-2.5 bg-slate-50 dark:bg-black/35 rounded-lg border border-slate-150 dark:border-white/5 font-mono text-[10.5px] text-slate-700 dark:text-slate-300 break-all select-all font-bold">
-                            {app.signingCertificate.sha256}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* SHA-1 */}
-                      {app.signingCertificate.sha1 && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-550 font-extrabold uppercase">
-                            <span>SHA-1 Fingerprint</span>
-                            <button 
-                              onClick={() => copyToClipboard(app.signingCertificate!.sha1!, 'sha1')}
-                              className="text-blue-500 hover:underline inline-flex items-center gap-1 cursor-pointer font-bold lowercase"
-                            >
-                              {copiedSha1 ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3 w-3" />}
-                              <span>{copiedSha1 ? 'tersalin' : 'salin'}</span>
-                            </button>
-                          </div>
-                          <div className="p-2.5 bg-slate-50 dark:bg-black/35 rounded-lg border border-slate-150 dark:border-white/5 font-mono text-[10.5px] text-slate-700 dark:text-slate-300 break-all select-all font-bold">
-                            {app.signingCertificate.sha1}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Issuer & Subject */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {app.signingCertificate.issuer && (
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wide">Certificate Issuer</span>
-                            <div className="p-2.5 bg-slate-50 dark:bg-black/35 rounded-lg border border-slate-150 dark:border-white/5 font-semibold text-slate-700 dark:text-slate-350 break-words leading-normal">
-                              {app.signingCertificate.issuer}
-                            </div>
-                          </div>
-                        )}
-                        {app.signingCertificate.subject && (
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wide">Certificate Subject</span>
-                            <div className="p-2.5 bg-slate-50 dark:bg-black/35 rounded-lg border border-slate-150 dark:border-white/5 font-semibold text-slate-700 dark:text-slate-350 break-words leading-normal">
-                              {app.signingCertificate.subject}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-5 bg-slate-50 dark:bg-white/[0.02] border border-dashed border-slate-200 dark:border-white/10 rounded-2xl text-center">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                  Informasi keamanan belum tersedia.
-                </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-semibold">
-                  Metadata belum dimasukkan oleh admin atau aplikasi belum dianalisis secara teknis.
-                </p>
-              </div>
-            )}
-
-            {/* Strict Disclaimer with NO fake security claims */}
-            <div className="p-4 bg-slate-50 dark:bg-black/25 border border-slate-150 dark:border-white/5 rounded-2xl flex items-start gap-3">
-              <Info className="h-5 w-5 text-slate-400 dark:text-slate-500 shrink-0 mt-0.5" />
-              <p className="text-[11.5px] text-slate-500 dark:text-slate-450 leading-relaxed font-semibold">
-                Informasi ini berasal dari metadata dan analisis teknis aplikasi. Data tersebut bukan jaminan bahwa aplikasi sepenuhnya aman.
-              </p>
-            </div>
-          </div>
+          {/* Expandable Sections */}
+          <AppExpandableSections app={app} />
 
           {/* USER RATING & REVIEWS SECTION */}
           <RatingReviewSection
             app={app}
             currentUser={currentUser}
+            onNavigate={onNavigate}
             onRequireLogin={() => {
               setLoginPromptConfig({
                 title: 'Masuk untuk memberikan ulasan',
@@ -739,35 +800,109 @@ export default function AppDetail({
         </div>
       </div>
 
-      {/* Stage 9.3: Similar Apps Shelf with Explainability and Recommendation Engine */}
-      {similarRecommendations.length > 0 ? (
-        <div className="pt-4" id="related-apps-section">
-          <RecommendationShelf
-            shelfId="similarApps"
-            title="Aplikasi Serupa Terkait"
-            subtitle={`Rekomendasi cerdas berdasarkan kesamaan fungsi, kompatibilitas, dan kategori (${app.category})`}
-            items={similarRecommendations}
-            onSelectApp={(selected) => onSelectRelated(selected.slug || selected.id)}
-            onDownloadApp={(selected) => onDownloadRelated({} as any, selected)}
-            downloadHistory={downloadHistory}
-            currentUser={currentUser}
-            showExplanationBadges={true}
-            allowDismiss={true}
-          />
-        </div>
-      ) : relatedApps.length > 0 ? (
-        <div className="space-y-4 pt-4" id="related-apps-section">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-              Aplikasi Serupa Terkait
+      {/* 17. DISARANKAN UNTUK ANDA */}
+      {suggestedApps.length > 0 && (
+        <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-white/5" id="disarankan-untuk-anda">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              Disarankan untuk anda
             </h3>
-            <p className="text-xs text-slate-400 font-semibold mt-0.5">
-              Rekomendasi berdasarkan kategori ({app.category}):
-            </p>
+          </div>
+
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[200px] sm:auto-cols-[220px] gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+            {suggestedApps.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => onSelectRelated(item.slug || item.id)}
+                className="p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl flex items-center gap-3 hover:border-blue-500/50 hover:shadow-sm cursor-pointer transition-all group"
+              >
+                <img
+                  src={item.iconUrl}
+                  alt={item.name}
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-xl object-cover shrink-0 group-hover:scale-105 transition-transform"
+                />
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                    {item.name}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                    {item.size || '35 MB'}
+                  </p>
+                  <div className="flex items-center gap-1 text-[11px] text-amber-500 font-bold mt-1">
+                    <Star className="w-3 h-3 fill-amber-500" />
+                    <span>{(item.ratingAverage || item.rating || 0).toFixed(1)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 18. APLIKASI LAIN UNTUK DICOBA */}
+      {otherAppsToTry.length > 0 && (
+        <div className="space-y-4 pt-4" id="aplikasi-lain-untuk-dicoba">
+          <AdBanner slot="feed-inline" />
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => onNavigate('all')}
+              className="group flex items-center gap-2 text-left cursor-pointer"
+            >
+              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight group-hover:text-blue-600 transition-colors flex items-center gap-2">
+                <span>Aplikasi lain untuk di coba</span>
+                <span className="text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">→</span>
+              </h3>
+            </button>
+          </div>
+
+          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+            {otherAppsToTry.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => onSelectRelated(item.slug || item.id)}
+                className="flex-none w-52 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 hover:shadow-sm cursor-pointer transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-xl object-cover shrink-0 group-hover:scale-105 transition-transform"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                      {item.name}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {item.category}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 19. APLIKASI SERUPA */}
+      {similarAppsList.length > 0 && (
+        <div className="space-y-4 pt-4" id="aplikasi-serupa">
+          <AdBanner slot="feed-inline" />
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => onNavigate('category-detail', categoryToSlug(app.category))}
+              className="group flex items-center gap-2 text-left cursor-pointer"
+            >
+              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight group-hover:text-blue-600 transition-colors flex items-center gap-2">
+                <span>Aplikasi serupa</span>
+                <span className="text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">→</span>
+              </h3>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-            {relatedApps.slice(0, 4).map((rel) => (
+            {similarAppsList.slice(0, 4).map((rel) => (
               <div key={rel.id} className="flex flex-col space-y-1.5">
                 <AppCard
                   app={rel}
@@ -779,7 +914,136 @@ export default function AppDetail({
             ))}
           </div>
         </div>
-      ) : null}
+      )}
+
+      {/* 20. POPULARITAS */}
+      <div className="space-y-6 pt-6 border-t border-slate-100 dark:border-white/5" id="popularitas-section">
+        {/* Popular in last 30 days */}
+        {popular30Days.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+              Popular in last 30 days
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              {popular30Days.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onSelectRelated(item.slug || item.id)}
+                  className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
+                >
+                  <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
+                  />
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{item.downloads || '10K+'} unduhan</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AdBanner slot="feed-inline" />
+
+        {/* Popular in last 7 days */}
+        {popular7Days.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+              Popular in last 7 days
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              {popular7Days.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onSelectRelated(item.slug || item.id)}
+                  className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
+                >
+                  <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
+                  />
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{item.category}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AdBanner slot="feed-inline" />
+
+        {/* Popular in last 24 hour */}
+        {popular24Hours.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+              Popular in last 24 hour
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              {popular24Hours.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onSelectRelated(item.slug || item.id)}
+                  className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
+                >
+                  <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
+                  />
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
+                  <p className="text-[10px] text-amber-500 font-bold mt-0.5">★ {(item.ratingAverage || item.rating || 0).toFixed(1)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AdBanner slot="feed-inline" />
+
+        {/* Last update */}
+        {lastUpdateApps.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+              Last update
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              {lastUpdateApps.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onSelectRelated(item.slug || item.id)}
+                  className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
+                >
+                  <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
+                  />
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{new Date(item.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AdBanner slot="feed-inline" />
+
+        {/* Discovery more button */}
+        <div className="pt-2 text-center">
+          <button
+            onClick={() => onNavigate('all')}
+            className="px-6 py-3 bg-slate-100 dark:bg-white/5 hover:bg-blue-600 hover:text-white text-slate-800 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+          >
+            Discovery More
+          </button>
+        </div>
+      </div>
 
       {/* Dynamic Feedback Modal */}
       <FeedbackModal

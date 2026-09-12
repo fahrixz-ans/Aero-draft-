@@ -3,16 +3,22 @@ import { appsData, CATEGORIES } from './data/appsData';
 import { 
   AppData, FilterState, SortOption, AppNotification, 
   DownloadHistoryItem, RecentlyViewedItem, UserPreferences,
-  UserRole, SubscriptionPlan, EventBannerItem
+  UserRole, SubscriptionPlan, EventBannerItem, BannerItem
 } from './types';
 import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
 import SecondaryNav from './components/SecondaryNav';
-import Hero from './components/Hero';
-import EventBanner from './components/EventBanner';
+import { useResponsive } from './hooks/useResponsive';
+import BannerCarousel from './components/BannerCarousel';
+import { fetchAggregatedBanners, buildCatalogBanners } from './services/bannerService';
 import AdBanner from './components/AdBanner';
 import DownloadInterstitialModal from './components/DownloadInterstitialModal';
 import SearchDiscoveryView from './components/SearchDiscoveryView';
 import SubscriptionView from './components/SubscriptionView';
+import DeveloperDetailView from './components/views/DeveloperDetailView';
+import CategoryDetailView from './components/views/CategoryDetailView';
+import AllDevelopersView from './components/views/AllDevelopersView';
+import AllCategoriesView from './components/views/AllCategoriesView';
 import DeveloperRegisterView from './components/DeveloperRegisterView';
 import DeveloperDashboard from './components/developer/DeveloperDashboard';
 import SearchBar from './components/SearchBar';
@@ -20,8 +26,6 @@ import AppGrid from './components/AppGrid';
 import AppCard from './components/AppCard';
 import CategoryCard from './components/CategoryCard';
 import AppDetail from './components/AppDetail';
-import Newsletter from './components/Newsletter';
-import Footer from './components/Footer';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import EmptyState from './components/EmptyState';
 import AdminPanel from './components/AdminPanel';
@@ -29,7 +33,6 @@ import RecentlyUpdatedPage from './components/RecentlyUpdatedPage';
 import DynamicSEO from './components/DynamicSEO';
 import DonateView from './components/DonateView';
 import SavedAppsView from './components/SavedAppsView';
-import WhatsAppBanner from './components/common/WhatsAppBanner';
 import AdSenseBanner from './components/common/AdSenseBanner';
 import UserProfileView from './components/UserProfileView';
 import DownloadHistoryView from './components/DownloadHistoryView';
@@ -38,6 +41,54 @@ import AppComparisonView from './components/AppComparisonView';
 import DiscoverFeedView from './components/DiscoverFeedView';
 import ContinueExploringSection from './components/ContinueExploringSection';
 import NotificationCenterModal from './components/NotificationCenterModal';
+import SuggestedAppsRow from './components/views/SuggestedAppsRow';
+import PopularView from './components/views/PopularView';
+import LatestView from './components/views/LatestView';
+import ModAppsView from './components/views/ModAppsView';
+import AppsView from './components/views/AppsView';
+import GamesView from './components/views/GamesView';
+import CategoriesView from './components/views/CategoriesView';
+import ForYouView from './components/views/ForYouView';
+import QrisDonationView from './components/views/QrisDonationView';
+import BankDonationView from './components/views/BankDonationView';
+import BlogMainView from './components/blog/BlogMainView';
+import BlogCategoryView from './components/blog/BlogCategoryView';
+import BlogSearchView from './components/blog/BlogSearchView';
+import BlogDetailView from './components/blog/BlogDetailView';
+import ArticlesView from './components/views/ArticlesView';
+import ArticleDetailView from './components/views/ArticleDetailView';
+import EventDetailView from './components/views/EventDetailView';
+import AppDownloadView from './components/views/AppDownloadView';
+import AppVersionsView from './components/views/AppVersionsView';
+import AppReviewsView from './components/views/AppReviewsView';
+import WriteReviewView from './components/views/WriteReviewView';
+import AppDetailFullView from './components/views/AppDetailFullView';
+import AppCommentsView from './components/views/AppCommentsView';
+import AppScreenshotsView from './components/views/AppScreenshotsView';
+import AuthViews from './components/views/AuthViews';
+import SettingsSecurityView from './components/views/SettingsSecurityView';
+import ProfileView from './components/views/ProfileView';
+import SettingsView from './components/views/SettingsView';
+import SettingsLanguageView from './components/settings/SettingsLanguageView';
+import SettingsDeviceView from './components/settings/SettingsDeviceView';
+import SettingsInterestsView from './components/settings/SettingsInterestsView';
+import SettingsAutoplayView from './components/settings/SettingsAutoplayView';
+import SettingsThemeView from './components/settings/SettingsThemeView';
+import SettingsAccountSecurityView from './components/settings/SettingsAccountSecurityView';
+import SettingsChangePasswordView from './components/settings/SettingsChangePasswordView';
+import SettingsSessionsView from './components/settings/SettingsSessionsView';
+import AboutView from './components/views/AboutView';
+import InformationViews from './components/views/InformationViews';
+
+import CustomerServiceView from './components/views/CustomerServiceView';
+import SocialMediaView from './components/views/SocialMediaView';
+import HelpCenterView from './components/views/HelpCenterView';
+import HelpAIAssistantView from './components/views/HelpAIAssistantView';
+import HelpArticlesView from './components/views/HelpArticlesView';
+import ChangePasswordView from './components/views/ChangePasswordView';
+import ErrorViews from './components/views/ErrorViews';
+import BackButton from './components/navigation/BackButton';
+import { articlesData } from './data/articlesData';
 
 import { 
   Users, Gamepad2, Film, CheckSquare, GraduationCap, 
@@ -100,10 +151,25 @@ import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firesto
 import { db } from './lib/firebase';
 
 export default function App() {
+  const { isDesktop } = useResponsive(768);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<string>('home');
+  const [internalHistory, setInternalHistory] = useState<{ view: string; slug?: string }[]>([]);
+  const isBackActionRef = useRef<boolean>(false);
+  const lastViewRef = useRef<{ view: string; slug?: string }>({ view: 'home' });
+
   const [adminInitialTab, setAdminInitialTab] = useState<string>('dashboard');
+  const [selectedDeveloperSlug, setSelectedDeveloperSlug] = useState<string | null>(null);
+  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(null);
   const [selectedAppSlug, setSelectedAppSlug] = useState<string | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [selectedBlogCategory, setSelectedBlogCategory] = useState<string>('all');
+  const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register' | 'forgot-password' | 'verify'>('login');
   const [comparisonInitialSlug, setComparisonInitialSlug] = useState<string | null>(null);
+  const [helpInitialQuestion, setHelpInitialQuestion] = useState<string | undefined>(undefined);
+  const [helpArticleSlug, setHelpArticleSlug] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [loading, setLoading] = useState<boolean>(false);
@@ -116,6 +182,7 @@ export default function App() {
 
   // User state, bookmarks state, followed apps/categories, download history
   const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [subscriptionPlan, setSubscriptionPlan] = useState<SubscriptionPlan>(() => {
     const saved = localStorage.getItem('aero_subscription_plan');
     return (saved as SubscriptionPlan) || 'free';
@@ -178,6 +245,24 @@ export default function App() {
     return () => unsubscribeApps();
   }, []);
 
+  // Universal Homepage Banner Carousel Aggregated State (Real Banners, Active Events, Apps & Articles)
+  const [homeBanners, setHomeBanners] = useState<BannerItem[]>(() => buildCatalogBanners(appsData));
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchAggregatedBanners(apps).then((items) => {
+      if (isMounted && items && items.length > 0) {
+        setHomeBanners(items);
+      }
+    }).catch((err) => {
+      console.warn("Banner aggregation warning:", err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apps]);
+
   // Stage 9.9: Smart Collections & Intelligent App Shelves
   const [viewAllSmartCollection, setViewAllSmartCollection] = useState<SmartCollectionData | null>(null);
   const { 
@@ -203,10 +288,6 @@ export default function App() {
     minAndroid: '',
     updatedDateRange: ''
   });
-
-  // Contact form submission state
-  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
-  const [contactSubmitted, setContactSubmitted] = useState(false);
 
   // DMCA form state
   const [dmcaForm, setDmcaForm] = useState({ appName: '', url: '', email: '', description: '' });
@@ -264,6 +345,7 @@ export default function App() {
             };
             setUser(activeUser);
             refreshUserData(activeUser);
+            setAuthLoading(false);
             return;
           }
         }
@@ -274,6 +356,7 @@ export default function App() {
       if (!unmounted) {
         setUser(null);
         refreshUserData(null);
+        setAuthLoading(false);
       }
     }
 
@@ -296,6 +379,13 @@ export default function App() {
       window.removeEventListener('message', handleMessage);
     };
   }, []);
+
+  // Redirect logged-in users away from auth subviews to profile (#/saya/)
+  useEffect(() => {
+    if (user && ['auth-login', 'auth-registration', 'auth-forgotpassword', 'auth-verification'].includes(currentView)) {
+      navigateTo('profile');
+    }
+  }, [user, currentView]);
 
   // Real-time Firestore subscription for user notifications
   useEffect(() => {
@@ -431,15 +521,107 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash.startsWith('#/apps/')) {
-        const slug = hash.replace('#/apps/', '');
+      if (hash.startsWith('#/apps/type/')) {
+        const slug = hash.replace('#/apps/type/', '');
+        setSelectedAppSlug(slug);
+        setCurrentView('detail');
+      } else if (hash.startsWith('#/games/type/')) {
+        const slug = hash.replace('#/games/type/', '');
+        setSelectedAppSlug(slug);
+        setCurrentView('detail');
+      } else if (hash.startsWith('#/apps/developer/')) {
+        const slug = hash.replace('#/apps/developer/', '');
+        setSelectedDeveloperSlug(slug);
+        setCurrentView('developer-detail');
+      } else if (hash.startsWith('#/developer/') && hash !== '#/developer' && hash !== '#/developer/') {
+        const slug = hash.replace('#/developer/', '');
+        setSelectedDeveloperSlug(slug);
+        setCurrentView('developer-detail');
+      } else if (hash.startsWith('#/apps/category/')) {
+        const slug = hash.replace('#/apps/category/', '');
+        setSelectedCategorySlug(slug);
+        setCurrentView('category-detail');
+      } else if (hash.startsWith('#/category/') && hash !== '#/category' && hash !== '#/category/') {
+        const slug = hash.replace('#/category/', '');
+        setSelectedCategorySlug(slug);
+        setCurrentView('category-detail');
+      } else if (hash.startsWith('#/apps/')) {
+        const pathPart = hash.replace('#/apps/', '');
+        const segments = pathPart.split('/');
+        const slug = segments[0];
+        const subview = segments[1];
+
         const appExists = apps.some(a => a.slug === slug || a.id === slug);
         if (appExists) {
           setSelectedAppSlug(slug);
-          setCurrentView('detail');
+          if (subview === 'download') {
+            setCurrentView('app-download');
+          } else if (subview === 'versions') {
+            setCurrentView('app-versions');
+          } else if (subview === 'rating' || subview === 'reviews') {
+            setCurrentView('app-rating-all');
+          } else if (subview === 'review') {
+            setCurrentView('app-write-review');
+          } else if (subview === 'comments') {
+            setCurrentView('app-comments');
+          } else if (subview === 'screenshots') {
+            setCurrentView('app-screenshots');
+          } else if (subview === 'detailapps' || subview === 'about') {
+            setCurrentView('app-detail-full');
+          } else {
+            setCurrentView('detail');
+          }
         } else {
           setCurrentView('home');
         }
+      } else if (hash.startsWith('#/events/')) {
+        const evId = hash.replace('#/events/', '');
+        setSelectedEventId(evId);
+        setCurrentView('event-detail');
+      } else if (hash.startsWith('#/blog/category/')) {
+        const catSlug = hash.replace('#/blog/category/', '');
+        setSelectedBlogCategory(catSlug);
+        setCurrentView('blog-category');
+      } else if (hash.startsWith('#/blog/search')) {
+        setCurrentView('blog-search');
+      } else if (hash.startsWith('#/blog/')) {
+        const blogSlug = hash.replace('#/blog/', '');
+        setSelectedBlogSlug(blogSlug);
+        setCurrentView('blog-detail');
+      } else if (hash === '#/blog' || hash === '#/blog/') {
+        setCurrentView('blog');
+      } else if (hash.startsWith('#/articles/')) {
+        const artSlug = hash.replace('#/articles/', '');
+        setSelectedBlogSlug(artSlug);
+        setCurrentView('blog-detail');
+      } else if (hash === '#/articles') {
+        setCurrentView('blog');
+      } else if (hash === '#/for-you') {
+        setCurrentView('for-you');
+      } else if (hash === '#/popular') {
+        setCurrentView('popular');
+      } else if (hash === '#/latest') {
+        setCurrentView('latest');
+      } else if (hash === '#/mod') {
+        setCurrentView('mod');
+      } else if (hash === '#/login' || hash === '#/login/') {
+        window.location.hash = '/auth/login';
+      } else if (hash === '#/register' || hash === '#/register/') {
+        window.location.hash = '/auth/registration/';
+      } else if (hash === '#/forgot-password' || hash === '#/forgot-password/') {
+        window.location.hash = '/auth/login/forgotpassword/';
+      } else if (hash === '#/verify' || hash === '#/verify/') {
+        window.location.hash = '/auth/registration/verification/';
+      } else if (hash === '#/auth/login' || hash === '#/auth/login/') {
+        setCurrentView('auth-login');
+      } else if (hash === '#/auth/login/forgotpassword' || hash === '#/auth/login/forgotpassword/') {
+        setCurrentView('auth-forgotpassword');
+      } else if (hash === '#/auth/registration' || hash === '#/auth/registration/') {
+        setCurrentView('auth-registration');
+      } else if (hash === '#/auth/registration/verification' || hash === '#/auth/registration/verification/') {
+        setCurrentView('auth-verification');
+      } else if (hash === '#/settings/security' || hash === '#/security') {
+        setCurrentView('settings-security');
       } else if (hash.startsWith('#/compare/')) {
         const slug = hash.replace('#/compare/', '');
         setComparisonInitialSlug(slug);
@@ -449,12 +631,35 @@ export default function App() {
         setCurrentView('compare');
       } else if (hash === '#/discover' || hash === '#/explore') {
         setCurrentView('discover');
-      } else if (hash === '#/search') {
+      } else if (hash === '#/search' || hash === '#/search/') {
+        setSearchQuery('');
         setCurrentView('search');
+      } else if (hash === '#/search/type' || hash === '#/search/type/') {
+        setCurrentView('search-type');
+      } else if (hash.startsWith('#/search/type/')) {
+        const afterType = hash.replace('#/search/type/', '');
+        if (afterType.endsWith('/expand/Fully') || afterType.endsWith('/expand/fully')) {
+          const query = afterType.replace(/\/expand\/Fully/i, '');
+          setSearchQuery(decodeURIComponent(query));
+          setCurrentView('search-expand-fully');
+        } else if (afterType.endsWith('/expand') || afterType.endsWith('/expand/')) {
+          const query = afterType.replace(/\/expand\/?/i, '');
+          setSearchQuery(decodeURIComponent(query));
+          setCurrentView('search-expand');
+        } else {
+          setSearchQuery(decodeURIComponent(afterType));
+          setCurrentView('search-results');
+        }
       } else if (hash === '#/subscription' || hash === '#/premium') {
         setCurrentView('subscription');
+      } else if (hash === '#/developer' || hash === '#/developer/' || hash === '#/developers' || hash === '#/developers/') {
+        setSelectedDeveloperSlug(null);
+        setCurrentView('all-developers');
       } else if (hash === '#/developer-register' || hash === '#/developer/register') {
         setCurrentView('developer-register');
+      } else if (hash === '#/category' || hash === '#/category/' || hash === '#/categories' || hash === '#/categories/') {
+        setSelectedCategorySlug(null);
+        setCurrentView('all-categories');
       } else if (hash === '#/developer-dashboard' || hash === '#/developer/dashboard') {
         setCurrentView('developer-dashboard');
       } else if (hash === '#/apps') {
@@ -467,14 +672,12 @@ export default function App() {
         setCurrentView('downloads');
       } else if (hash === '#/notifications') {
         setCurrentView('notifications');
-      } else if (hash === '#/profile' || hash === '#/account') {
+      } else if (hash === '#/saya' || hash === '#/saya/' || hash === '#/profile' || hash === '#/profile/' || hash === '#/account' || hash === '#/account/') {
         setCurrentView('profile');
       } else if (hash === '#/all') {
         setCurrentView('all');
       } else if (hash === '#/bookmarks' || hash === '#/saved') {
         setCurrentView('bookmarks');
-      } else if (hash === '#/categories') {
-        setCurrentView('categories');
       } else if (hash === '#/owner' || hash === '#/admin' || hash === '#/admin/dashboard') {
         setAdminInitialTab('dashboard');
         setCurrentView('admin');
@@ -484,17 +687,41 @@ export default function App() {
       } else if (hash === '#/admin/moderation' || hash === '#/admin/reports') {
         setAdminInitialTab('reports');
         setCurrentView('admin');
-      } else if (hash.startsWith('#/category/')) {
-        const cat = hash.replace('#/category/', '');
-        const matchedCat = CATEGORIES.find(c => c.toLowerCase() === cat.toLowerCase());
-        if (matchedCat) {
-          setFilters(prev => ({ ...prev, category: matchedCat }));
-          setCurrentView('all');
-        } else {
-          setCurrentView('home');
-        }
+      } else if (hash === '#/donasi/qris' || hash === '#/donate/qris' || hash === '#/donasi-qris' || hash === '#/donate-qris' || hash === '#/qris') {
+        setCurrentView('donate-qris');
+      } else if (hash === '#/donasi/bank' || hash === '#/donate/bank' || hash === '#/donasi-bank' || hash === '#/donate-bank' || hash === '#/bank') {
+        setCurrentView('donate-bank');
+      } else if (hash === '#/social-media' || hash === '#/follow' || hash === '#/social') {
+        setCurrentView('social-media');
+      } else if (hash === '#/change-password' || hash === '#/ganti-kata-sandi') {
+        setCurrentView('change-password');
+      } else if (hash === '#/help-ai-assistant' || hash === '#/tanya-ai') {
+        setCurrentView('help-ai-assistant');
+      } else if (hash.startsWith('#/help-articles/') || hash.startsWith('#/artikel-bantuan/')) {
+        const slug = hash.replace('#/help-articles/', '').replace('#/artikel-bantuan/', '');
+        setHelpArticleSlug(slug);
+        setCurrentView('help-articles');
+      } else if (hash === '#/help-articles' || hash === '#/artikel-bantuan') {
+        setHelpArticleSlug(undefined);
+        setCurrentView('help-articles');
+      } else if (hash === '#/help-center' || hash === '#/pusat-bantuan' || hash === '#/help' || hash === '#/faq') {
+        setCurrentView('help-center');
+      } else if (hash === '#/contact' || hash === '#/customer-service' || hash === '#/hubungi-kami') {
+        setCurrentView('customer-service');
+      } else if (hash === '#/donate' || hash === '#/donasi') {
+        setCurrentView('donate');
+      } else if (hash === '#/dmca') {
+        setCurrentView('dmca');
+      } else if (hash === '#/terms' || hash === '#/syarat-dan-ketentuan') {
+        setCurrentView('terms');
+      } else if (hash === '#/privacy' || hash === '#/kebijakan-privasi') {
+        setCurrentView('privacy');
+      } else if (hash.startsWith('#/category/') || hash.startsWith('#/categories/')) {
+        const cat = hash.startsWith('#/categories/') ? hash.replace('#/categories/', '') : hash.replace('#/category/', '');
+        setSelectedCategorySlug(cat);
+        setCurrentView('category-detail');
       } else {
-        const staticViews = ['about', 'contact', 'sitemap', 'donate', 'disclaimer', 'dmca', 'privacy', 'terms'];
+        const staticViews = ['about', 'contact', 'customer-service', 'help-center', 'help', 'faq', 'sitemap', 'donate', 'social-media', 'change-password', 'help-ai-assistant', 'help-articles', 'disclaimer', 'dmca', 'privacy', 'terms'];
         const potentialStatic = hash.replace('#/', '');
         if (staticViews.includes(potentialStatic)) {
           setCurrentView(potentialStatic);
@@ -511,14 +738,94 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [apps]);
 
+  // Synchronize internal history stack with any view change (programmatic or native hash change)
+  useEffect(() => {
+    const prev = lastViewRef.current;
+    const current = { view: currentView, slug: selectedAppSlug || undefined };
+
+    // If the view actually changed
+    if (prev.view !== current.view || prev.slug !== current.slug) {
+      const wasExplicitBack = isBackActionRef.current;
+      isBackActionRef.current = false; // reset
+
+      setInternalHistory(stack => {
+        const isBackAction = wasExplicitBack || (
+          stack.length > 0 &&
+          stack[stack.length - 1].view === current.view &&
+          stack[stack.length - 1].slug === current.slug
+        );
+
+        if (isBackAction) {
+          if (stack.length > 0) {
+            return stack.slice(0, -1);
+          }
+          return stack;
+        } else {
+          // Forward navigation
+          if (prev.view && (prev.view !== current.view || prev.slug !== current.slug)) {
+            const newStack = [...stack, prev];
+            if (newStack.length > 50) {
+              newStack.shift();
+            }
+            return newStack;
+          }
+          return stack;
+        }
+      });
+
+      // Update ref
+      lastViewRef.current = current;
+    }
+  }, [currentView, selectedAppSlug]);
+
   // Update navigation and sync window Hash URL
   const navigateTo = (view: string, slug?: string) => {
-    setLoading(true);
-    setTimeout(() => {
+    const isReduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    
+    const updateRoute = () => {
       if (view === 'home') {
         window.location.hash = '';
         setSelectedAppSlug(null);
+        setFilters(prev => ({ ...prev, category: '' }));
         setCurrentView('home');
+      } else if (view === 'apps') {
+        window.location.hash = '/apps';
+        setSelectedAppSlug(null);
+        setFilters(prev => ({ ...prev, category: '' }));
+        setCurrentView('apps');
+      } else if (view === 'games') {
+        window.location.hash = '/games';
+        setSelectedAppSlug(null);
+        setFilters(prev => ({ ...prev, category: '' }));
+        setCurrentView('games');
+      } else if (view === 'search') {
+        window.location.hash = '/search';
+        setSelectedAppSlug(null);
+        setCurrentView('search');
+      } else if (view === 'search-type') {
+        window.location.hash = '/search/type/';
+        setSelectedAppSlug(null);
+        setCurrentView('search-type');
+      } else if (view === 'search-results' && slug) {
+        window.location.hash = `/search/type/${encodeURIComponent(slug)}`;
+        setSelectedAppSlug(null);
+        setCurrentView('search-results');
+      } else if (view === 'search-expand' && slug) {
+        window.location.hash = `/search/type/${encodeURIComponent(slug)}/expand/`;
+        setSelectedAppSlug(null);
+        setCurrentView('search-expand');
+      } else if (view === 'search-expand-fully' && slug) {
+        window.location.hash = `/search/type/${encodeURIComponent(slug)}/expand/Fully`;
+        setSelectedAppSlug(null);
+        setCurrentView('search-expand-fully');
+      } else if (view === 'app-detail-type' && slug) {
+        window.location.hash = `/apps/type/${slug}`;
+        setSelectedAppSlug(slug);
+        setCurrentView('detail');
+      } else if (view === 'game-detail-type' && slug) {
+        window.location.hash = `/games/type/${slug}`;
+        setSelectedAppSlug(slug);
+        setCurrentView('detail');
       } else if (view === 'all') {
         window.location.hash = '/all';
         setSelectedAppSlug(null);
@@ -545,8 +852,8 @@ export default function App() {
         window.location.hash = '/notifications';
         setSelectedAppSlug(null);
         setCurrentView('notifications');
-      } else if (view === 'profile') {
-        window.location.hash = '/profile';
+      } else if (view === 'profile' || view === 'saya') {
+        window.location.hash = '/saya/';
         setSelectedAppSlug(null);
         setCurrentView('profile');
       } else if (view === 'bookmarks') {
@@ -561,14 +868,182 @@ export default function App() {
         window.location.hash = `/apps/${slug}`;
         setSelectedAppSlug(slug);
         setCurrentView('detail');
+      } else if (view === 'app-download' && slug) {
+        window.location.hash = `/apps/${slug}/download`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-download');
+      } else if (view === 'app-versions' && slug) {
+        window.location.hash = `/apps/${slug}/versions`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-versions');
+      } else if (view === 'app-reviews' && slug) {
+        window.location.hash = `/apps/${slug}/reviews`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-reviews');
+      } else if (view === 'app-comments' && slug) {
+        window.location.hash = `/apps/${slug}/comments`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-comments');
+      } else if (view === 'app-screenshots' && slug) {
+        window.location.hash = `/apps/${slug}/screenshots`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-screenshots');
+      } else if ((view === 'detailapps' || view === 'app-about' || view === 'about') && slug) {
+        window.location.hash = `/apps/${slug}/about`;
+        setSelectedAppSlug(slug);
+        setCurrentView('app-detail-full');
+      } else if (view === 'donate' || view === 'donasi') {
+        window.location.hash = '/donate';
+        setSelectedAppSlug(null);
+        setCurrentView('donate');
+      } else if (view === 'social-media' || view === 'follow') {
+        window.location.hash = '/social-media';
+        setSelectedAppSlug(null);
+        setCurrentView('social-media');
+      } else if (view === 'help-center' || view === 'pusat-bantuan') {
+        window.location.hash = '/help-center';
+        setSelectedAppSlug(null);
+        setCurrentView('help-center');
+      } else if (view === 'help-ai-assistant' || view === 'tanya-ai') {
+        window.location.hash = '/help-ai-assistant';
+        setHelpInitialQuestion(slug);
+        setCurrentView('help-ai-assistant');
+      } else if (view === 'help-articles' || view === 'artikel-bantuan') {
+        if (slug) {
+          window.location.hash = `/help-articles/${slug}`;
+          setHelpArticleSlug(slug);
+        } else {
+          window.location.hash = '/help-articles';
+          setHelpArticleSlug(undefined);
+        }
+        setCurrentView('help-articles');
+      } else if (view === 'change-password' || view === 'ganti-kata-sandi') {
+        window.location.hash = '/change-password';
+        setSelectedAppSlug(null);
+        setCurrentView('change-password');
+      } else if (view === 'customer-service' || view === 'contact' || view === 'hubungi-kami') {
+        window.location.hash = '/customer-service';
+        setSelectedAppSlug(null);
+        setCurrentView('customer-service');
+      } else if (view === 'subscription' || view === 'premium') {
+        window.location.hash = '/subscription';
+        setSelectedAppSlug(null);
+        setCurrentView('subscription');
+      } else if (view === 'dmca') {
+        window.location.hash = '/dmca';
+        setSelectedAppSlug(null);
+        setCurrentView('dmca');
+      } else if (view === 'terms') {
+        window.location.hash = '/terms';
+        setSelectedAppSlug(null);
+        setCurrentView('terms');
+      } else if (view === 'privacy') {
+        window.location.hash = '/privacy';
+        setSelectedAppSlug(null);
+        setCurrentView('privacy');
+      } else if (view === 'admin' || view === 'owner-console') {
+        window.location.hash = '/admin';
+        setAdminInitialTab('dashboard');
+        setCurrentView('admin');
+      } else if (view === 'developer-dashboard' || view === 'developer-console') {
+        window.location.hash = '/developer-dashboard';
+        setCurrentView('developer-dashboard');
+      } else if (view === 'donate-qris' || view === 'qris') {
+        window.location.hash = '/donasi/qris';
+        setSelectedAppSlug(null);
+        setCurrentView('donate-qris');
+      } else if (view === 'donate-bank' || view === 'bank') {
+        window.location.hash = '/donasi/bank';
+        setSelectedAppSlug(null);
+        setCurrentView('donate-bank');
+      } else if (view === 'blog') {
+        window.location.hash = '/blog';
+        setCurrentView('blog');
+      } else if (view === 'blog-category' && slug) {
+        window.location.hash = `/blog/category/${slug}`;
+        setSelectedBlogCategory(slug);
+        setCurrentView('blog-category');
+      } else if (view === 'blog-search') {
+        window.location.hash = '/blog/search';
+        setCurrentView('blog-search');
+      } else if (view === 'blog-detail' && slug) {
+        window.location.hash = `/blog/${slug}`;
+        setSelectedBlogSlug(slug);
+        setCurrentView('blog-detail');
+      } else if (view === 'articles') {
+        window.location.hash = '/blog';
+        setCurrentView('blog');
+      } else if (view === 'article-detail' && slug) {
+        window.location.hash = `/blog/${slug}`;
+        setSelectedBlogSlug(slug);
+        setCurrentView('blog-detail');
+      } else if (view === 'event-detail' && slug) {
+        window.location.hash = `/events/${slug}`;
+        setSelectedEventId(slug);
+        setCurrentView('event-detail');
+      } else if (view === 'auth-login' || view === 'login') {
+        window.location.hash = '/auth/login';
+        setSelectedAppSlug(null);
+        setCurrentView('auth-login');
+      } else if (view === 'auth-registration' || view === 'register') {
+        window.location.hash = '/auth/registration/';
+        setSelectedAppSlug(null);
+        setCurrentView('auth-registration');
+      } else if (view === 'auth-forgotpassword' || view === 'forgot-password') {
+        window.location.hash = '/auth/login/forgotpassword/';
+        setSelectedAppSlug(null);
+        setCurrentView('auth-forgotpassword');
+      } else if (view === 'auth-verification' || view === 'verify') {
+        window.location.hash = '/auth/registration/verification/';
+        setSelectedAppSlug(null);
+        setCurrentView('auth-verification');
+      } else if (view === 'developer-detail' && slug) {
+        window.location.hash = `/apps/developer/${slug}`;
+        setSelectedDeveloperSlug(slug);
+        setCurrentView('developer-detail');
+      } else if (view === 'category-detail' && slug) {
+        window.location.hash = `/apps/category/${slug}`;
+        setSelectedCategorySlug(slug);
+        setCurrentView('category-detail');
+      } else if (view === 'all-developers' || view === 'developer' || view === 'developers') {
+        window.location.hash = '/developer';
+        setSelectedDeveloperSlug(null);
+        setCurrentView('all-developers');
+      } else if (view === 'all-categories' || view === 'category' || view === 'categories') {
+        window.location.hash = '/category';
+        setSelectedCategorySlug(null);
+        setCurrentView('all-categories');
       } else {
         window.location.hash = `/${view}`;
-        setSelectedAppSlug(null);
+        if (slug) setSelectedAppSlug(slug);
         setCurrentView(view);
       }
+    };
+
+    if (isReduced) {
+      updateRoute();
       setLoading(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 200);
+      window.scrollTo({ top: 0 });
+    } else {
+      setLoading(true);
+      setTimeout(() => {
+        updateRoute();
+        setLoading(false);
+        window.scrollTo({ top: 0 });
+      }, 100); // Snappy non-blocking skeleton display (100ms)
+    }
+  };
+
+  // Browser History Back Navigation with Fallback
+  const handleBack = (fallbackView: string = 'home', fallbackSlug?: string) => {
+    isBackActionRef.current = true;
+
+    if (internalHistory.length > 0) {
+      const target = internalHistory[internalHistory.length - 1];
+      navigateTo(target.view, target.slug);
+    } else {
+      navigateTo(fallbackView, fallbackSlug);
+    }
   };
 
   // Active app for details view
@@ -623,15 +1098,11 @@ export default function App() {
   const handleTagClick = (tag: string) => {
     setSearchQuery(tag);
     recordSearchHistory(tag);
-    navigateTo('all');
+    navigateTo('search');
   };
 
   const handleSearchFocus = () => {
-    navigateTo('all');
-    setTimeout(() => {
-      const input = document.getElementById('search-input-field');
-      if (input) input.focus();
-    }, 300);
+    navigateTo('search');
   };
 
   const parseSizeToMB = (sizeStr: string): number => {
@@ -750,6 +1221,47 @@ export default function App() {
     return apps.filter(a => a.category === currentApp.category && a.id !== currentApp.id);
   };
 
+  const isNoNavbarView = [
+    'detail',
+    'app-detail-full',
+    'app-download',
+    'app-versions',
+    'app-rating-all',
+    'app-write-review',
+    'app-comments',
+    'app-screenshots',
+    'sitemap',
+    'subscription',
+    'notifications',
+    'about',
+    'dmca',
+    'donate',
+    'donate-qris',
+    'qris',
+    'donate-bank',
+    'bank',
+    'privacy',
+    'terms',
+    'downloads',
+    'settings',
+    'settings-security',
+    'help-center',
+    'help',
+    'customer-service',
+    'faq',
+    'contact',
+    'disclaimer',
+    'auth-login',
+    'auth-forgotpassword',
+    'auth-registration',
+    'auth-verification',
+    'search-type',
+    'blog',
+    'blog-category',
+    'blog-search',
+    'blog-detail'
+  ].includes(currentView);
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
       
@@ -760,68 +1272,92 @@ export default function App() {
         categoryFilter={filters.category} 
       />
 
-      {/* Navigation Header bar */}
-      <Navbar
-        currentView={currentView}
-        onNavigate={navigateTo}
-        darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
-        onSearchFocus={handleSearchFocus}
-        user={user}
-        userRole={userRole}
-        subscriptionPlan={effectiveSubscriptionPlan}
-        onSignIn={handleSignIn}
-        onSignOut={handleSignOut}
-        unreadNotificationCount={notifications.filter(n => !n.read).length}
-        onOpenNotifications={() => setShowNotificationModal(true)}
-      />
-
-      {/* Secondary Category & Tab Navigation (Top-charts, Apps, Games, Discover, etc.) */}
-      {['home', 'all', 'apps', 'games', 'categories', 'top-charts', 'discover', 'updated', 'recently-updated'].includes(currentView) && (
-        <SecondaryNav
-          activeTab={currentView}
-          onTabChange={(tabId, view, cat) => {
-            if (view) {
-              navigateTo(view);
-            } else if (cat) {
-              setFilters(prev => ({ ...prev, category: cat }));
-              navigateTo('all');
-            } else {
-              navigateTo(tabId);
-            }
-          }}
+      {/* Navigation Header bar - Hidden on dedicated internal views */}
+      {!isNoNavbarView && (
+        <Navbar
+          currentView={currentView}
+          categoryFilter={filters.category}
+          onNavigate={navigateTo}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          onSearchFocus={handleSearchFocus}
+          onToggleSidebar={() => setSidebarCollapsed(prev => !prev)}
+          user={user}
+          userRole={userRole}
+          subscriptionPlan={effectiveSubscriptionPlan}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+          unreadNotificationCount={notifications.filter(n => !n.read).length}
+          onOpenNotifications={() => setShowNotificationModal(true)}
         />
       )}
 
-      {/* Main Container */}
-      <main className="flex-1 w-full pb-16">
+      {/* Main Container Layout with Desktop App Store Sidebar */}
+      <div className="flex-1 flex flex-row w-full min-w-0">
+        {!isNoNavbarView && currentView !== 'admin' && (
+          <Sidebar
+            currentView={currentView}
+            onNavigate={navigateTo}
+            userRole={userRole}
+            user={user}
+            unreadNotificationCount={notifications.filter(n => !n.read).length}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
+          />
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 w-full">
+          {/* Secondary Category & Tab Navigation (Hanya pada halaman katalog APK yang memang membutuhkan filter kategori) */}
+          {currentView === 'all' && (
+            <SecondaryNav
+              activeTab={currentView}
+              onTabChange={(tabId, view, cat) => {
+                if (view) {
+                  navigateTo(view);
+                } else if (cat) {
+                  setFilters(prev => ({ ...prev, category: cat }));
+                  navigateTo('all');
+                } else {
+                  navigateTo(tabId);
+                }
+              }}
+            />
+          )}
+
+          {/* Main Container */}
+          <main className="flex-1 w-full pb-10 md:pb-12">
         
         {/* Loading overlay for routing feel */}
         {loading ? (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-            <LoadingSkeleton type={currentView === 'detail' ? 'detail' : 'grid'} count={8} />
+          <div className="py-6">
+            <LoadingSkeleton type={currentView} count={8} />
           </div>
         ) : (
           <>
             {/* View mapping */}
             {currentView === 'home' && (
-              <div className="space-y-12 animate-fade-in">
-                {/* Global Event Banner if active */}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-                  <EventBanner onActionClick={(url) => window.open(url, '_blank', 'noopener,noreferrer')} />
-                </div>
-
-                {/* Brand Hero */}
-                <Hero
-                  searchQuery={searchQuery}
-                  onSearchChange={(q) => setSearchQuery(q)}
-                  onSearchSubmit={(e) => {
-                    e.preventDefault();
-                    if (searchQuery.trim()) recordSearchHistory(searchQuery.trim());
+              <div className="space-y-8 animate-fade-in">
+                {/* Universal Auto-Sliding Dynamic Banner Carousel */}
+                <BannerCarousel
+                  banners={homeBanners}
+                  apps={apps}
+                  onNavigate={navigateTo}
+                  onDownloadApp={handleDirectDownload}
+                  onSelectCategory={(cat) => {
+                    setFilters(prev => ({ ...prev, category: cat }));
                     navigateTo('all');
                   }}
-                  onTagClick={handleTagClick}
                 />
+
+                {/* Reference-design Horizontal App Suggestions Row */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <SuggestedAppsRow
+                    apps={apps}
+                    onSelectApp={(slug) => navigateTo('detail', slug)}
+                    onDownloadApp={handleDirectDownload}
+                    onViewAll={() => navigateTo('popular')}
+                  />
+                </div>
 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
                   
@@ -842,7 +1378,7 @@ export default function App() {
                     onSelectApp={(slug) => navigateTo('detail', slug)}
                     onSelectSearch={(query) => {
                       setSearchQuery(query);
-                      navigateTo('all');
+                      navigateTo('search');
                     }}
                     onClearHistory={async () => {
                       await clearRecentlyViewed(user);
@@ -852,9 +1388,6 @@ export default function App() {
 
                   {/* Google AdSense Banner Placeholder */}
                   <AdSenseBanner slotId="homepage-middle-slot" />
-
-                  {/* WhatsApp Channel Complete Placeholder Banner */}
-                  <WhatsAppBanner />
 
                   {/* Trending Intelligence section */}
                   <section className="space-y-6" id="home-trending-intelligence">
@@ -1133,9 +1666,6 @@ export default function App() {
                       })}
                     </div>
                   </section>
-
-                  {/* Newsletter subscription module */}
-                  <Newsletter />
                 </div>
               </div>
             )}
@@ -1173,7 +1703,8 @@ export default function App() {
                   await clearDownloadHistory(user);
                   setDownloadHistory([]);
                 }}
-                onBackHome={() => navigateTo('home')}
+                onBack={handleBack}
+                onBackHome={handleBack}
               />
             )}
 
@@ -1184,34 +1715,73 @@ export default function App() {
                 onMarkRead={handleMarkNotificationRead}
                 onMarkAllRead={handleMarkAllNotificationsRead}
                 onSelectApp={(slug) => navigateTo('detail', slug)}
-                onBackHome={() => navigateTo('home')}
+                onBack={handleBack}
+                onBackHome={handleBack}
               />
             )}
 
-            {/* Search Discovery View */}
-            {currentView === 'search' && (
+            {/* Search Discovery Page (Dedicated /search) */}
+            {['search', 'search-type', 'search-results', 'search-expand', 'search-expand-fully'].includes(currentView) && (
               <SearchDiscoveryView
                 apps={apps}
+                view={currentView}
                 searchQuery={searchQuery}
                 onSearchChange={(q) => setSearchQuery(q)}
-                onSelectApp={(slug) => navigateTo('detail', slug)}
+                onSelectApp={(slug) => {
+                  const matchedApp = apps.find(a => a.slug === slug || a.id === slug);
+                  if (matchedApp) {
+                    const isGame = matchedApp.category === 'Games';
+                    navigateTo(isGame ? 'game-detail-type' : 'app-detail-type', matchedApp.slug);
+                  } else {
+                    navigateTo('detail', slug);
+                  }
+                }}
                 onDownloadApp={handleDirectDownload}
                 downloadHistory={downloadHistory}
                 onBookmarkToggle={(appId) => handleToggleBookmark(appId)}
                 bookmarkedAppIds={bookmarks}
                 userId={user?.uid || null}
                 onNavigate={navigateTo}
+                onBack={() => handleBack()}
               />
             )}
 
-            {/* Subscription Management View (Aero Premium) */}
-            {currentView === 'subscription' && (
-              <SubscriptionView
-                subscriptionPlan={effectiveSubscriptionPlan}
-                userRole={userRole}
-                user={user}
-                onUpgradePlan={handleUpgradePlan}
-                onSignIn={handleSignIn}
+            {currentView === 'developer-detail' && selectedDeveloperSlug && (
+              <DeveloperDetailView
+                developerSlug={selectedDeveloperSlug}
+                apps={apps}
+                onSelectApp={(slug) => navigateTo('detail', slug)}
+                onDownloadApp={handleDirectDownload}
+                onNavigate={navigateTo}
+                onBack={() => handleBack('all-developers')}
+              />
+            )}
+            {currentView === 'all-developers' && (
+              <AllDevelopersView
+                apps={apps}
+                onSelectDeveloper={(devSlug) => navigateTo('developer-detail', devSlug)}
+                onSelectApp={(slug) => navigateTo('detail', slug)}
+                onDownloadApp={handleDirectDownload}
+                onNavigate={navigateTo}
+              />
+            )}
+            {currentView === 'category-detail' && (
+              <CategoryDetailView
+                categorySlug={selectedCategorySlug || undefined}
+                categoryName={filters.category}
+                apps={apps}
+                onSelectApp={(slug) => navigateTo('detail', slug)}
+                onDownloadApp={handleDirectDownload}
+                onNavigate={navigateTo}
+                onBack={() => handleBack('all-categories')}
+              />
+            )}
+            {currentView === 'all-categories' && (
+              <AllCategoriesView
+                apps={apps}
+                onSelectCategory={(catSlug) => navigateTo('category-detail', catSlug)}
+                onSelectApp={(slug) => navigateTo('detail', slug)}
+                onNavigate={navigateTo}
               />
             )}
 
@@ -1234,82 +1804,13 @@ export default function App() {
 
             {/* Apps Only View */}
             {currentView === 'apps' && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
-                <div className="space-y-1">
-                  <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    Katalog Aplikasi Android
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold">
-                    Temukan seluruh koleksi utilitas, produktivitas, komunikasi, dan multimedia terbaik.
-                  </p>
-                </div>
-
-                <SearchBar
-                  searchQuery={searchQuery}
-                  onSearchChange={(q) => {
-                    setSearchQuery(q);
-                    if (q.trim()) recordSearchHistory(q.trim());
-                  }}
-                  filters={filters}
-                  onFiltersChange={setFilters}
-                  sortBy={sortBy}
-                  onSortChange={setSortBy}
-                  totalResults={sortedApps.filter(a => a.category !== 'Game' && a.category !== 'Permainan').length}
-                  apps={apps.filter(a => a.category !== 'Game' && a.category !== 'Permainan')}
-                />
-
-                <AppGrid
-                  apps={sortedApps.filter(a => a.category !== 'Game' && a.category !== 'Permainan')}
-                  onSelect={(s) => navigateTo('detail', s)}
-                  onDownload={handleDirectDownload}
-                  onResetSearch={() => {
-                    setSearchQuery('');
-                    setFilters({ category: '', rating: '', version: '', recentlyUpdated: false });
-                  }}
-                  pageSize={8}
-                  downloadHistory={downloadHistory}
-                />
-              </div>
-            )}
-
-            {/* Games Only View */}
-            {currentView === 'games' && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
-                <div className="space-y-1">
-                  <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    Katalog Game Android
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold">
-                    Koleksi game aksi, petualangan, strategi, dan kasual APK resmi berkecepatan tinggi.
-                  </p>
-                </div>
-
-                <SearchBar
-                  searchQuery={searchQuery}
-                  onSearchChange={(q) => {
-                    setSearchQuery(q);
-                    if (q.trim()) recordSearchHistory(q.trim());
-                  }}
-                  filters={filters}
-                  onFiltersChange={setFilters}
-                  sortBy={sortBy}
-                  onSortChange={setSortBy}
-                  totalResults={sortedApps.filter(a => a.category === 'Game' || a.category === 'Permainan').length}
-                  apps={apps.filter(a => a.category === 'Game' || a.category === 'Permainan')}
-                />
-
-                <AppGrid
-                  apps={sortedApps.filter(a => a.category === 'Game' || a.category === 'Permainan')}
-                  onSelect={(s) => navigateTo('detail', s)}
-                  onDownload={handleDirectDownload}
-                  onResetSearch={() => {
-                    setSearchQuery('');
-                    setFilters({ category: '', rating: '', version: '', recentlyUpdated: false });
-                  }}
-                  pageSize={8}
-                  downloadHistory={downloadHistory}
-                />
-              </div>
+              <AppsView
+                apps={apps}
+                onNavigate={navigateTo}
+                onSelectApp={(s) => navigateTo('detail', s)}
+                onDownloadApp={handleDirectDownload}
+                downloadHistory={downloadHistory}
+              />
             )}
 
             {/* Top Charts / Trending View */}
@@ -1390,34 +1891,342 @@ export default function App() {
               </div>
             )}
 
-            {currentView === 'categories' && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
-                <div className="space-y-1">
-                  <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    Kategori Aplikasi Android
-                  </h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold">
-                    Klasifikasi cerdas aplikasi untuk mempermudah pencarian kebutuhan ponsel cerdas Anda.
-                  </p>
-                </div>
+            {currentView === 'for-you' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <ForYouView
+                  apps={apps}
+                  user={user}
+                  onSelectApp={(s) => navigateTo('detail', s)}
+                  onDownloadApp={handleDirectDownload}
+                  downloadHistory={downloadHistory}
+                  onSignIn={handleSignIn}
+                />
+              </div>
+            )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                  {CATEGORIES.map((cat) => {
-                    const count = apps.filter(a => a.category === cat).length;
-                    return (
-                      <CategoryCard
-                        key={cat}
-                        category={cat}
-                        appCount={count}
-                        isSelected={false}
-                        onSelect={(c) => {
-                          setFilters(prev => ({ ...prev, category: c }));
-                          navigateTo('all');
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+            {currentView === 'popular' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <PopularView
+                  apps={apps}
+                  onSelectApp={(s) => navigateTo('detail', s)}
+                  onDownloadApp={handleDirectDownload}
+                />
+              </div>
+            )}
+
+            {currentView === 'latest' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <LatestView
+                  apps={apps}
+                  onSelectApp={(s) => navigateTo('detail', s)}
+                  onDownloadApp={handleDirectDownload}
+                />
+              </div>
+            )}
+
+            {currentView === 'mod' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <ModAppsView
+                  apps={apps}
+                  onSelectApp={(s) => navigateTo('detail', s)}
+                  onDownloadApp={handleDirectDownload}
+                />
+              </div>
+            )}
+
+            {currentView === 'games' && (
+              <GamesView
+                apps={apps}
+                onNavigate={navigateTo}
+                onSelectApp={(s) => navigateTo('detail', s)}
+                onDownloadApp={handleDirectDownload}
+                downloadHistory={downloadHistory}
+                currentUser={user}
+                subscriptionPlan={effectiveSubscriptionPlan}
+                userRole={userRole}
+                banners={homeBanners}
+              />
+            )}
+
+            {currentView === 'categories' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <CategoriesView
+                  apps={apps}
+                  onSelectCategory={(cat) => {
+                    setFilters(prev => ({ ...prev, category: cat }));
+                    navigateTo('all');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'blog' && (
+              <div className="w-full animate-fade-in">
+                <BlogMainView
+                  onNavigate={navigateTo}
+                  onOpenAuthModal={(mode) => {
+                    setAuthInitialMode(mode);
+                    navigateTo('auth-login');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'blog-category' && (
+              <div className="w-full animate-fade-in">
+                <BlogCategoryView
+                  categorySlug={selectedBlogCategory}
+                  onNavigate={navigateTo}
+                  onOpenAuthModal={(mode) => {
+                    setAuthInitialMode(mode);
+                    navigateTo('auth-login');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'blog-search' && (
+              <div className="w-full animate-fade-in">
+                <BlogSearchView
+                  onNavigate={navigateTo}
+                  onOpenAuthModal={(mode) => {
+                    setAuthInitialMode(mode);
+                    navigateTo('auth-login');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'blog-detail' && (
+              <div className="w-full animate-fade-in">
+                <BlogDetailView
+                  slug={selectedBlogSlug || 'cara-menggunakan-2-whatsapp-dalam-1-hp'}
+                  onNavigate={navigateTo}
+                  onOpenAuthModal={(mode) => {
+                    setAuthInitialMode(mode);
+                    navigateTo('auth-login');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'event-detail' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <EventDetailView
+                  eventId={selectedEventId || ''}
+                  apps={apps}
+                  onNavigate={navigateTo}
+                  onSelectApp={(app) => navigateTo('detail', app.slug || app.id)}
+                  onBack={() => handleBack('home')}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-download' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppDownloadView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-versions' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppVersionsView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                  onSelectVersion={() => navigateTo('app-download', activeApp.slug)}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-rating-all' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppReviewsView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                  currentUser={user}
+                  onSignIn={handleSignIn}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-write-review' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <WriteReviewView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                  currentUser={user}
+                  onSignIn={handleSignIn}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-detail-full' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppDetailFullView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-comments' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppCommentsView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                  currentUser={user}
+                />
+              </div>
+            )}
+
+            {currentView === 'app-screenshots' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+                <AppScreenshotsView
+                  app={activeApp}
+                  onBack={() => handleBack('detail', activeApp.slug)}
+                />
+              </div>
+            )}
+
+            {['auth-login', 'auth-registration', 'auth-forgotpassword', 'auth-verification'].includes(currentView) && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                <AuthViews
+                  mode={
+                    currentView === 'auth-login' ? 'login' :
+                    currentView === 'auth-registration' ? 'register' :
+                    currentView === 'auth-forgotpassword' ? 'forgot-password' :
+                    'verify'
+                  }
+                  onNavigate={navigateTo}
+                  onBack={() => {
+                    if (currentView === 'auth-login') {
+                      handleBack('profile');
+                    } else if (currentView === 'auth-registration') {
+                      handleBack('auth-login');
+                    } else if (currentView === 'auth-forgotpassword') {
+                      handleBack('auth-login');
+                    } else if (currentView === 'auth-verification') {
+                      handleBack('auth-registration');
+                    } else {
+                      handleBack();
+                    }
+                  }}
+                  onSuccess={() => {
+                    handleSignIn();
+                    navigateTo('profile');
+                  }}
+                />
+              </div>
+            )}
+
+            {currentView === 'settings-security' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in">
+                <SettingsSecurityView
+                  onBack={() => handleBack('profile')}
+                />
+              </div>
+            )}
+
+            {currentView === 'social-media' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <SocialMediaView
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('home')}
+                />
+              </div>
+            )}
+
+            {currentView === 'help-center' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <HelpCenterView
+                  currentUser={user}
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('home')}
+                />
+              </div>
+            )}
+
+            {currentView === 'help-ai-assistant' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <HelpAIAssistantView
+                  initialQuestion={helpInitialQuestion}
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('help-center')}
+                />
+              </div>
+            )}
+
+            {currentView === 'help-articles' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <HelpArticlesView
+                  initialSlug={helpArticleSlug}
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('help-center')}
+                />
+              </div>
+            )}
+
+            {currentView === 'change-password' && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <ChangePasswordView
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('help-center')}
+                />
+              </div>
+            )}
+
+            {(currentView === 'customer-service' || currentView === 'contact') && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <CustomerServiceView
+                  currentUser={user}
+                  onNavigate={navigateTo}
+                  onSignIn={handleSignIn}
+                  onBack={() => handleBack('help-center')}
+                />
+              </div>
+            )}
+
+            {(currentView === 'subscription' || currentView === 'premium') && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
+                <SubscriptionView
+                  subscriptionPlan={effectiveSubscriptionPlan}
+                  userRole={userRole}
+                  user={user}
+                  onUpgradePlan={handleUpgradePlan}
+                  onSignIn={handleSignIn}
+                  onBack={() => handleBack('home')}
+                  onNavigate={navigateTo}
+                />
+              </div>
+            )}
+
+            {currentView === 'about' && (
+              <AboutView
+                onNavigate={navigateTo}
+                onBack={() => handleBack('home')}
+              />
+            )}
+
+            {['faq', 'privacy', 'terms', 'dmca', 'disclaimer'].includes(currentView) && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in">
+                <InformationViews
+                  type={currentView as any}
+                  onNavigate={navigateTo}
+                  onBack={() => handleBack('home')}
+                />
+              </div>
+            )}
+
+
+            {['error-404', 'error-403', 'error-500', 'error-offline', '404', '403', '500', 'offline'].includes(currentView) && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+                <ErrorViews
+                  type={(currentView.replace('error-', '') as any) || '404'}
+                  onNavigateHome={() => navigateTo('home')}
+                />
               </div>
             )}
 
@@ -1431,12 +2240,13 @@ export default function App() {
             )}
 
             {currentView === 'detail' && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 animate-fade-in">
                 <AppDetail
                   app={activeApp}
                   relatedApps={getRelatedApps(activeApp)}
                   allApps={apps}
                   onNavigate={navigateTo}
+                  onBack={() => handleBack('apps')}
                   onSelectRelated={(s) => navigateTo('detail', s)}
                   onDownloadRelated={handleDirectDownload}
                   isBookmarked={bookmarks.includes(activeApp.id)}
@@ -1461,38 +2271,95 @@ export default function App() {
               />
             )}
 
-            {currentView === 'profile' && (
-              <UserProfileView
+            {(currentView === 'profile' || currentView === 'account') && (
+              <ProfileView
                 user={user}
-                allApps={apps}
                 savedApps={apps.filter(app => bookmarks.includes(app.id))}
-                followedApps={apps.filter(app => followedApps.includes(app.id))}
-                followedCategories={followedCategories}
                 downloadHistory={downloadHistory}
-                notifications={notifications}
                 onSelectApp={(s) => navigateTo('detail', s)}
                 onDownloadApp={handleDirectDownload}
                 onRemoveBookmark={(appId) => handleToggleBookmark(appId)}
-                onToggleFollowApp={(appOrId) => handleToggleFollow(typeof appOrId === 'string' ? appOrId : appOrId.id)}
-                onToggleFollowCategory={(cat) => handleToggleFollowCategory(cat)}
                 onClearDownloadHistory={async () => {
                   await clearDownloadHistory(user);
                   setDownloadHistory([]);
                 }}
-                onClearRecentlyViewed={async () => {
-                  await clearRecentlyViewed(user);
-                  setRecentlyViewed([]);
+                onNavigate={navigateTo}
+                onBack={() => handleBack('home')}
+                onUpdateUser={(updatedUser) => {
+                  setUser(prev => prev ? ({ ...prev, ...updatedUser }) : null);
                 }}
-                onSignOut={handleSignOut}
-                onSignIn={handleSignIn}
-                onMarkNotificationRead={handleMarkNotificationRead}
-                onBackHome={() => navigateTo('home')}
               />
             )}
 
+            {currentView === 'settings' && (
+              <SettingsView
+                user={user}
+                onNavigate={navigateTo}
+                onBack={() => handleBack('home')}
+                onSignIn={handleSignIn}
+                onSignOut={handleSignOut}
+                onThemeChange={(th) => setDarkMode(th === 'dark')}
+              />
+            )}
+
+            {currentView === 'settings-language' && (
+              <SettingsLanguageView
+                onBack={() => handleBack('settings')}
+              />
+            )}
+
+            {currentView === 'settings-device' && (
+              <SettingsDeviceView
+                onBack={() => handleBack('settings')}
+              />
+            )}
+
+            {currentView === 'settings-interests' && (
+              <SettingsInterestsView
+                user={user}
+                onBack={() => handleBack('settings')}
+              />
+            )}
+
+            {currentView === 'settings-autoplay' && (
+              <SettingsAutoplayView
+                onBack={() => handleBack('settings')}
+              />
+            )}
+
+            {currentView === 'settings-theme' && (
+              <SettingsThemeView
+                onBack={() => handleBack('settings')}
+                onThemeChange={(th) => setDarkMode(th === 'dark')}
+              />
+            )}
+
+            {currentView === 'settings-account-security' && (
+              <SettingsAccountSecurityView
+                user={user}
+                onNavigate={navigateTo}
+                onBack={() => handleBack('settings')}
+                onSignOut={handleSignOut}
+              />
+            )}
+
+            {currentView === 'settings-change-password' && (
+              <SettingsChangePasswordView
+                onNavigate={navigateTo}
+                onBack={() => handleBack('settings-account-security')}
+              />
+            )}
+
+            {currentView === 'settings-sessions' && (
+              <SettingsSessionsView
+                onBack={() => handleBack('settings-account-security')}
+              />
+            )}
+
+
             {currentView === 'admin' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in font-sans">
-                {user && (user.email === 'fantrastore.id@gmail.com' || user.email === 'fahriandriansaputra123@gmail.com' || user.email === 'admin@aeroapk.com') ? (
+                {isOwnerOrAdmin ? (
                   <AdminPanel onNavigate={navigateTo} user={user} initialTab={adminInitialTab} />
                 ) : (
                   <div className="py-20 text-center space-y-4">
@@ -1504,232 +2371,35 @@ export default function App() {
               </div>
             )}
 
-            {/* Static Content Views */}
-            {currentView === 'about' && (
-              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Tentang AeroAPK Downloader
-                </h1>
-                <p className="text-sm sm:text-base text-slate-650 dark:text-slate-350 leading-relaxed font-semibold">
-                  AeroAPK lahir dari komitmen kuat untuk menyediakan ekosistem unduhan aplikasi Android yang jujur, transparan, dan berkelas dunia untuk masyarakat Indonesia. 
-                </p>
-                <p className="text-sm text-slate-550 dark:text-slate-400 leading-relaxed">
-                  Kami menyadari banyak sekali situs APK Downloader yang memaksakan unduhan tersembunyi, tombol unduh palsu yang mengarahkan ke virus/iklan pop-up agresif, serta melakukan modifikasi kode yang membahayakan privasi perangkat pengguna. Di AeroAPK, kami memutus rantai buruk tersebut. 
-                </p>
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
-                  <h4 className="font-extrabold text-sm text-blue-600 dark:text-blue-400">Jaminan AeroAPK:</h4>
-                  <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 mt-2 font-medium">
-                    <li>✓ 100% Berkas APK Asli Google Play Store tanpa modifikasi kode berbahaya.</li>
-                    <li>✓ Integrasi deteksi malware instan dengan engine Antivirus SHA-256 cloud.</li>
-                    <li>✓ Server berkecepatan tinggi tanpa throttling atau batasan limit download bulanan.</li>
-                  </ul>
-                </div>
-              </div>
+            {(currentView === 'donate-qris' || currentView === 'qris') && (
+              <QrisDonationView
+                onBack={() => handleBack('home')}
+              />
             )}
 
-            {currentView === 'contact' && (
-              <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Hubungi AeroAPK
-                </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
-                  Punya saran kemitraan, permohonan penambahan rilis aplikasi APK baru, ataupun keluhan lainnya? Kirimkan pesan Anda melalui form di bawah ini secara instan:
-                </p>
-
-                {contactSubmitted ? (
-                  <div className="p-6 bg-blue-50/10 dark:bg-blue-950/20 border border-blue-500/20 dark:border-blue-800 rounded-3xl text-center space-y-3 animate-fade-in">
-                    <CheckCircle className="h-10 w-10 text-blue-500 mx-auto" />
-                    <h3 className="text-base font-extrabold text-slate-800 dark:text-white">Pesan Anda Berhasil Terkirim!</h3>
-                    <p className="text-xs text-slate-550 dark:text-slate-400">Terima kasih atas partisipasi Anda menghubungi kami. Tim teknis AeroAPK akan merespon email Anda dalam waktu 1x24 jam kerja.</p>
-                    <button
-                      onClick={() => {
-                        setContactForm({ name: '', email: '', message: '' });
-                        setContactSubmitted(false);
-                      }}
-                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
-                    >
-                      Kirim Pesan Baru
-                    </button>
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setContactSubmitted(true);
-                    }}
-                    className="space-y-4 bg-white dark:bg-white/[0.02] p-6 rounded-3xl border border-slate-200/80 dark:border-white/5 shadow-xs"
-                  >
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label>
-                      <input
-                        type="text"
-                        required
-                        value={contactForm.name}
-                        onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        placeholder="Masukkan nama Anda..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Alamat Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={contactForm.email}
-                        onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        placeholder="nama@email.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Pesan / Masukan</label>
-                      <textarea
-                        required
-                        rows={4}
-                        value={contactForm.message}
-                        onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 resize-none"
-                        placeholder="Tuliskan pesan atau keluhan secara lengkap di sini..."
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-                    >
-                      Kirim Pesan Sekarang
-                    </button>
-                  </form>
-                )}
-              </div>
+            {(currentView === 'donate-bank' || currentView === 'bank') && (
+              <BankDonationView
+                onBack={() => handleBack('home')}
+              />
             )}
 
             {currentView === 'donate' && (
-              <DonateView onBackHome={() => navigateTo('home')} />
-            )}
-
-            {currentView === 'disclaimer' && (
-              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Sangkalan Hukum (Disclaimer)
-                </h1>
-                <div className="space-y-4 text-xs sm:text-sm text-slate-650 dark:text-slate-350 leading-relaxed font-semibold">
-                  <p>AeroAPK adalah layanan repositori arsip berkas APK Android independen dan TIDAK berafiliasi, didukung, disponsori, atau disetujui secara resmi oleh Google LLC, Alphabet Inc., atau pengembang aplikasi pihak ketiga mana pun.</p>
-                  <p>Android, Google Play, dan logo Google Play adalah merek dagang dari Google LLC. Semua merek dagang, logo, dan nama produk yang ditampilkan dalam situs ini adalah milik dari pemiliknya masing-masing.</p>
-                  <p>Semua aplikasi dan permainan di AeroAPK bersumber dari domain publik atau kontribusi pengembang, dan ditujukan hanya untuk penggunaan pribadi dan edukasional.</p>
-                </div>
-              </div>
-            )}
-
-            {currentView === 'privacy' && (
-              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Kebijakan Privasi (Privacy Policy)
-                </h1>
-                <div className="space-y-4 text-xs sm:text-sm text-slate-650 dark:text-slate-350 leading-relaxed font-semibold">
-                  <p>Di AeroAPK, privasi pengunjung kami adalah prioritas utama. Dokumen Kebijakan Privasi ini menjelaskan jenis data pribadi apa saja yang dikumpulkan dan dicatat oleh sistem kami serta bagaimana kami menggunakannya.</p>
-                  <h3 className="text-base font-extrabold text-slate-800 dark:text-white pt-2">Data yang Kami Kumpulkan</h3>
-                  <p>Kami tidak mengumpulkan informasi pribadi tanpa persetujuan eksplisit Anda. Data login Google Auth hanya digunakan untuk mengidentifikasi akun Anda saat mengunggah ulasan atau menyimpan daftar aplikasi favorit.</p>
-                  <h3 className="text-base font-extrabold text-slate-800 dark:text-white pt-2">Kontrol Privasi Pengguna</h3>
-                  <p>Pengguna memiliki hak penuh untuk mengekspor riwayat data atau menghapus seluruh riwayat aktivitas dari tab Pengaturan Privasi di profil akun.</p>
-                </div>
-              </div>
-            )}
-
-            {currentView === 'terms' && (
-              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Syarat & Ketentuan Layanan (Terms of Service)
-                </h1>
-                <div className="space-y-4 text-xs sm:text-sm text-slate-650 dark:text-slate-350 leading-relaxed font-semibold">
-                  <p>Dengan mengakses atau menggunakan situs AeroAPK, Anda menyetujui untuk terikat oleh Syarat dan Ketentuan Layanan ini serta semua hukum dan peraturan yang berlaku.</p>
-                  <p>Anda dilarang keras menggunakan situs ini untuk mendistribusikan malware, virus, atau perangkat lunak berbahaya lainnya, melakukan rekayasa balik (reverse engineering) yang merugikan pengembang asli, atau melakukan scraping otomatis yang membebani infrastruktur kami.</p>
-                </div>
-              </div>
-            )}
-
-            {currentView === 'dmca' && (
-              <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Pemberitahuan DMCA & Hak Cipta
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
-                  AeroAPK mematuhi ketentuan 17 U.S.C. § 512 dan Digital Millennium Copyright Act (DMCA). Adalah kebijakan kami untuk menanggapi setiap pemberitahuan pelanggaran dan mengambil tindakan yang sesuai. Jika materi berhak cipta Anda telah diposting di AeroAPK tanpa izin, hubungi kami melalui formulir ini:
-                </p>
-
-                {dmcaSubmitted ? (
-                  <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl text-center space-y-3 animate-fade-in">
-                    <CheckCircle className="h-10 w-10 text-emerald-500 mx-auto" />
-                    <h3 className="text-base font-extrabold text-slate-800 dark:text-white">Laporan DMCA Diterima</h3>
-                    <p className="text-xs text-slate-400">Pemberitahuan pelanggaran hak cipta Anda telah kami terima dan akan segera ditinjau oleh tim legal AeroAPK dalam 1x24 jam.</p>
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setDmcaSubmitted(true);
-                    }}
-                    className="space-y-4 bg-white dark:bg-white/[0.02] p-6 rounded-3xl border border-slate-200/80 dark:border-white/5 shadow-xs"
-                  >
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Nama Aplikasi yang Dilaporkan</label>
-                      <input
-                        type="text"
-                        required
-                        value={dmcaForm.appName}
-                        onChange={(e) => setDmcaForm({ ...dmcaForm, appName: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        placeholder="Contoh: WhatsApp Messenger APK"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">URL Halaman Aero</label>
-                      <input
-                        type="text"
-                        required
-                        value={dmcaForm.url}
-                        onChange={(e) => setDmcaForm({ ...dmcaForm, url: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        placeholder="https://aeroapk.com/#/apps/whatsapp-messenger"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Email Pemegang Hak Cipta</label>
-                      <input
-                        type="email"
-                        required
-                        value={dmcaForm.email}
-                        onChange={(e) => setDmcaForm({ ...dmcaForm, email: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        placeholder="legal@perusahaan.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">Uraian Bukti Kepemilikan</label>
-                      <textarea
-                        required
-                        rows={4}
-                        value={dmcaForm.description}
-                        onChange={(e) => setDmcaForm({ ...dmcaForm, description: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 resize-none"
-                        placeholder="Jelaskan bukti hak cipta atau lampirkan nomor pendaftaran merek dagang..."
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold shadow-md shadow-red-500/20 transition-all cursor-pointer"
-                    >
-                      Kirimkan Laporan DMCA
-                    </button>
-                  </form>
-                )}
-              </div>
+              <DonateView
+                onBackHome={() => handleBack('home')}
+                onBack={() => handleBack('home')}
+                user={user}
+                onSignIn={handleSignIn}
+              />
             )}
 
             {currentView === 'sitemap' && (
-              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6 animate-fade-in">
-                <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
-                  Peta Situs (Sitemap)
-                </h1>
+              <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-fade-in">
+                <div>
+                  <BackButton onBack={() => handleBack('home')} label="Kembali" showText={true} className="mb-4" />
+                  <h1 className="text-3xl font-black tracking-tight text-slate-850 dark:text-white">
+                    Peta Situs (Sitemap)
+                  </h1>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="p-5 bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/5 rounded-2xl space-y-3">
                     <h3 className="font-extrabold text-sm text-blue-600 dark:text-blue-400">Halaman Utama</h3>
@@ -1747,9 +2417,9 @@ export default function App() {
                   <div className="p-5 bg-white dark:bg-white/[0.02] border border-slate-200/80 dark:border-white/5 rounded-2xl space-y-3">
                     <h3 className="font-extrabold text-sm text-blue-600 dark:text-blue-400">Informasi & Bantuan</h3>
                     <ul className="text-xs space-y-2 text-slate-600 dark:text-slate-400 font-semibold">
-                      <li><button onClick={() => navigateTo('about')} className="hover:underline text-left">Tentang Aero</button></li>
+                      <li><button onClick={() => navigateTo('about')} className="hover:underline text-left">Tentang Kami</button></li>
                       <li><button onClick={() => navigateTo('contact')} className="hover:underline text-left">Hubungi Kami</button></li>
-                      <li><button onClick={() => navigateTo('donate')} className="hover:underline text-left">Dukung Proyek Aero</button></li>
+                      <li><button onClick={() => navigateTo('donate')} className="hover:underline text-left">Dukung Mod Station</button></li>
                       <li><button onClick={() => navigateTo('dmca')} className="hover:underline text-left">Pemberitahuan DMCA</button></li>
                       <li><button onClick={() => navigateTo('privacy')} className="hover:underline text-left">Kebijakan Privasi</button></li>
                       <li><button onClick={() => navigateTo('terms')} className="hover:underline text-left">Syarat & Ketentuan</button></li>
@@ -1761,9 +2431,8 @@ export default function App() {
           </>
         )}
       </main>
-
-      {/* Footer */}
-      <Footer onNavigate={navigateTo} />
+      </div>
+      </div>
 
       {/* Real-time Notification Center Modal */}
       {showNotificationModal && (

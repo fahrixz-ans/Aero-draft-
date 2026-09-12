@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { 
   Upload, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, 
-  X, FileText, ArrowLeft, Layers, Hash, Code, Save, RefreshCw, 
+  X, FileText, Layers, Hash, Code, Save, RefreshCw, 
   Sparkles, Check, AlertCircle, Eye, HelpCircle, HardDrive
 } from 'lucide-react';
+import BackButton from '../navigation/BackButton';
 import { AppData, AppStatus, PublishMode } from '../../types';
 import { db } from '../../lib/firebase';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
@@ -361,13 +362,7 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
       
       {/* Top Header */}
       <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Kembali ke Katalog</span>
-        </button>
+        <BackButton onBack={onBack} label="Kembali ke Katalog" showText={true} />
 
         <div className="text-right">
           <span className="px-3 py-1 bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-full text-xs font-extrabold">

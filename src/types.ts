@@ -99,6 +99,49 @@ export interface AppData {
   badges?: string[];
   viewCount?: number;
   minAndroid?: string;
+  isMod?: boolean;
+  versions?: AppVersion[];
+  requirements?: string;
+  contentRating?: string;
+  modFeatures?: string;
+  contactEmail?: string;
+}
+
+export interface Review {
+  id: string;
+  appId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  rating: number;
+  title?: string;
+  comment: string;
+  deviceInfo?: string;
+  helpfulCount: number;
+  reported?: boolean;
+  createdAt: string;
+}
+
+export interface Article {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  author: {
+    name: string;
+    avatar: string;
+    role: string;
+  };
+  category: string;
+  tags: string[];
+  readTime: string;
+  publishedAt: string;
+  views: number;
+  likes: number;
+  featured?: boolean;
+  relatedAppSlugs?: string[];
 }
 
 export interface ImportJob {
@@ -233,6 +276,82 @@ export interface AppReport {
   updatedAt: string;
 }
 
+export type CSTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export type CSConversationState = 
+  | 'AI_CHAT'
+  | 'REQUESTING_AGENT'
+  | 'WAITING_QUEUE'
+  | 'AGENT_ASSIGNED'
+  | 'IN_AGENT_CHAT'
+  | 'ENDING_CHAT'
+  | 'ENDED'
+  | 'CANCELLED';
+
+export type CSActionType = 
+  | 'OPEN_APP'
+  | 'OPEN_GAME'
+  | 'OPEN_HELP'
+  | 'OPEN_FAQ'
+  | 'OPEN_CUSTOMER_SERVICE'
+  | 'OPEN_REPORT_HISTORY'
+  | 'REQUEST_HUMAN_AGENT'
+  | 'CANCEL_AGENT_REQUEST'
+  | 'END_AGENT_CHAT';
+
+export interface CSAction {
+  type: CSActionType;
+  targetId?: string;
+  label: string;
+}
+
+export interface CSAttachment {
+  name: string;
+  type: string;
+  url: string;
+  size: number;
+}
+
+export interface CSMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderType: 'user' | 'agent' | 'bot' | 'ai' | 'system';
+  senderName: string;
+  message: string;
+  actions?: CSAction[];
+  attachments?: CSAttachment[];
+  createdAt: string;
+  status?: 'sending' | 'sent' | 'failed';
+}
+
+export interface CSTicket {
+  id: string;
+  ticketCode: string; // e.g. #CS-10824
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userAvatar?: string;
+  category: string;
+  subject: string;
+  status: CSTicketStatus;
+  state?: CSConversationState;
+  assignedAgentId?: string;
+  assignedAgentName?: string;
+  assignedAgentEmail?: string;
+  queuePosition?: number;
+  estimatedWaitMinutes?: number;
+  requestedAgentAt?: string;
+  agentJoinedAt?: string;
+  endedAt?: string;
+  lastMessage: string;
+  unreadByAdmin?: boolean;
+  unreadByUser?: boolean;
+  messages: CSMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppRating {
   id: string;
   userId: string;
@@ -333,7 +452,12 @@ export type AdminAuditAction =
   | 'collection_updated'
   | 'admin_setting_changed'
   | 'security_alert_resolved'
-  | 'firestore_sync';
+  | 'firestore_sync'
+  | 'notification_saved'
+  | 'notification_sent'
+  | 'notification_deleted'
+  | 'banner_saved'
+  | 'banner_deleted';
 
 export interface AdminAuditLog {
   id: string;
@@ -341,7 +465,7 @@ export interface AdminAuditLog {
   adminEmail: string;
   performedBy?: string;
   action: AdminAuditAction;
-  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system';
+  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system' | 'notification' | 'banner';
   entityId: string;
   entityName?: string;
   details?: string;
@@ -820,6 +944,86 @@ export interface EventBannerItem {
   startDate?: string;
   endDate?: string;
   createdAt: string;
+}
+
+export interface EventItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  content?: string;
+  imageUrl?: string;
+  image?: string;
+  mediaType?: 'image' | 'gif' | 'video';
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  appId?: string;
+  startDate?: string;
+  endDate?: string;
+  startAt?: string;
+  endAt?: string;
+  location?: string;
+  organizer?: string;
+  category?: string;
+  tag?: string;
+  relatedAppSlugs?: string[];
+  ctaLabel?: string;
+  destinationType?: string;
+  destination?: string;
+  isActive?: boolean;
+  priority?: number;
+}
+
+export type BannerDestinationType = 
+  | 'internal' 
+  | 'external' 
+  | 'app' 
+  | 'game' 
+  | 'event' 
+  | 'article' 
+  | 'blog'
+  | 'channel'
+  | 'category';
+
+export interface BannerItem {
+  id: string;
+  title: string;
+  description: string;
+  image?: string;
+  imageUrl?: string;
+  mediaType?: 'image' | 'gif' | 'video';
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  ctaLabel?: string;
+  destinationType: BannerDestinationType;
+  destination: string;
+  isActive: boolean;
+  order?: number;
+  priority?: number;
+  startAt?: string;
+  endAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  tag?: string;
+}
+
+export interface BlogItem {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  category: string;
+  author: {
+    name: string;
+    avatar: string;
+    role: string;
+  };
+  publishedAt: string;
+  readTimeMinutes: number;
+  tags: string[];
+  isFeatured?: boolean;
 }
 
 // ----------------------------------------------------

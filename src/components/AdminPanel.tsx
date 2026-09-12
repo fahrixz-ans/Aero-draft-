@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { appsData as staticApps } from '../data/appsData';
 import { calculateAppBadges } from '../utils/badges';
+import { AppBadge, AppBadgeType } from './common/AppBadge';
 import { 
   addDeletedAppId, 
   addDeletedAppIds, 
@@ -58,6 +59,9 @@ import AdminNewAppForm from './admin/AdminNewAppForm';
 import AdminModerationHub from './admin/AdminModerationHub';
 import AdminSeoIntelligenceView from './admin/AdminSeoIntelligenceView';
 import AdminAiDiscoveryIntelligenceView from './admin/AdminAiDiscoveryIntelligenceView';
+import AdminNotificationsManagement from './admin/AdminNotificationsManagement';
+import AdminBannersManagement from './admin/AdminBannersManagement';
+import AdminCustomerServiceView from './admin/AdminCustomerServiceView';
 import AdminLayout from './admin/common/AdminLayout';
 import { BreadcrumbItem } from './admin/common/Breadcrumb';
 import { logAdminAction } from '../services/admin/auditLogService';
@@ -1551,12 +1555,12 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
                     return (
                       <div className="flex flex-wrap gap-2">
                         {dynamicBadges.map((badge, bIdx) => (
-                          <span
+                          <AppBadge
                             key={bIdx}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wide border shadow-xs ${badge.styleClasses}`}
-                          >
-                            {badge.label}
-                          </span>
+                            type={badge.type as AppBadgeType}
+                            label={badge.label}
+                            size="sm"
+                          />
                         ))}
                       </div>
                     );
@@ -1928,12 +1932,12 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
                                           slug: {app.slug || app.id}
                                         </span>
                                         {appBadges.slice(0, 2).map((b, bi) => (
-                                          <span
+                                          <AppBadge
                                             key={bi}
-                                            className={`text-[8.5px] font-black px-1.5 py-0.2 rounded ${b.styleClasses}`}
-                                          >
-                                            {b.label}
-                                          </span>
+                                            type={b.type as AppBadgeType}
+                                            label={b.label}
+                                            size="sm"
+                                          />
                                         ))}
                                       </div>
                                     </div>
@@ -2103,6 +2107,11 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
                   onRefreshApps={loadAllData}
                   onNavigateToApp={(slug) => onNavigate('detail', slug)}
                 />
+              )}
+
+              {/* TAB: CUSTOMER SERVICE */}
+              {activeTab === 'customer-service' && (
+                <AdminCustomerServiceView currentUser={user} />
               )}
 
               {/* TAB 3: FEEDBACK MANAGEMENT */}
@@ -2849,6 +2858,20 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
               {activeTab === 'ai-discovery' && (
                 <div className="animate-fade-in">
                   <AdminAiDiscoveryIntelligenceView />
+                </div>
+              )}
+
+              {/* NOTIFICATIONS MANAGEMENT */}
+              {activeTab === 'notifications' && (
+                <div className="animate-fade-in">
+                  <AdminNotificationsManagement currentUser={user} apps={apps} />
+                </div>
+              )}
+
+              {/* BANNERS MANAGEMENT */}
+              {activeTab === 'banners' && (
+                <div className="animate-fade-in">
+                  <AdminBannersManagement currentUser={user} apps={apps} />
                 </div>
               )}
             </>

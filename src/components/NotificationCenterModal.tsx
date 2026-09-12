@@ -65,7 +65,7 @@ export default function NotificationCenterModal({
           <div className="flex items-center gap-1">
             {unreadCount > 0 && (
               <button
-                onClick={onMarkAllAsRead}
+                onClick={handleMarkAllRead}
                 title="Tandai semua telah dibaca"
                 aria-label="Tandai semua pemberitahuan telah dibaca"
                 className="p-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg flex items-center gap-1 transition-colors"
@@ -77,7 +77,7 @@ export default function NotificationCenterModal({
             <button
               onClick={onClose}
               aria-label="Tutup jendela pemberitahuan"
-              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg btn-close-effect cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -101,9 +101,9 @@ export default function NotificationCenterModal({
               <div
                 key={item.id}
                 onClick={() => {
-                  if (!item.read) onMarkAsRead(item.id);
-                  if (item.appSlug && onNavigateToApp) {
-                    onNavigateToApp(item.appSlug);
+                  if (!item.read) handleMarkRead(item.id);
+                  if (item.appSlug && handleNavigateApp) {
+                    handleNavigateApp(item.appSlug);
                     onClose();
                   }
                 }}

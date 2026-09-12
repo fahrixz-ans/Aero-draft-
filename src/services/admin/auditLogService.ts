@@ -4,7 +4,7 @@ import { collection, addDoc, getDocs, query, orderBy, limit as firestoreLimit, o
 
 export async function logAdminAction(params: {
   action: AdminAuditAction;
-  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system';
+  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system' | 'notification' | 'banner';
   entityId: string;
   entityName?: string;
   metadata?: Record<string, any>;

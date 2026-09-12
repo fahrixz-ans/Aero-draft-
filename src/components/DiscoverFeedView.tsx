@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Compass, Sparkles, Flame, TrendingUp, RefreshCw, Star, Layers, ArrowLeft, Filter } from 'lucide-react';
+import { Compass, Sparkles, Flame, TrendingUp, RefreshCw, Star, Layers, Filter } from 'lucide-react';
+import BackButton from './navigation/BackButton';
 import { AppData, DownloadHistoryRecord } from '../types';
 import { CATEGORIES } from '../data/appsData';
 import AppCard from './AppCard';
@@ -11,6 +12,7 @@ interface DiscoverFeedViewProps {
   onDownloadApp: (e: React.MouseEvent, app: AppData) => void;
   onSelectCategory?: (category: string) => void;
   onBackHome?: () => void;
+  onBack?: () => void;
   onNavigate?: (view: string, slug?: string) => void;
   downloadHistory?: DownloadHistoryRecord[];
 }
@@ -24,11 +26,12 @@ export default function DiscoverFeedView({
   onDownloadApp,
   onSelectCategory,
   onBackHome,
+  onBack,
   onNavigate,
   downloadHistory
 }: DiscoverFeedViewProps) {
   const dataset = allApps || apps || [];
-  const handleBack = onBackHome || (() => onNavigate?.('home'));
+  const handleBack = onBack || onBackHome || (() => onNavigate?.('home'));
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<DiscoverSort>('trending');
   const [displayCount, setDisplayCount] = useState<number>(12);
@@ -56,14 +59,7 @@ export default function DiscoverFeedView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-200 dark:border-white/10">
         <div>
           {handleBack && (
-            <button
-              onClick={handleBack}
-              aria-label="Kembali ke beranda"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 mb-2 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Kembali ke Beranda</span>
-            </button>
+            <BackButton onBack={handleBack} label="Kembali ke Beranda" showText={true} className="mb-2" />
           )}
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
             <Compass className="w-7 h-7 text-blue-600 dark:text-blue-400" />

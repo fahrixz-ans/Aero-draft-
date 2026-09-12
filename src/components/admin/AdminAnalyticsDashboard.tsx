@@ -82,7 +82,7 @@ export default function AdminAnalyticsDashboard({ apps }: AdminAnalyticsDashboar
             <span>STAGE 9.5 • ANALYTICS & EVENT TRACKING</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Pusat Analitik & Metrik Platform AERO
+            Pusat Analitik & Metrik Platform Mod Station
           </h1>
           <p className="text-slate-300 text-xs sm:text-sm max-w-2xl font-medium leading-relaxed">
             Observabilitas real-time, funnel konversi penemuan, performa mesin pencari, keefektifan rekomendasi, dan metrik interaksi pengguna.

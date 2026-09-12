@@ -98,7 +98,7 @@ export const SmartCollectionCard: React.FC<SmartCollectionCardProps> = ({
         {/* Contextual Reason / Badge */}
         {item.reason && (
           <div className="mt-1">
-            <span className="inline-block text-[10px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded truncate max-w-full">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-900 dark:text-white bg-white dark:bg-[#0b0f19] border border-slate-900/80 dark:border-white/80 px-2 py-0.5 rounded-lg shadow-xs truncate max-w-full">
               {item.reason.label}
             </span>
           </div>

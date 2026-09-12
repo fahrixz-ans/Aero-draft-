@@ -112,7 +112,7 @@ export default function AdminAiDiscoveryIntelligenceView() {
     return (
       <div className="flex flex-col items-center justify-center p-12 space-y-4">
         <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-sm text-slate-500 font-medium">Memuat kecerdasan buatan AI Discovery Intelligence AERO...</p>
+        <p className="text-sm text-slate-500 font-medium">Memuat kecerdasan buatan AI Discovery Intelligence Mod Station...</p>
       </div>
     );
   }
@@ -544,7 +544,7 @@ export default function AdminAiDiscoveryIntelligenceView() {
           </div>
 
           <p className="text-xs text-slate-400 leading-relaxed">
-            Format laporan di bawah ini dibuat otomatis untuk memenuhi kontrak audit Stage 9.16. Gunakan tombol unduh/salin untuk audit kepatuhan platform AERO.
+            Format laporan di bawah ini dibuat otomatis untuk memenuhi kontrak audit Stage 9.16. Gunakan tombol unduh/salin untuk audit kepatuhan platform Mod Station.
           </p>
 
           <pre className="text-xs text-slate-300 font-mono p-4 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto max-h-[500px] leading-relaxed">

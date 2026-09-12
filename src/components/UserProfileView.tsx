@@ -5,6 +5,7 @@ import {
   Shield, History, Download, Layers, RefreshCw, AlertTriangle, FileText,
   Sliders, Lock, Eye, DownloadCloud, AlertCircle, Sparkles
 } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   AppData, 
   AppReview, 
@@ -52,6 +53,7 @@ interface UserProfileViewProps {
   onClearRecentlyViewed?: () => void;
   onSignOut: () => void;
   onSignIn?: () => void;
+  authLoading?: boolean;
   onMarkNotificationRead?: (id: string) => void;
   onMarkAllNotificationsRead?: () => void;
   onBackHome: () => void;
@@ -75,10 +77,13 @@ export default function UserProfileView({
   onUnfollowCategory,
   onClearDownloadHistory,
   onSignOut,
+  onSignIn,
+  authLoading = false,
   onMarkNotificationRead,
   onBackHome,
   initialTab = 'overview'
 }: UserProfileViewProps) {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [myReviews, setMyReviews] = useState<AppReview[]>([]);
   const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
@@ -251,6 +256,56 @@ export default function UserProfileView({
 
   const unreadNotifCount = (notifications || []).filter((n) => !n.read).length;
 
+  if (authLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-pulse" id="user-profile-loading">
+        <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl p-8 mb-8 flex items-center gap-6">
+          <div className="w-20 h-20 rounded-2xl bg-slate-200 dark:bg-white/10"></div>
+          <div className="space-y-3 flex-1">
+            <div className="h-6 bg-slate-200 dark:bg-white/10 rounded-lg w-1/3"></div>
+            <div className="h-4 bg-slate-200 dark:bg-white/10 rounded-lg w-1/2"></div>
+            <div className="flex gap-2 pt-1">
+              <div className="h-6 bg-slate-200 dark:bg-white/10 rounded-lg w-20"></div>
+              <div className="h-6 bg-slate-200 dark:bg-white/10 rounded-lg w-20"></div>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="h-12 bg-slate-200 dark:bg-white/10 rounded-2xl w-full"></div>
+          <div className="h-64 bg-slate-200 dark:bg-white/10 rounded-3xl w-full"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center animate-fade-in" id="user-profile-guest">
+        <div className="bg-white dark:bg-[#131924] border border-slate-200/80 dark:border-white/10 rounded-3xl p-8 shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-4 shadow-xs">
+            <UserIcon className="w-8 h-8" />
+          </div>
+          <div className="inline-block px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-3">
+            Belum masuk
+          </div>
+          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight mb-2 animate-pulse">
+            Masuk ke Mod Station
+          </h2>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+            Masuk untuk mengakses fitur akun, menyimpan aplikasi favorit, dan mendapatkan pengalaman Mod Station yang lebih personal.
+          </p>
+          <button
+            onClick={onSignIn}
+            className="w-full h-11 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+          >
+            <span>Masuk/Daftar</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in" id="user-profile-view">
       {/* Account Header */}
@@ -271,23 +326,23 @@ export default function UserProfileView({
 
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {user?.displayName || 'Pengguna Aero'}
+              {user?.displayName || t('profile.defaultDisplayName', 'Pengguna Mod Station')}
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {user?.email || 'Akun Tamu (Tersimpan Lokal)'}
+              {user?.email || t('profile.guestAccount', 'Akun Tamu (Tersimpan Lokal)')}
             </p>
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                 <Bookmark className="w-3 h-3 text-blue-500" />
-                {savedApps.length} Disimpan
+                {savedApps.length} {t('profile.statsSaved', 'Disimpan')}
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                 <Bell className="w-3 h-3 text-purple-500" />
-                {followedApps.length} Diikuti
+                {followedApps.length} {t('profile.followedBadge', 'Diikuti')}
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                 <History className="w-3 h-3 text-emerald-500" />
-                {downloadHistory.length} Riwayat Unduh
+                {downloadHistory.length} {t('profile.statsDownloads', 'Riwayat Unduh')}
               </span>
             </div>
           </div>
@@ -295,25 +350,25 @@ export default function UserProfileView({
 
         <button
           onClick={onSignOut}
-          aria-label="Keluar dari akun"
+          aria-label={t('security.logoutConfirmTitle', 'Keluar dari akun')}
           className="px-4 py-2 rounded-xl border border-red-200 dark:border-red-900/30 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 transition-colors self-center sm:self-start cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
-          <span>Keluar</span>
+          <span>{t('common.logout', 'Keluar')}</span>
         </button>
       </div>
 
       {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-8 overflow-x-auto pb-px">
         {[
-          { id: 'overview', label: 'Ringkasan', icon: UserIcon },
-          { id: 'saved', label: `Tersimpan & Diikuti (${savedApps.length + followedApps.length})`, icon: Bookmark },
-          { id: 'history', label: `Riwayat Unduhan (${downloadHistory.length})`, icon: History },
-          { id: 'reviews', label: 'Ulasan Saya', icon: MessageSquare },
-          { id: 'reports', label: 'Laporan Saya', icon: FileText },
-          { id: 'preferences', label: 'Preferensi', icon: Sliders },
-          { id: 'notifications', label: 'Notifikasi', icon: Bell },
-          { id: 'privacy', label: 'Privasi & Data', icon: Lock }
+          { id: 'overview', label: t('profile.activity', 'Ringkasan'), icon: UserIcon },
+          { id: 'saved', label: `${t('profile.statsSaved', 'Tersimpan')} & ${t('profile.followedBadge', 'Diikuti')} (${savedApps.length + followedApps.length})`, icon: Bookmark },
+          { id: 'history', label: `${t('profile.downloadHistory', 'Riwayat Unduhan')} (${downloadHistory.length})`, icon: History },
+          { id: 'reviews', label: t('profile.reviewHistory', 'Ulasan Saya'), icon: MessageSquare },
+          { id: 'reports', label: t('profile.reportHistory', 'Laporan Saya'), icon: FileText },
+          { id: 'preferences', label: t('settings.preferences', 'Preferensi'), icon: Sliders },
+          { id: 'notifications', label: t('notifications.title', 'Notifikasi'), icon: Bell },
+          { id: 'privacy', label: t('nav.privacy', 'Privasi & Data'), icon: Lock }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -346,10 +401,10 @@ export default function UserProfileView({
                 <Bookmark className="w-6 h-6" />
               </div>
               <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-blue-500 transition-colors">
-                Aplikasi Tersimpan
+                {t('profile.savedApps', 'Aplikasi Tersimpan')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {savedApps.length} aplikasi tersimpan dalam daftar favorit Anda.
+                {savedApps.length} {t('profile.savedAppsDesc', 'aplikasi tersimpan dalam daftar favorit Anda.')}
               </p>
             </div>
 
@@ -361,10 +416,10 @@ export default function UserProfileView({
                 <History className="w-6 h-6" />
               </div>
               <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-emerald-500 transition-colors">
-                Riwayat Unduhan
+                {t('profile.downloadHistory', 'Riwayat Unduhan')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {downloadHistory.length} berkas APK atau tautan resmi pernah diunduh.
+                {downloadHistory.length} {t('profile.downloadHistoryDesc', 'berkas APK atau tautan resmi pernah diunduh.')}
               </p>
             </div>
 
@@ -376,10 +431,10 @@ export default function UserProfileView({
                 <Shield className="w-6 h-6" />
               </div>
               <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-purple-500 transition-colors">
-                Kontrol Privasi
+                {t('privacy.title', 'Kontrol Privasi')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Kelola personalisasi data, riwayat pencarian, dan opsi export data JSON.
+                {t('profile.privacyDesc', 'Kelola personalisasi data, riwayat pencarian, dan opsi export data JSON.')}
               </p>
             </div>
           </div>
@@ -389,13 +444,13 @@ export default function UserProfileView({
             <div className="space-y-4 pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">
-                  Aplikasi Tersimpan Terakhir
+                  {t('profile.lastSavedApps', 'Aplikasi Tersimpan Terakhir')}
                 </h3>
                 <button
                   onClick={() => setActiveTab('saved')}
                   className="text-xs font-bold text-blue-500 hover:underline cursor-pointer"
                 >
-                  Lihat Semua
+                  {t('common.viewAll', 'Lihat Semua')}
                 </button>
               </div>
 
@@ -594,7 +649,7 @@ export default function UserProfileView({
       {activeTab === 'reports' && (
         <div className="space-y-4">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Pantau status laporan kendala aplikasi yang telah Anda ajukan kepada tim moderator Aero.
+            Pantau status laporan kendala aplikasi yang telah Anda ajukan kepada tim moderator Mod Station.
           </p>
 
           {loadingReports ? (
@@ -915,7 +970,7 @@ export default function UserProfileView({
                 Konfirmasi Hapus Akun Permanen
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Tindakan ini tidak dapat dibatalkan. Seluruh daftar aplikasi tersimpan, riwayat unduh, preferensi, dan data profil Anda akan dihapus secara permanen dari server database Aero.
+                Tindakan ini tidak dapat dibatalkan. Seluruh daftar aplikasi tersimpan, riwayat unduh, preferensi, dan data profil Anda akan dihapus secara permanen dari server database Mod Station.
               </p>
             </div>
 

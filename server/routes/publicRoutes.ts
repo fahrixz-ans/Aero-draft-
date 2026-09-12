@@ -340,3 +340,16 @@ publicRouter.get('/dosya/download/:fileId', (req, res) => {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
   }
 });
+
+// GET /api/public/download-modstation-client
+publicRouter.get('/download-modstation-client', (req, res) => {
+  try {
+    const apkPath = path.join(process.cwd(), 'uploads', 'apks', 'test_download_ok.apk');
+    if (fs.existsSync(apkPath)) {
+      return res.download(apkPath, 'mod-station.apk');
+    }
+    return sendError(res, 'APK_NOT_FOUND', 'Aplikasi belum tersedia untuk diunduh.', 404);
+  } catch (err: any) {
+    return sendError(res, 'INTERNAL_ERROR', err.message, 500);
+  }
+});

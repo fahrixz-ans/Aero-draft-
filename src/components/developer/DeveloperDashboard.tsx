@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, ShieldCheck, Clock, CheckCircle2, AlertTriangle, FileText, Code2, Plus, ArrowLeft } from 'lucide-react';
+import { Upload, ShieldCheck, Clock, CheckCircle2, AlertTriangle, FileText, Code2, Plus } from 'lucide-react';
+import BackButton from '../navigation/BackButton';
 
 interface DeveloperDashboardProps {
   user: any;
@@ -97,16 +98,18 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in" id="developer-dashboard">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <button
-            onClick={onBackToHome}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Kembali ke Beranda</span>
-          </button>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40 text-blue-600 dark:text-blue-400 text-xs font-black uppercase tracking-wider mb-2">
-            <Code2 className="w-3.5 h-3.5" />
-            <span>Portal Developer Aero</span>
+          <BackButton onBack={onBackToHome} label="Kembali ke Beranda" showText={true} className="mb-3" />
+          <div className="flex items-center gap-3 mb-2">
+            <img
+              src="/assets/mod-station-logo.svg"
+              alt="Mod Station"
+              className="w-10 h-10 object-contain shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40 text-blue-600 dark:text-blue-400 text-xs font-black uppercase tracking-wider">
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Portal Developer Mod Station</span>
+            </div>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             Dashboard Pengembang & Riwayat Rilis

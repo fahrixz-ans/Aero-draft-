@@ -5,6 +5,7 @@ import { ScoredApp } from '../../services/recommendations/recommendationTypes';
 import { trackRecommendationEvent } from '../../services/recommendations/recommendationAnalytics';
 import { trackUserInteraction } from '../../services/recommendations/userInterestService';
 import AppCard from '../AppCard';
+import RefreshIconButton from '../common/RefreshIconButton';
 
 interface RecommendationShelfProps {
   shelfId: string;
@@ -137,14 +138,11 @@ export default function RecommendationShelf({
         </div>
 
         {onRefresh && (
-          <button
-            onClick={onRefresh}
-            className="self-end sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all cursor-pointer"
-            title="Segarkan rekomendasi"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Segarkan</span>
-          </button>
+          <RefreshIconButton
+            onRefresh={onRefresh}
+            label="Segarkan"
+            className="self-end sm:self-auto"
+          />
         )}
       </div>
 
@@ -175,10 +173,10 @@ export default function RecommendationShelf({
                 <div className="flex items-center justify-between gap-1.5 px-1 pt-0.5">
                   <div className="flex items-center gap-1 overflow-hidden">
                     <span 
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-500/20 px-2 py-0.5 rounded-md truncate max-w-[200px]"
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-900 dark:text-white bg-white dark:bg-[#0b0f19] border border-slate-900/80 dark:border-white/80 px-2 py-0.5 rounded-lg shadow-xs truncate max-w-[200px]"
                       title={score.matchingFactors.join(' • ') || score.primaryReason}
                     >
-                      <Sparkles className="w-2.5 h-2.5 shrink-0" />
+                      <Sparkles className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500/20" />
                       <span className="truncate">{score.primaryReason || 'Pilihan Relevan'}</span>
                     </span>
                   </div>

@@ -73,9 +73,11 @@ export const AppRecommendationCard: React.FC<AppRecommendationCardProps> = ({
 
       {/* Reason / Confidence Badge */}
       {reason && (
-        <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-gray-800/80 flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium truncate">
-          <Sparkles className="w-2.5 h-2.5 shrink-0" />
-          <span className="truncate">{reason}</span>
+        <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-gray-800/80">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-900 dark:text-white bg-white dark:bg-[#0b0f19] border border-slate-900/80 dark:border-white/80 px-2 py-0.5 rounded-lg shadow-xs truncate max-w-full">
+            <Sparkles className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500/20" />
+            <span className="truncate">{reason}</span>
+          </span>
         </div>
       )}
     </div>

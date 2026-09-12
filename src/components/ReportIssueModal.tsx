@@ -152,7 +152,7 @@ export default function ReportIssueModal({
         <button
           onClick={onClose}
           aria-label="Tutup formulir laporan"
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full btn-close-effect cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <X className="w-5 h-5" />
         </button>

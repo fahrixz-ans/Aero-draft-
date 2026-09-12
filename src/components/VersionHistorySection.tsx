@@ -41,7 +41,7 @@ export default function VersionHistorySection({
             <span>Riwayat Versi (Version Archive)</span>
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Total {versions.length} versi rilis terverifikasi tersimpan dalam arsip immutable Aero.
+            Total {versions.length} versi rilis terverifikasi tersimpan dalam arsip immutable Mod Station.
           </p>
         </div>
         {versions.length >= 2 && (

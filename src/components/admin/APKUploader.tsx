@@ -70,7 +70,7 @@ export const APKUploader: React.FC<APKUploaderProps> = ({
 
       // 4. Upload file to backend server storage (/api/upload-apk)
       setStep('uploading');
-      setStepMessage('Mengunggah berkas APK ke penyimpanan server Aero...');
+      setStepMessage('Mengunggah berkas APK ke penyimpanan server Mod Station...');
 
       const formData = new FormData();
       formData.append('apk', file);

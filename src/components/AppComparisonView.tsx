@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  ArrowLeft, Star, Download, ShieldCheck, Check, X, 
+  Star, Download, ShieldCheck, Check, X, 
   Smartphone, HardDrive, Calendar, User, ExternalLink, Plus, Trash2, ArrowUpRight 
 } from 'lucide-react';
+import BackButton from './navigation/BackButton';
 import { AppData } from '../types';
 
 interface AppComparisonViewProps {
@@ -62,15 +63,8 @@ export default function AppComparisonView({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-200 dark:border-white/10">
         <div>
-          {onBackHome && (
-            <button
-              onClick={onBackHome}
-              aria-label="Kembali ke beranda"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 mb-2 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Kembali ke Beranda</span>
-            </button>
+          {handleBack && (
+            <BackButton onBack={handleBack} label="Kembali ke Beranda" showText={true} className="mb-2" />
           )}
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             Perbandingan Spesifikasi Aplikasi

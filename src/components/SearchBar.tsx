@@ -1,16 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, RotateCcw, ChevronDown, Calendar, HardDrive, Cpu, Star, X, Sparkles, Building, Layers, Flame, TrendingUp, History, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, RotateCcw, ChevronDown, Calendar, HardDrive, Cpu, Star, X, Sparkles, Building, Layers } from 'lucide-react';
 import { AppData, FilterState, SortOption } from '../types';
 import { CATEGORIES } from '../data/appsData';
 import { trackAnalyticsEvent } from '../utils/analytics';
-import { 
-  recordSearchQuery, 
-  recordSearchResultClick, 
-  getSearchIntelligenceSummary, 
-  getRecentSearches, 
-  clearRecentSearches,
-  recordUserInteraction 
-} from '../services';
+import { recordSearchQuery } from '../services';
 
 interface SearchBarProps {
   searchQuery: string;
@@ -35,12 +28,6 @@ export default function SearchBar({
 }: SearchBarProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const autocompleteRef = useRef<HTMLDivElement>(null);
-
-  // Load search intelligence summary
-  const searchSummary = getSearchIntelligenceSummary();
 
   // Extract unique developers for developer filter
   const developers = Array.from(new Set(apps.map(a => a.developer).filter(Boolean))).sort();
@@ -49,11 +36,6 @@ export default function SearchBar({
   useEffect(() => {
     setInputValue(searchQuery);
   }, [searchQuery]);
-
-  // Load recent searches on mount / when suggestions open
-  useEffect(() => {
-    setRecentSearches(getRecentSearches());
-  }, [showSuggestions]);
 
   // Debounced search trigger and analytics search tracking
   useEffect(() => {
@@ -69,17 +51,6 @@ export default function SearchBar({
     return () => clearTimeout(handler);
   }, [inputValue, onSearchChange, totalResults]);
 
-  // Close suggestions when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (autocompleteRef.current && !autocompleteRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const handleReset = () => {
     setInputValue('');
     onSearchChange('');
@@ -94,7 +65,6 @@ export default function SearchBar({
       updatedDateRange: ''
     });
     onSortChange('popular');
-    setShowSuggestions(false);
   };
 
   const handleFilterChange = (key: keyof FilterState, value: any) => {
@@ -102,43 +72,6 @@ export default function SearchBar({
       ...filters,
       [key]: value
     });
-  };
-
-  // Filter apps to get autocomplete suggestions
-  const getSuggestions = () => {
-    if (!inputValue || inputValue.trim().length < 2) return [];
-    const query = inputValue.toLowerCase().trim();
-    return apps
-      .filter(app => 
-        (app.status === 'published' || !app.status) && (
-          app.name.toLowerCase().includes(query) || 
-          (app.developerName || app.developer || '').toLowerCase().includes(query) ||
-          app.category.toLowerCase().includes(query)
-        )
-      )
-      .slice(0, 5);
-  };
-
-  const suggestions = getSuggestions();
-
-  const handleSuggestionClick = (app: AppData) => {
-    recordSearchResultClick(inputValue, app);
-    recordUserInteraction('search', app);
-    setInputValue(app.name);
-    onSearchChange(app.name);
-    setShowSuggestions(false);
-  };
-
-  const handleQueryClick = (queryText: string) => {
-    setInputValue(queryText);
-    onSearchChange(queryText);
-    setShowSuggestions(false);
-  };
-
-  const handleClearHistory = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearRecentSearches();
-    setRecentSearches([]);
   };
 
   const activeFiltersCount = Object.entries(filters).filter(([k, v]) => {
@@ -150,7 +83,7 @@ export default function SearchBar({
     <div className="w-full space-y-4" id="search-filter-module">
       {/* Search Input and Toggles */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1" ref={autocompleteRef}>
+        <div className="relative flex-1">
           <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
             <Search className="h-5 w-5" />
           </div>
@@ -160,9 +93,7 @@ export default function SearchBar({
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);
-              setShowSuggestions(true);
             }}
-            onFocus={() => setShowSuggestions(true)}
             className="w-full pl-11 pr-10 py-3.5 bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl text-slate-850 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 text-sm font-semibold focus:border-blue-500 focus:outline-none transition-all shadow-sm"
             id="search-input-field"
             autoComplete="off"
@@ -173,125 +104,11 @@ export default function SearchBar({
                 setInputValue('');
                 onSearchChange('');
               }}
-              className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 btn-close-effect cursor-pointer"
+              title="Hapus pencarian"
             >
               <X className="h-4 w-4" />
             </button>
-          )}
-
-          {/* Autocomplete Suggestions & Intelligence Box */}
-          {showSuggestions && (
-            <div className="absolute left-0 right-0 mt-2 bg-white dark:bg-[#13161C] border border-slate-150 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-white/5 animate-fade-in max-h-96 overflow-y-auto">
-              {/* When user has typed query and has matching apps */}
-              {suggestions.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 bg-slate-50 dark:bg-white/[0.02] text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                    <span>Aplikasi Cocok</span>
-                    <span>{suggestions.length} ditemukan</span>
-                  </div>
-                  {suggestions.map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleSuggestionClick(app)}
-                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors text-left group cursor-pointer"
-                    >
-                      <img
-                        src={app.iconUrl || app.icon}
-                        alt={app.name}
-                        referrerPolicy="no-referrer"
-                        className="h-9 w-9 rounded-lg object-cover bg-slate-100 dark:bg-slate-800"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors truncate">
-                          {app.name}
-                        </p>
-                        <p className="text-[10px] text-slate-450 dark:text-slate-400 truncate">
-                          {app.developerName || app.developer} • <span className="font-bold text-slate-500 dark:text-slate-300">{app.category}</span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                        <Star className="h-2.5 w-2.5 fill-amber-500" />
-                        <span>{app.rating.toFixed(1)}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Recent searches */}
-              {recentSearches.length > 0 && (
-                <div className="p-3 space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-1">
-                    <span className="flex items-center gap-1.5">
-                      <History className="h-3 w-3" /> Pencarian Terakhir
-                    </span>
-                    <button
-                      onClick={handleClearHistory}
-                      className="text-slate-400 hover:text-red-500 cursor-pointer lowercase"
-                    >
-                      hapus riwayat
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {recentSearches.slice(0, 6).map((item, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleQueryClick(item)}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Trending & Popular search recommendations */}
-              {(!suggestions.length || inputValue.trim().length < 2) && (
-                <div className="p-3 space-y-3">
-                  {/* Trending Queries */}
-                  {searchSummary.trendingSearches.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="text-[10px] font-extrabold text-orange-500 uppercase tracking-wider flex items-center gap-1 px-1">
-                        <Flame className="h-3 w-3 fill-orange-500" /> Sedang Tren
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {searchSummary.trendingSearches.map((t, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleQueryClick(t.query)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-lg transition-colors cursor-pointer border border-orange-500/20"
-                          >
-                            <span>{t.query}</span>
-                            <span className="text-[9px] opacity-75 font-mono">+{t.growth}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Popular Queries */}
-                  {searchSummary.popularSearches.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="text-[10px] font-extrabold text-blue-500 uppercase tracking-wider flex items-center gap-1 px-1">
-                        <TrendingUp className="h-3 w-3" /> Paling Banyak Dicari
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {searchSummary.popularSearches.map((p, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleQueryClick(p.query)}
-                            className="px-2.5 py-1 bg-blue-500/5 hover:bg-blue-500/15 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg transition-colors cursor-pointer border border-blue-500/15"
-                          >
-                            {p.query}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           )}
         </div>
 
@@ -300,7 +117,7 @@ export default function SearchBar({
           <button
             onClick={() => setShowFilters(!showFilters)}
             id="filter-toggle-button"
-            className={`flex items-center gap-2 px-4 py-3.5 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-3.5 rounded-xl border text-sm font-bold btn-press-feedback cursor-pointer ${
               showFilters || activeFiltersCount > 0
                 ? 'bg-blue-50/20 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-500/30'
                 : 'bg-white dark:bg-white/[0.03] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10'

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, MessageSquare, Flag, Edit3, Trash2, CheckCircle2, AlertCircle, Loader2, ChevronLeft, ChevronRight, User as UserIcon } from 'lucide-react';
 import { AppData, AppRating, AppReview, ReviewReportReason, AeroUser as User } from '../types';
-import { doc, getDoc, collection, query, where, limit, getDocs, updateDoc, setDoc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, limit, getDocs, updateDoc, setDoc, addDoc, deleteDoc, orderBy, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 interface RatingReviewSectionProps {
@@ -9,6 +9,7 @@ interface RatingReviewSectionProps {
   currentUser: User | null;
   onRequireLogin: () => void;
   onAppUpdated?: (updatedApp: Partial<AppData>) => void;
+  onNavigate?: (view: string, slug?: string) => void;
 }
 
 const REASON_LABELS: { reason: ReviewReportReason; label: string }[] = [
@@ -23,7 +24,8 @@ export default function RatingReviewSection({
   app,
   currentUser,
   onRequireLogin,
-  onAppUpdated
+  onAppUpdated,
+  onNavigate
 }: RatingReviewSectionProps) {
   // Current user's rating & review
   const [userRating, setUserRating] = useState<number>(0);
@@ -46,6 +48,22 @@ export default function RatingReviewSection({
   const [reportDetails, setReportDetails] = useState<string>('');
   const [reportSubmitting, setReportSubmitting] = useState<boolean>(false);
   const [reportSuccess, setReportSuccess] = useState<boolean>(false);
+  const [helpfulVotes, setHelpfulVotes] = useState<Record<string, 'yes' | 'no'>>({});
+
+  const handleVoteHelpful = async (reviewId: string, vote: 'yes' | 'no') => {
+    if (!app.id || helpfulVotes[reviewId]) return;
+    setHelpfulVotes(prev => ({ ...prev, [reviewId]: vote }));
+    try {
+      const revRef = doc(db, 'applications', app.id, 'reviews', reviewId);
+      if (vote === 'yes') {
+        await updateDoc(revRef, { helpfulCount: increment(1) });
+      } else {
+        await updateDoc(revRef, { unhelpfulCount: increment(1) });
+      }
+    } catch (e) {
+      console.warn('Could not record helpful vote:', e);
+    }
+  };
 
   // Load user's rating and all reviews
   useEffect(() => {
@@ -316,14 +334,39 @@ export default function RatingReviewSection({
   return (
     <div className="space-y-8" id="rating-and-reviews">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            Rating & Ulasan
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Pendapat komunitas pengguna terverifikasi Aero
-          </p>
-        </div>
+        <button
+          onClick={() => {
+            if (onNavigate) onNavigate('rating', app.slug);
+            else window.location.hash = `/apps/${app.slug}/rating`;
+          }}
+          className="group flex items-center gap-2 text-left cursor-pointer"
+        >
+          <div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2">
+              <span>Rating & ulasan</span>
+              <span className="text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">→</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Pendapat komunitas pengguna terverifikasi Mod Station
+            </p>
+          </div>
+        </button>
+
+        {/* 13. TULIS ULASAN Button */}
+        <button
+          onClick={() => {
+            if (!currentUser) {
+              onRequireLogin();
+              return;
+            }
+            if (onNavigate) onNavigate('review', app.slug);
+            else window.location.hash = `/apps/${app.slug}/review`;
+          }}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+        >
+          <Edit3 className="w-3.5 h-3.5" />
+          <span>Tulis Ulasan</span>
+        </button>
       </div>
 
       {/* RATING SUMMARY & DISTRIBUTION (Real Data Only) */}
@@ -387,73 +430,27 @@ export default function RatingReviewSection({
       </div>
 
       {/* USER INTERACTION: RATE & WRITE REVIEW */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-sm">
-        <h3 className="text-sm font-black text-slate-900 dark:text-white mb-3">
-          {existingReviewId && !isEditing ? 'Ulasan Anda' : 'Beri Rating & Tulis Pengalaman'}
-        </h3>
-
-        {/* Stars Selector */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-2">
-            Peringkat:
-          </span>
-          <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Rating bintang 1 sampai 5">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <button
-                key={star}
-                type="button"
-                aria-label={`Beri rating ${star} dari 5 bintang`}
-                onClick={() => handleSelectRating(star)}
-                onMouseEnter={() => setHoverRating(star)}
-                onMouseLeave={() => setHoverRating(0)}
-                disabled={submitting}
-                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
-                <Star
-                  className={`w-6 h-6 transition-colors ${
-                    star <= (hoverRating || userRating)
-                      ? 'fill-amber-500 text-amber-500'
-                      : 'text-slate-300 dark:text-white/20'
-                  }`}
-                />
-              </button>
-            ))}
-          </div>
-          {userRating > 0 && (
-            <span className="text-xs font-black text-amber-500 ml-2">
-              {userRating} Bintang
-            </span>
-          )}
-        </div>
-
-        {statusMsg && (
-          <div
-            className={`p-3 rounded-xl mb-4 text-xs font-bold flex items-center gap-2 ${
-              statusMsg.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
-                : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/40'
-            }`}
-          >
-            {statusMsg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0" />
-            )}
-            <span>{statusMsg.text}</span>
-          </div>
-        )}
-
-        {/* Existing review display mode */}
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col items-center text-center space-y-4">
         {existingReviewId && !isEditing ? (
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-150 dark:border-white/5">
-            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
-              "{reviewText}"
-            </p>
+          <div className="w-full text-left">
+            <h3 className="text-sm font-black text-slate-900 dark:text-white mb-3">Ulasan Anda</h3>
+            <div className="flex items-center gap-1 mb-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  className={`w-4 h-4 ${star <= userRating ? 'fill-amber-500 text-amber-500' : 'text-slate-300 dark:text-slate-700'}`}
+                />
+              ))}
+            </div>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-150 dark:border-white/5 mb-3">
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                "{reviewText}"
+              </p>
+            </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsEditing(true)}
-                aria-label="Edit ulasan"
+                onClick={() => onNavigate && onNavigate('review', app.slug)}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
               >
                 <Edit3 className="w-3.5 h-3.5" />
@@ -463,7 +460,6 @@ export default function RatingReviewSection({
               <button
                 type="button"
                 onClick={handleDeleteReview}
-                aria-label="Hapus ulasan"
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-red-500 hover:underline"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -472,50 +468,39 @@ export default function RatingReviewSection({
             </div>
           </div>
         ) : (
-          /* Review Form */
-          <form onSubmit={handleSubmitReview} className="space-y-3">
+          <>
+            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center">
+              <MessageSquare className="w-6 h-6" />
+            </div>
             <div>
-              <label htmlFor="review-text-input" className="sr-only">
-                Tulis pengalaman kamu
-              </label>
-              <textarea
-                id="review-text-input"
-                rows={3}
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                placeholder="Bagikan pengalamanmu menggunakan aplikasi ini (opsional)..."
-                className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/30 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              />
+              <h3 className="font-bold text-slate-900 dark:text-white mb-1">Bagaimana pendapat Anda?</h3>
+              <p className="text-xs text-slate-500">Bantu pengguna lain dengan membagikan pengalaman Anda.</p>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={submitting}
-                aria-label="Kirim ulasan"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-transform active:scale-95 shadow-md shadow-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
-                <span>{existingReviewId ? 'Simpan Perubahan' : 'Kirim Review'}</span>
-              </button>
-              {isEditing && (
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl"
-                >
-                  Batal
-                </button>
-              )}
-            </div>
-          </form>
+            <button
+              onClick={() => onNavigate && onNavigate('review', app.slug)}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl w-full sm:w-auto"
+            >
+              Tulis Ulasan
+            </button>
+          </>
         )}
       </div>
 
       {/* REVIEWS LIST */}
       <div className="space-y-4">
-        <h3 className="text-base font-black text-slate-900 dark:text-white">
-          Ulasan Komunitas ({reviews.length})
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-black text-slate-900 dark:text-white">
+            Ulasan Komunitas ({reviews.length})
+          </h3>
+          {reviews.length > 0 && (
+            <button
+              onClick={() => onNavigate && onNavigate('rating', app.slug)}
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            >
+              Lihat Semua →
+            </button>
+          )}
+        </div>
 
         {loadingReviews ? (
           <div className="py-12 text-center text-slate-400">
@@ -598,6 +583,35 @@ export default function RatingReviewSection({
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-11">
                   {rev.reviewText}
                 </p>
+
+                {/* Apakah ulasan ini membantu? [Ya] [Tidak] */}
+                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 dark:border-white/5 pl-11 text-xs">
+                  <span className="text-[11px] text-slate-400 font-medium">Apakah ulasan ini membantu?</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleVoteHelpful(rev.id, 'yes')}
+                      disabled={!!helpfulVotes[rev.id]}
+                      className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                        helpfulVotes[rev.id] === 'yes'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                      }`}
+                    >
+                      Ya
+                    </button>
+                    <button
+                      onClick={() => handleVoteHelpful(rev.id, 'no')}
+                      disabled={!!helpfulVotes[rev.id]}
+                      className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                        helpfulVotes[rev.id] === 'no'
+                          ? 'bg-slate-700 text-white'
+                          : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      Tidak
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
 

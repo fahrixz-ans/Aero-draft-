@@ -13,6 +13,7 @@ import { internalRouter } from './server/routes/internalRoutes';
 import { authRouter } from './server/routes/authRoutes';
 import { developerRouter } from './server/routes/developerRoutes';
 import { smartCollectionsRouter } from './server/routes/smartCollections';
+import { customerServiceRouter } from './server/routes/customerServiceRoutes';
 import { adminIntelligenceRouter } from './server/routes/adminIntelligence';
 import { developerIntelligenceRouter } from './server/routes/developerIntelligence';
 import { initializeBackgroundWorkers } from './server/jobs';
@@ -92,7 +93,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // Global Auth.js session resolution middleware
 app.use(async (req: any, res, next) => {
   try {
-    const session = await getSession(req, authConfig);
+    const session = await getSession(req, authConfig as any);
     if (session?.user?.email) {
       const dbUser = await resolveOrCreateFirestoreUser(
         session.user.email,
@@ -183,6 +184,7 @@ app.use('/api/developer/intelligence', createAdaptiveLimiter('ADMIN'), developer
 app.use('/api/developer', createAdaptiveLimiter('DEVELOPER_UPLOAD'), developerRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api/auth', createAdaptiveLimiter('AUTH'), authRouter);
+app.use('/api/customer-service', customerServiceRouter);
 app.use('/api', smartCollectionsRouter);
 
 // ---------------------------------------------------------------------------

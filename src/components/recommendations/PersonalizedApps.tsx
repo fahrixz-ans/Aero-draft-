@@ -35,7 +35,7 @@ export const PersonalizedApps: React.FC<PersonalizedAppsProps> = ({
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           {isPersonalized
             ? 'Rekomendasi terpersonalisasi berdasarkan interaksi, riwayat pencarian, dan preferensi aplikasi Anda.'
-            : 'Pilihan aplikasi populer dan sedang tren di seluruh platform AERO.'}
+            : 'Pilihan aplikasi populer dan sedang tren di seluruh platform Mod Station.'}
         </p>
       </div>
 
@@ -47,7 +47,7 @@ export const PersonalizedApps: React.FC<PersonalizedAppsProps> = ({
               key={item.id}
               app={item}
               onSelectApp={onSelectApp}
-              reason={isPersonalized ? 'Cocok Minat Anda' : 'Trending AERO'}
+              reason={isPersonalized ? 'Cocok Minat Anda' : 'Trending Mod Station'}
             />
           );
         })}

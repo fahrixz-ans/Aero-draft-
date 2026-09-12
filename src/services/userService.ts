@@ -576,8 +576,8 @@ export function showBrowserNotification(title: string, options?: NotificationOpt
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(title, {
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
+        icon: '/assets/mod-station-logo.svg',
+        badge: '/assets/mod-station-logo.svg',
         ...options
       });
     } catch (e) {

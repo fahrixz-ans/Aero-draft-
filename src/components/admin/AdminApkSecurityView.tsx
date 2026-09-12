@@ -42,7 +42,7 @@ export default function AdminApkSecurityView({ apps }: AdminApkSecurityViewProps
             Jaminan Isolasi Eksekusi Nol (Zero-Server-Execution Policy)
           </p>
           <p className="text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 leading-relaxed">
-            Semua paket APK yang diunggah ke Aero HANYA dianalisis secara statis (inspeksi manifest dan uncompressed zip entries). Berkas APK tidak pernah dieksekusi atau dijalankan di lingkungan kontainer server untuk mencegah eksekusi kode berbahaya.
+            Semua paket APK yang diunggah ke Mod Station HANYA dianalisis secara statis (inspeksi manifest dan uncompressed zip entries). Berkas APK tidak pernah dieksekusi atau dijalankan di lingkungan kontainer server untuk mencegah eksekusi kode berbahaya.
           </p>
         </div>
       </div>

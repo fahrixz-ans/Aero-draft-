@@ -228,9 +228,37 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "targetType", "targetId", "score", "level", "updatedAt"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Promotional, event, and discovery banner items for the homepage banner carousel.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "ctaLabel": { "type": "string" },
+        "destinationType": { "type": "string" },
+        "destination": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "order": { "type": "number" },
+        "priority": { "type": "number" },
+        "startAt": { "type": "string" },
+        "endAt": { "type": "string" },
+        "tag": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "destinationType", "destination", "isActive"]
     }
   },
   "firestore": {
+    "/banners/{bannerId}": {
+      "schema": "Banner",
+      "description": "Dynamic promotional banners and curated carousel items."
+    },
     "/securityIncidents/{incidentId}": {
       "schema": "SecurityIncident",
       "description": "Platform-wide security incidents tracked by security service."
