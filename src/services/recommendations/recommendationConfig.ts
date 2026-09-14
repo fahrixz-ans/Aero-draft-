@@ -77,7 +77,7 @@ export const DEFAULT_RECOMMENDATION_CONFIG: RecommendationConfig = {
     trending: {
       id: 'trending',
       title: 'Sedang Tren',
-      subtitle: 'Paling banyak dilihat dan diakses oleh komunitas Aero minggu ini',
+      subtitle: 'Paling banyak dilihat dan diakses oleh pengguna minggu ini',
       enabled: true,
       limit: 8,
       showExplanationBadge: true,

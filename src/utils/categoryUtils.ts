@@ -102,191 +102,29 @@ export function getAppCategories(app: AppData): string[] {
     results.add(resolved);
   }
 
-  // 3. Secondary category / tags
+  // 3. Secondary category
   if (app.secondaryCategory) {
     const trimmed = app.secondaryCategory.trim();
     const slug = categoryToSlug(trimmed);
     const resolved = CATEGORY_ALIASES[slug] || trimmed;
     results.add(resolved);
   }
+
+  // 4. Explicit tags that cleanly map to canonical categories/aliases
   if (Array.isArray(app.tags)) {
     app.tags.forEach(t => {
-      const slug = categoryToSlug(t);
-      const resolved = CATEGORY_ALIASES[slug];
-      if (resolved) results.add(resolved);
+      if (typeof t === 'string') {
+        const slug = categoryToSlug(t);
+        const resolved = CATEGORY_ALIASES[slug] || slugToCategoryName(slug);
+        if (resolved) {
+          results.add(resolved);
+        }
+      }
     });
   }
 
-  // 4. Inferred multi-labels based on semantic content (without losing strict financial separation)
-  const combinedText = `${app.name} ${app.description || ''} ${app.developer || ''}`.toLowerCase();
-
-  // Social & Communication
-  if (results.has('Sosial') || results.has('Social')) {
-    results.add('Sosial');
-    if (combinedText.includes('chat') || combinedText.includes('pesan') || combinedText.includes('video call')) {
-      results.add('Komunikasi');
-      results.add('Pesan & Chat');
-    }
-    results.add('Media Sosial');
-  }
-  if (results.has('Komunikasi') || results.has('Communication')) {
-    results.add('Komunikasi');
-    results.add('Pesan & Chat');
-    results.add('Sosial');
-  }
-
-  // Photography & Video
-  if (results.has('Fotografi') || results.has('Photography')) {
-    results.add('Fotografi');
-    results.add('Editor Foto');
-    if (combinedText.includes('video') || combinedText.includes('reels')) {
-      results.add('Pemutar & Editor Video');
-    }
-  }
-  if (results.has('Video') || results.has('Pemutar & Editor Video')) {
-    results.add('Pemutar & Editor Video');
-    if (combinedText.includes('stream') || combinedText.includes('nonton')) {
-      results.add('Streaming');
-    }
-  }
-
-  // Games
-  if (results.has('Game') || results.has('Games')) {
-    results.add('Game');
-    results.add('Hiburan');
-  }
-
-  // Music & Audio
-  if (results.has('Music') || results.has('Musik & Audio')) {
-    results.add('Musik & Audio');
-    results.add('Pemutar Musik');
-    if (combinedText.includes('podcast')) results.add('Podcast');
-    if (combinedText.includes('radio')) results.add('Radio');
-  }
-
-  // Productivity
-  if (results.has('Productivity') || results.has('Produktivitas')) {
-    results.add('Produktivitas');
-    if (combinedText.includes('catatan') || combinedText.includes('notes') || combinedText.includes('memo')) {
-      results.add('Catatan & Memo');
-    }
-    if (combinedText.includes('dokumen') || combinedText.includes('doc') || combinedText.includes('pdf')) {
-      results.add('Editor Dokumen');
-      results.add('PDF & Dokumen');
-    }
-  }
-
-  // Strict Financial categories distribution
-  const hasFinancePrimary = results.has('Finance') || results.has('Keuangan');
-  if (hasFinancePrimary) {
-    results.add('Keuangan'); // Broad financial category
-  }
-
-  // Investasi (reksa dana, emas, investasi umum)
-  if (
-    combinedText.includes('reksa dana') || 
-    combinedText.includes('investasi') || 
-    combinedText.includes('emas') || 
-    combinedText.includes('bibit') || 
-    combinedText.includes('bareksa') || 
-    combinedText.includes('pluang')
-  ) {
-    results.add('Investasi');
-    results.add('Keuangan');
-  }
-
-  // Saham & Sekuritas (saham, broker, sekuritas, trading)
-  if (
-    combinedText.includes('saham') || 
-    combinedText.includes('sekuritas') || 
-    combinedText.includes('broker') || 
-    combinedText.includes('trading') || 
-    combinedText.includes('idx') || 
-    combinedText.includes('stockbit') || 
-    combinedText.includes('ajaib')
-  ) {
-    results.add('Saham & Sekuritas');
-    results.add('Keuangan');
-  }
-
-  // Perbankan (bank digital dan konvensional)
-  if (
-    combinedText.includes('bank') || 
-    combinedText.includes('banking') || 
-    combinedText.includes('bca') || 
-    combinedText.includes('mandiri') || 
-    combinedText.includes('bri') || 
-    combinedText.includes('bni') || 
-    combinedText.includes('jago') || 
-    combinedText.includes('seabank') || 
-    combinedText.includes('neobank')
-  ) {
-    results.add('Perbankan');
-    results.add('Keuangan');
-  }
-
-  // Pembayaran Digital (payment gateway, QRIS, pembayaran)
-  if (
-    combinedText.includes('qris') || 
-    combinedText.includes('payment gateway') || 
-    combinedText.includes('pembayaran')
-  ) {
-    results.add('Pembayaran Digital');
-    results.add('Keuangan');
-  }
-
-  // Dompet Digital (e-wallet)
-  if (
-    combinedText.includes('dompet digital') || 
-    combinedText.includes('e-wallet') || 
-    combinedText.includes('ewallet') || 
-    combinedText.includes('gopay') || 
-    combinedText.includes('ovo') || 
-    combinedText.includes('dana') || 
-    combinedText.includes('linkaja') || 
-    combinedText.includes('shopeepay')
-  ) {
-    results.add('Dompet Digital');
-    results.add('Keuangan');
-  }
-
-  // Asuransi (aplikasi asuransi)
-  if (
-    combinedText.includes('asuransi') || 
-    combinedText.includes('insurance') || 
-    combinedText.includes('bpjs kesehatan') || 
-    combinedText.includes('prudential')
-  ) {
-    results.add('Asuransi');
-    results.add('Keuangan');
-  }
-
-  // Produktivitas Keuangan (budgeting dan pencatatan keuangan)
-  if (
-    combinedText.includes('budgeting') || 
-    combinedText.includes('pencatatan keuangan') || 
-    combinedText.includes('catat keuangan') || 
-    combinedText.includes('buku kas') || 
-    combinedText.includes('anggaran') || 
-    combinedText.includes('pengeluaran') || 
-    combinedText.includes('money manager')
-  ) {
-    results.add('Produktivitas Keuangan');
-    results.add('Keuangan');
-  }
-
-  // Bisnis & Wirausaha (kasir, POS, toko, kelola bisnis)
-  if (
-    combinedText.includes('kasir') || 
-    combinedText.includes('pos') || 
-    combinedText.includes('wirausaha') || 
-    combinedText.includes('umkm') || 
-    combinedText.includes('kelola bisnis') || 
-    combinedText.includes('bukuwarung') || 
-    combinedText.includes('majoo')
-  ) {
-    results.add('Bisnis & Wirausaha');
-    results.add('Bisnis');
+  if (results.size === 0) {
+    results.add('Alat');
   }
 
   return Array.from(results);

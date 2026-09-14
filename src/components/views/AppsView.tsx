@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Star, Download, ChevronRight, Sparkles, Flame, Clock, ShieldCheck } from 'lucide-react';
+import { Star, Download, ChevronRight, Sparkles, Flame, Clock, ShieldCheck, Layers } from 'lucide-react';
 import { AppData, DownloadHistoryRecord } from '../../types';
 import AppCard from '../AppCard';
+import ActiveFilterChips, { FilterChipItem } from '../common/ActiveFilterChips';
 
 interface AppsViewProps {
   apps: AppData[];
@@ -206,6 +207,22 @@ export default function AppsView({
             {displayedApps.length} Aplikasi
           </span>
         </div>
+
+        {/* Active Filter Chips */}
+        {selectedCategory !== 'all' && (
+          <ActiveFilterChips
+            chips={[
+              {
+                id: 'apps-cat-chip',
+                label: 'Kategori',
+                value: selectedCategory,
+                icon: <Layers className="w-3 h-3 text-blue-500" />,
+                onRemove: () => setSelectedCategory('all')
+              }
+            ]}
+            onClearAll={() => setSelectedCategory('all')}
+          />
+        )}
 
         {displayedApps.length === 0 ? (
           <div className="py-16 text-center bg-white dark:bg-[#1c1c1e] rounded-2xl border border-slate-200/80 dark:border-white/10 p-6">

@@ -31,7 +31,6 @@ import {
 } from './dto';
 import { emitAeroEvent, submitBackgroundJob } from './events';
 import { storage, sanitizeFileName } from './storage/storage';
-import { analyzeApkBuffer } from './apkAnalyzer';
 import fs from 'fs';
 import path from 'path';
 

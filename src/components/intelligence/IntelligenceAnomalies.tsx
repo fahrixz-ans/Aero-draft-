@@ -65,7 +65,7 @@ export const IntelligenceAnomalies: React.FC<IntelligenceAnomaliesProps> = ({
         return <Search className="w-5 h-5 text-amber-500" />;
       case 'RECOMMENDATION_CTR_DROP':
         return <ArrowDownRight className="w-5 h-5 text-amber-600" />;
-      case 'VIRUSTOTAL_FAILURE_SURGE':
+      case 'INTEGRITY_FAILURE_SURGE':
         return <ShieldAlert className="w-5 h-5 text-red-500" />;
       default:
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;

@@ -1,4 +1,4 @@
-import { CATEGORIES as INITIAL_CATEGORIES } from '../data/appsData';
+import { CATEGORIES_100 as INITIAL_CATEGORIES } from '../data/categories100';
 import { db } from '../lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, query, where } from 'firebase/firestore';
 import { 

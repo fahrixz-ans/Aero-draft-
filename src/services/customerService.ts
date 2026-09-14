@@ -57,11 +57,15 @@ export async function sendUserTicketMessage(params: {
   } = params;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2200);
+
     const res = await fetch('/api/customer-service/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
+      signal: controller.signal,
       body: JSON.stringify({
         ticketId,
         messageId,
@@ -75,6 +79,8 @@ export async function sendUserTicketMessage(params: {
       })
     });
 
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.ticket) {
@@ -84,8 +90,12 @@ export async function sendUserTicketMessage(params: {
         };
       }
     }
-  } catch (err) {
-    console.warn('[CS Service] Server chat endpoint error, fallback to direct Firestore:', err);
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      console.warn('[CS Service] Request timed out at 2.2s deadline');
+    } else {
+      console.warn('[CS Service] Server chat endpoint error:', err);
+    }
   }
 
   // Resilient Direct Firestore Fallback

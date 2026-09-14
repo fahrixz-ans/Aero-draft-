@@ -10,7 +10,6 @@ import BackButton from '../navigation/BackButton';
 import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { AppData } from '../../types';
-import { appsData } from '../../data/appsData';
 import { useLanguage } from '../../context/LanguageContext';
 
 interface AboutViewProps {
@@ -383,9 +382,6 @@ export default function AboutView({ onNavigate, onBack }: AboutViewProps) {
           snapshot.forEach((doc) => {
             loadedApps.push({ id: doc.id, ...doc.data() } as AppData);
           });
-        } else {
-          // Fallback to static catalog dataset if collection is currently unpopulated
-          loadedApps = appsData;
         }
 
         const totalApps = loadedApps.length;
@@ -408,7 +404,6 @@ export default function AboutView({ onNavigate, onBack }: AboutViewProps) {
           if ((app as any).ratingCount) {
             totalRatingsCount += Number((app as any).ratingCount);
           } else if (app.rating) {
-            // Standard estimation multiplier if rating count field absent
             totalRatingsCount += Math.floor(app.rating * 12);
           }
         });
@@ -423,9 +418,9 @@ export default function AboutView({ onNavigate, onBack }: AboutViewProps) {
         setStats((prev) => ({
           ...prev,
           totalApps,
-          totalDevelopers: developersSet.size > 0 ? developersSet.size : 14,
-          totalCategories: categoriesSet.size > 0 ? categoriesSet.size : 12,
-          totalRatings: totalRatingsCount > 0 ? totalRatingsCount : 450,
+          totalDevelopers: developersSet.size,
+          totalCategories: categoriesSet.size,
+          totalRatings: totalRatingsCount,
           safeAppsCount: safeCount,
           securityRate: securityPercentage,
           loading: false,
@@ -437,21 +432,10 @@ export default function AboutView({ onNavigate, onBack }: AboutViewProps) {
         console.warn('Firestore applications subscription notice in AboutView:', err);
         if (!isMounted) return;
 
-        // Fallback calculations using static dataset
-        const developersSet = new Set(appsData.map((a) => a.developer));
-        const categoriesSet = new Set(appsData.map((a) => a.category));
-
         setStats((prev) => ({
           ...prev,
-          totalApps: appsData.length,
-          totalDevelopers: developersSet.size,
-          totalCategories: categoriesSet.size,
-          totalRatings: 320,
-          safeAppsCount: appsData.length,
-          securityRate: 100,
           loading: false,
-          error: null,
-          lastUpdated: new Date()
+          error: 'Gagal memuat statistik dari database.'
         }));
       }
     );

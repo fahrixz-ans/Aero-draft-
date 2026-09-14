@@ -10,6 +10,19 @@ import { CSTicket, CSMessage, CSConversationState } from '../../src/types';
 export const customerServiceRouter = Router();
 const CS_COLLECTION = 'cs_tickets';
 
+/**
+ * GET /api/customer-service/status
+ * Check if ChatGPT API is connected for Customer Service
+ */
+customerServiceRouter.get('/status', (req: Request, res: Response) => {
+  const isConnected = !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0;
+  return res.json({
+    success: true,
+    connected: isConnected,
+    provider: 'ChatGPT API'
+  });
+});
+
 // Helper to generate ticket code
 function generateTicketCode(): string {
   const randomNum = Math.floor(10000 + Math.random() * 90000);
@@ -56,6 +69,15 @@ async function calculateRealQueuePosition(ticketId: string, createdAt: string): 
 customerServiceRouter.post('/chat', async (req: any, res: Response) => {
   try {
     const { ticketId, message, attachments = [], category = 'Umum', messageId } = req.body;
+
+    const isConnected = !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0;
+    if (!isConnected) {
+      return res.status(400).json({
+        success: false,
+        code: 'API_NOT_CONNECTED',
+        error: { message: 'Error. The API is not connected yet.' }
+      });
+    }
 
     if (!message && attachments.length === 0) {
       return res.status(400).json({

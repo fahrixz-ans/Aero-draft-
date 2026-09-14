@@ -8,6 +8,7 @@ import {
 import { AppData } from '../../types';
 import { CATEGORIES_100 } from '../../data/categories100';
 import { categoryToSlug, appMatchesCategory } from '../../utils/categoryUtils';
+import AdSlot from '../common/AdSlot';
 
 interface CategoriesViewProps {
   apps: AppData[];
@@ -89,6 +90,9 @@ export default function CategoriesView({
           />
         </div>
       </div>
+
+      {/* Strategic Ad Placement for Categories View */}
+      <AdSlot page="categories" placement="top-banner" slotId="categories-top-banner" />
 
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-4">

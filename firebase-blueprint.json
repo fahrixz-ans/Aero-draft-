@@ -13,6 +13,8 @@
         "screenshots": { "type": "array" },
         "description": { "type": "string" },
         "category": { "type": "string" },
+        "categories": { "type": "array" },
+        "secondaryCategory": { "type": "string" },
         "version": { "type": "string" },
         "size": { "type": "string" },
         "androidVersion": { "type": "string" },
@@ -338,6 +340,9 @@
     "/subscribers/{subscriberId}": {
       "schema": "NewsletterSubscriber",
       "description": "Collection of newsletter subscribers."
+    },
+    "/analytics/{eventId}": {
+      "description": "User interaction events and telemetry collection for usage insights."
     }
   }
 }

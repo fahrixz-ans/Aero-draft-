@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { AppRepository } from '../repositories';
 import { CSAction } from '../../src/types';
+import { generateGeminiCSResponse } from './geminiCsService';
 
 // Lazy OpenAI Client initialization
 let openaiClient: OpenAI | null = null;
@@ -156,68 +157,88 @@ Pedoman Kepribadian & Aturan:
    }
    Hanya sertakan "actions" jika benar-benar relevan dan membantu pengguna mengambil tindakan langsung (misalnya membuka FAQ atau masuk antrean CS). Jika tidak ada tindakan yang perlu diambil, buat array actions kosong [].`;
 
-  const openai = getOpenAIClient();
+  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) {
+    const openai = getOpenAIClient();
+    if (openai) {
+      try {
+        // Build safe context messages (last 6 turns for context continuity)
+        const contextMessages: any[] = [
+          { role: 'system', content: systemPrompt }
+        ];
 
-  if (openai) {
-    try {
-      // Build safe context messages (last 6 turns for context continuity)
-      const contextMessages: any[] = [
-        { role: 'system', content: systemPrompt }
-      ];
-
-      const recentHistory = conversationHistory.slice(-6);
-      for (const h of recentHistory) {
-        if (h.senderType === 'user') {
-          contextMessages.push({ role: 'user', content: sanitizeUserText(h.message) });
-        } else if (h.senderType === 'ai' || h.senderType === 'bot') {
-          contextMessages.push({ role: 'assistant', content: h.message });
+        const recentHistory = conversationHistory.slice(-6);
+        for (const h of recentHistory) {
+          if (h.senderType === 'user') {
+            contextMessages.push({ role: 'user', content: sanitizeUserText(h.message) });
+          } else if (h.senderType === 'ai' || h.senderType === 'bot') {
+            contextMessages.push({ role: 'assistant', content: h.message });
+          }
         }
-      }
 
-      contextMessages.push({ role: 'user', content: sanitizedInput });
+        contextMessages.push({ role: 'user', content: sanitizedInput });
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: contextMessages,
-        temperature: 0.4,
-        max_tokens: 600,
-        response_format: { type: 'json_object' }
-      });
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: contextMessages,
+          temperature: 0.4,
+          max_tokens: 600,
+          response_format: { type: 'json_object' }
+        });
 
-      const rawContent = completion.choices[0]?.message?.content?.trim();
-      if (rawContent) {
-        const parsed = JSON.parse(rawContent);
-        if (parsed.message) {
-          const validActions: CSAction[] = [];
-          if (Array.isArray(parsed.actions)) {
-            for (const act of parsed.actions) {
-              if (act && typeof act.label === 'string') {
-                validActions.push({
-                  type: act.type || (wantsHumanAgent ? 'REQUEST_HUMAN_AGENT' : 'OPEN_FAQ'),
-                  targetId: act.targetId,
-                  label: act.label
-                });
+        const rawContent = completion.choices[0]?.message?.content?.trim();
+        if (rawContent) {
+          const parsed = JSON.parse(rawContent);
+          if (parsed.message) {
+            const validActions: CSAction[] = [];
+            if (Array.isArray(parsed.actions)) {
+              for (const act of parsed.actions) {
+                if (act && typeof act.label === 'string') {
+                  validActions.push({
+                    type: act.type || (wantsHumanAgent ? 'REQUEST_HUMAN_AGENT' : 'OPEN_FAQ'),
+                    targetId: act.targetId,
+                    label: act.label
+                  });
+                }
               }
             }
-          }
 
-          // If user clearly wanted human agent but AI didn't include action, add it safely
-          if (wantsHumanAgent && !validActions.some(a => a.type === 'REQUEST_HUMAN_AGENT')) {
-            validActions.push({
-              type: 'REQUEST_HUMAN_AGENT',
-              label: 'Chat Dengan CS Mod Station'
-            });
-          }
+            // If user clearly wanted human agent but AI didn't include action, add it safely
+            if (wantsHumanAgent && !validActions.some(a => a.type === 'REQUEST_HUMAN_AGENT')) {
+              validActions.push({
+                type: 'REQUEST_HUMAN_AGENT',
+                label: 'Chat Dengan CS Mod Station'
+              });
+            }
 
-          return {
-            message: parsed.message,
-            actions: validActions,
-            suggestedState: wantsHumanAgent ? 'REQUESTING_AGENT' : 'AI_CHAT'
-          };
+            return {
+              message: parsed.message,
+              actions: validActions,
+              suggestedState: wantsHumanAgent ? 'REQUESTING_AGENT' : 'AI_CHAT'
+            };
+          }
         }
+      } catch (err: any) {
+        console.info('[Famo AI] OpenAI API unavailable (429/credits). Using Gemini CS engine fallback.');
       }
-    } catch (err: any) {
-      console.warn('[Famo AI] OpenAI call error, falling back to resilient rule-based engine:', err?.message || err);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gemini AI CS Engine Fallback
+  // ---------------------------------------------------------------------------
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) {
+    try {
+      const geminiRes = await generateGeminiCSResponse({
+        userMessage,
+        conversationHistory,
+        userName,
+        userEmail: params.userEmail
+      });
+      if (geminiRes && geminiRes.message) {
+        return geminiRes;
+      }
+    } catch (geminiErr) {
+      console.info('[Famo AI] Gemini fallback info:', geminiErr);
     }
   }
 

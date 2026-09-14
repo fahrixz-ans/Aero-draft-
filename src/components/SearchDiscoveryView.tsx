@@ -13,6 +13,7 @@ import {
   clearAllRecentSearches,
   getAggregatedSearchIntelligence 
 } from '../services/search/searchIntelligence';
+import ActiveFilterChips, { FilterChipItem } from './common/ActiveFilterChips';
 
 interface SearchDiscoveryViewProps {
   apps?: AppData[];
@@ -157,8 +158,10 @@ export default function SearchDiscoveryView({
   };
 
   // Clear single recent item
-  const handleClearRecentItem = async (e: React.MouseEvent, keyword: string) => {
-    e.stopPropagation();
+  const handleClearRecentItem = async (e: React.MouseEvent | any, keyword: string) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     const updated = recentSearches.filter(s => s !== keyword);
     setRecentSearches(updated);
     await deleteRecentSearch(userId || 'guest_user', keyword);
@@ -515,6 +518,62 @@ export default function SearchDiscoveryView({
             <option value="rating">Rating Tertinggi</option>
           </select>
         </div>
+
+        {/* Active Filter Chips with X remove buttons */}
+        {(() => {
+          const discoveryChips: FilterChipItem[] = [];
+          if (searchQuery && searchQuery.trim()) {
+            discoveryChips.push({
+              id: 'chip-search',
+              label: 'Kata Kunci',
+              value: `"${searchQuery}"`,
+              icon: <Search className="w-3 h-3 text-blue-500" />,
+              onRemove: () => onSearchChange?.('')
+            });
+          }
+          if (selectedCategory && selectedCategory !== 'all') {
+            discoveryChips.push({
+              id: 'chip-cat',
+              label: 'Kategori',
+              value: selectedCategory,
+              icon: <Layers className="w-3 h-3 text-blue-500" />,
+              onRemove: () => setSelectedCategory('all')
+            });
+          }
+          if (selectedRating && selectedRating !== 'all') {
+            discoveryChips.push({
+              id: 'chip-rating',
+              label: 'Rating',
+              value: `≥ ${selectedRating} ★`,
+              icon: <Star className="w-3 h-3 text-amber-500 fill-amber-500" />,
+              onRemove: () => setSelectedRating('all')
+            });
+          }
+          if (selectedSort && selectedSort !== 'popular') {
+            discoveryChips.push({
+              id: 'chip-sort',
+              label: 'Urutan',
+              value: selectedSort === 'latest' ? 'Terbaru' : 'Rating Tertinggi',
+              icon: <TrendingUp className="w-3 h-3 text-blue-500" />,
+              onRemove: () => setSelectedSort('popular')
+            });
+          }
+
+          if (discoveryChips.length === 0) return null;
+
+          return (
+            <ActiveFilterChips
+              chips={discoveryChips}
+              onClearAll={() => {
+                onSearchChange?.('');
+                setSelectedCategory('all');
+                setSelectedRating('all');
+                setSelectedSort('popular');
+              }}
+              className="mb-4"
+            />
+          );
+        })()}
 
         {results.length === 0 ? (
           /* Informative & Interactive Indonesian Empty State */

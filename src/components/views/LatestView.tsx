@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clock, Star, Download, Sparkles, Filter, Calendar } from 'lucide-react';
 import { AppData } from '../../types';
 import AppCard from '../AppCard';
+import AdSlot from '../common/AdSlot';
 
 interface LatestViewProps {
   apps: AppData[];
@@ -66,6 +67,9 @@ export default function LatestView({
           ))}
         </div>
       </div>
+
+      {/* Strategic Ad Slot for New Apps View */}
+      <AdSlot page="newApps" placement="top-banner" slotId="new-apps-top-banner" />
 
       {/* Grid of Latest Apps */}
       {filteredApps.length === 0 ? (

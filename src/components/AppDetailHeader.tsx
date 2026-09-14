@@ -135,14 +135,16 @@ export default function AppDetailHeader({
               <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
             </button>
 
-            {/* Bagikan */}
+            {/* Bagikan (Native Web Share API) */}
             <button
               onClick={onShare}
-              className="p-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-all cursor-pointer flex items-center justify-center"
-              title="Bagikan Tautan Aplikasi"
-              aria-label="Bagikan aplikasi"
+              className="px-3.5 py-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+              title="Bagikan Halaman Aplikasi (Web Share API)"
+              aria-label="Bagikan halaman aplikasi"
+              id="app-native-share-btn"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Bagikan</span>
             </button>
 
             {/* Laporkan */}

@@ -66,7 +66,7 @@ export function isEligibleForRanking(app: AppData): boolean {
   * Multi-Category Assignment check
   */
 export function getAppCategories(app: AppData): { primary: string; secondary: string[]; special: string[] } {
-  const primary = app.category || 'Utilities';
+  const primary = app.category || 'Alat';
   const secondary: string[] = [];
   if (app.tags && Array.isArray(app.tags)) {
     app.tags.forEach(t => {
@@ -79,7 +79,7 @@ export function getAppCategories(app: AppData): { primary: string; secondary: st
   const isMod = Boolean(app.modAvailability || app.tags?.includes('Mod') || app.name?.toLowerCase().includes('mod') || app.description?.toLowerCase().includes('mod'));
   if (isMod) {
     // Gating check: Must be approved, security passed, and distribution policy satisfied
-    const securityOk = (app.securityStatus || 'safe') !== 'failed' && (app.securityScan?.status === 'passed' || true);
+    const securityOk = (app.securityStatus || 'safe') !== 'failed' && (app.securityStatus || 'safe') !== 'malicious' && app.securityScan?.status !== 'failed';
     const moderationOk = (app.moderationStatus || 'approved') === 'approved';
     if (securityOk && moderationOk) {
       special.push('Apps Mod');

@@ -15,7 +15,12 @@ export default function ModAppsView({
 }: ModAppsViewProps) {
   const [activeFilter, setActiveFilter] = useState<'all' | 'premium' | 'no-ads' | 'unlimited'>('all');
 
-  const modApps = apps.filter(app => app.isMod || app.id === 'capcut' || app.id === 'spotify' || app.id === 'whatsapp' || app.id === 'instagram' || app.id === 'tiktok');
+  const modApps = apps.filter(app => Boolean(
+    app.isMod || 
+    app.tags?.includes('Mod') || 
+    app.tags?.includes('mod') || 
+    app.category?.toLowerCase() === 'mod'
+  ));
 
   const handleDownload = (e: React.MouseEvent, app: AppData) => {
     if (onDownloadApp) {

@@ -21,7 +21,7 @@ export function mapAppToCollectionItem(
     appId: app.id,
     slug: app.slug || app.id,
     name: app.name,
-    developerName: app.developer || 'Pengembang Resmi',
+    developerName: app.developer || 'Pengembang',
     iconUrl: app.icon,
 
     rating: app.ratingAverage || app.rating || 0,
@@ -30,12 +30,12 @@ export function mapAppToCollectionItem(
     downloadCount: app.downloads || 0,
     downloadLabel: formatDownloadCount(app.downloads || 0),
 
-    versionName: app.version || '1.0.0',
+    versionName: app.version || '-',
     versionCode: (app as any).versionCode || 1,
     apkSize: (app as any).fileSize || 0,
-    apkSizeLabel: app.size || '35 MB',
+    apkSizeLabel: app.size || '-',
 
-    category: app.category || 'Alat & Utilitas',
+    category: app.category || 'Alat',
     secondaryCategories: (app as any).secondaryCategories || [],
 
     badge: options?.badgeLabel ? {
@@ -52,7 +52,7 @@ export function mapAppToCollectionItem(
     position,
 
     isPublished: isAppEligibleForCollection(app),
-    securityStatus: (app as any).securityStatus || 'passed',
+    securityStatus: (app as any).securityStatus || 'pending',
 
     collectionId
   };
@@ -97,7 +97,7 @@ export function getCatalogFallbackItems(
   return sorted.slice(0, limit).map((app, idx) => 
     mapAppToCollectionItem(app, collectionId, idx + 1, {
       badgeLabel: 'Pilihan Populer',
-      reasonLabel: 'Populer di komunitas Aero'
+      reasonLabel: 'Banyak Diunduh Pengguna'
     })
   );
 }

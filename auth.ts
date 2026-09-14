@@ -7,10 +7,11 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase
 import { SUPER_ADMIN_EMAILS, getRolePermissions, resolveOrCreateFirestoreUser } from "./server/auth";
 
 export const authConfig = {
+  basePath: "/api/auth",
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "google_client_id_placeholder",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET || "google_client_secret_placeholder",
     }),
     Credentials({
       name: "Credentials",
@@ -76,7 +77,7 @@ export const authConfig = {
   pages: {
     signIn: "/login",
   },
-  secret: process.env.AUTH_SECRET,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "mod-station-production-secure-auth-secret-key-32-bytes",
   trustHost: true,
   session: {
     strategy: "jwt" as const,

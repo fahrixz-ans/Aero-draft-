@@ -219,7 +219,7 @@ export default function MobileMenuDrawer({
                 <nav className="space-y-0.5">
                   {[
                     { id: 'home', label: 'Beranda', view: 'home', icon: Home },
-                    { id: 'today', label: 'Hari Ini', view: 'articles', icon: Sparkles },
+                    { id: 'today', label: 'Hari Ini', view: 'today', icon: Sparkles },
                     { id: 'apps', label: 'Aplikasi', view: 'apps', icon: LayoutGrid },
                     { id: 'games', label: 'Game', view: 'games', icon: Gamepad2 },
                     { id: 'blog', label: 'Blog', view: 'blog', icon: BookOpen },

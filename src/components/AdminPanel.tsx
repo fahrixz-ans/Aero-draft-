@@ -38,7 +38,6 @@ import ImportHistoryView from './admin/ImportHistoryView';
 import { ImageUploader } from './admin/ImageUploader';
 import { APKUploader } from './admin/APKUploader';
 import VersionManagerModal from './admin/VersionManagerModal';
-import ApkAnalyzerView from './admin/ApkAnalyzerView';
 import AdminReportDashboard from './admin/AdminReportDashboard';
 import ProductionHealthDashboard from './admin/ProductionHealthDashboard';
 import AppEditorModal from './admin/AppEditorModal';
@@ -51,7 +50,6 @@ import AdminStorageManagement from './admin/AdminStorageManagement';
 import AdminUsersRolesView from './admin/AdminUsersRolesView';
 import AdminSettingsView from './admin/AdminSettingsView';
 import AdminJobsView from './admin/AdminJobsView';
-import AdminApkSecurityView from './admin/AdminApkSecurityView';
 import AdminAnalyticsDashboard from './admin/AdminAnalyticsDashboard';
 import AdminExportModal from './admin/AdminExportModal';
 import AdminDashboardOverview from './admin/AdminDashboardOverview';
@@ -2066,13 +2064,6 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
                 );
               })()}
 
-              {/* TAB: APK ANALYZER */}
-              {activeTab === 'apk-analyzer' && (
-                <ApkAnalyzerView
-                  onQuickCreateApp={startCreateAppWithMetadata}
-                />
-              )}
-
               {/* TAB: BULK IMPORT JSON */}
               {activeTab === 'import' && (
                 <BulkImportView
@@ -2765,15 +2756,6 @@ export default function AdminPanel({ onNavigate, user, initialTab }: AdminPanelP
               {activeTab === 'production-health' && (
                 <div className="animate-fade-in">
                   <ProductionHealthDashboard />
-                </div>
-              )}
-
-              {/* TAHAP 7: APK SECURITY & INTEGRITY */}
-              {activeTab === 'apk-security' && (
-                <div className="animate-fade-in">
-                  <AdminApkSecurityView
-                    apps={apps}
-                  />
                 </div>
               )}
 

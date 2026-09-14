@@ -95,7 +95,7 @@ export default function DownloadInterstitialModal({
             Mendukung Server APK Bebas Iklan Palsu
           </p>
           <p className="text-[11px] text-slate-600 dark:text-slate-400">
-            Aero menyediakan berkas APK yang telah dipindai SHA-256 dan bebas malware untuk komunitas.
+            Mod Station menyediakan berkas APK yang telah dipindai SHA-256 dan bebas malware.
           </p>
 
           <div className="pt-1">

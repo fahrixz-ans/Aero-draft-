@@ -287,64 +287,10 @@ publicRouter.get('/new-releases', async (req, res) => {
   }
 });
 
-// GET /api/public/gcs-fallback/*
-publicRouter.get('/gcs-fallback/*', (req, res) => {
-  try {
-    const relativePath = req.params[0] || '';
-    if (!relativePath) {
-      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'File tidak ditemukan.', 404);
-    }
-
-    // Resolve file path safely under uploads/gcs_storage
-    const targetFile = path.resolve(process.cwd(), 'uploads', 'gcs_storage', relativePath.replace(/\//g, path.sep));
-    if (!targetFile.startsWith(path.resolve(process.cwd(), 'uploads', 'gcs_storage'))) {
-      return sendError(res, ERROR_CODES.FORBIDDEN, 'Akses ditolak.', 403);
-    }
-
-    if (!fs.existsSync(targetFile)) {
-      // If file doesn't exist, check alternative fallback directory
-      const altFile = path.join(process.cwd(), 'uploads', 'apks', path.basename(relativePath));
-      if (fs.existsSync(altFile)) {
-        return res.download(altFile, path.basename(relativePath));
-      }
-      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'File tidak ditemukan di penyimpanan simulasi.', 404);
-    }
-
-    return res.download(targetFile, path.basename(relativePath));
-  } catch (err: any) {
-    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
-  }
-});
-
-// GET /api/public/dosya/download/:fileId
-publicRouter.get('/dosya/download/:fileId', (req, res) => {
-  try {
-    const fileId = req.params.fileId;
-    const simDir = path.join(process.cwd(), 'uploads', 'dosya_storage');
-    
-    if (!fs.existsSync(simDir)) {
-      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Simulasi penyimpanan dosya tidak ditemukan.', 404);
-    }
-
-    const files = fs.readdirSync(simDir);
-    const matchedFile = files.find(f => f.startsWith(fileId));
-
-    if (!matchedFile) {
-      return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Berkas dosya tidak ditemukan.', 404);
-    }
-
-    const targetFile = path.join(simDir, matchedFile);
-    const originalName = matchedFile.replace(`${fileId}_`, '');
-    return res.download(targetFile, originalName);
-  } catch (err: any) {
-    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);
-  }
-});
-
 // GET /api/public/download-modstation-client
 publicRouter.get('/download-modstation-client', (req, res) => {
   try {
-    const apkPath = path.join(process.cwd(), 'uploads', 'apks', 'test_download_ok.apk');
+    const apkPath = path.join(process.cwd(), 'uploads', 'apks', 'mod-station.apk');
     if (fs.existsSync(apkPath)) {
       return res.download(apkPath, 'mod-station.apk');
     }

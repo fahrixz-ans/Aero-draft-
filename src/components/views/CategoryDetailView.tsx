@@ -122,7 +122,7 @@ function HorizontalCarousel({ items, onSelectApp, emptyMessage, id }: Horizontal
                 loading="lazy"
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&h=128&fit=crop&q=80';
+                  (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"%3E%3Crect width="128" height="128" rx="28" fill="%231e293b"/%3E%3Ctext x="64" y="72" font-size="28" fill="%2394a3b8" text-anchor="middle" font-family="sans-serif"%3EAPK%3C/text%3E%3C/svg%3E';
                 }}
               />
             </div>
@@ -134,7 +134,7 @@ function HorizontalCarousel({ items, onSelectApp, emptyMessage, id }: Horizontal
 
             {/* Ukuran */}
             <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5">
-              {app.size || '35 MB'}
+              {app.size || '-'}
             </p>
           </div>
         ))}
@@ -177,7 +177,7 @@ function VerticalList({ items, onSelectApp, emptyMessage, id }: VerticalListProp
         {displayItems.map((app) => {
           const categories = getAppCategories(app);
           const categoriesText = categories.slice(0, 3).join(' • ');
-          const ratingValue = (app.ratingAverage || app.rating || 4.5).toFixed(1);
+          const ratingValue = (app.ratingAverage || app.rating || 0).toFixed(1);
 
           return (
             <div
@@ -195,7 +195,7 @@ function VerticalList({ items, onSelectApp, emptyMessage, id }: VerticalListProp
                     loading="lazy"
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&h=128&fit=crop&q=80';
+                      (e.currentTarget as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"%3E%3Crect width="128" height="128" rx="28" fill="%231e293b"/%3E%3Ctext x="64" y="72" font-size="28" fill="%2394a3b8" text-anchor="middle" font-family="sans-serif"%3EAPK%3C/text%3E%3C/svg%3E';
                     }}
                   />
                 </div>
@@ -215,7 +215,7 @@ function VerticalList({ items, onSelectApp, emptyMessage, id }: VerticalListProp
                     </span>
                     <span>•</span>
                     <span className="font-medium text-slate-400 dark:text-slate-500">
-                      {app.size || '35 MB'}
+                      {app.size || '-'}
                     </span>
                   </div>
                 </div>

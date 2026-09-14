@@ -13,6 +13,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import BackButton from '../navigation/BackButton';
+import AdSlot from '../common/AdSlot';
 import { HELP_CATEGORIES, HELP_QUESTIONS, HelpQuestion } from '../../data/helpCenterData';
 import { listenToUserTickets } from '../../services/customerService';
 import { CSTicket } from '../../types';
@@ -203,6 +204,9 @@ export default function HelpCenterView({
           </button>
         </div>
       </section>
+
+      {/* Strategic Ad Slot for Help Center */}
+      <AdSlot page="helpCenter" placement="in-content" slotId="help-center-mid-banner" />
 
       {/* Jawaban Singkat */}
       <section className="space-y-3">

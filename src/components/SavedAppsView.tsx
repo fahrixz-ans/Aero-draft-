@@ -189,7 +189,9 @@ export default function SavedAppsView({
                   />
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
+                      if (e && typeof e.stopPropagation === 'function') {
+                        e.stopPropagation();
+                      }
                       onRemoveBookmark(app.id);
                     }}
                     title="Hapus dari simpanan"
@@ -245,7 +247,9 @@ export default function SavedAppsView({
                   {onUnfollowApp && (
                     <button
                       onClick={(e) => {
-                        e.stopPropagation();
+                        if (e && typeof e.stopPropagation === 'function') {
+                          e.stopPropagation();
+                        }
                         onUnfollowApp(app.id);
                       }}
                       title="Berhenti Mengikuti"

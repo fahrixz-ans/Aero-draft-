@@ -1,36 +1,35 @@
 import React from 'react';
 import { SubscriptionPlan, UserRole } from '../types';
-import AdSenseSlot from './common/AdSenseSlot';
+import AdSlot from './common/AdSlot';
 
 interface AdBannerProps {
   subscriptionPlan?: SubscriptionPlan;
   userRole?: UserRole;
   slot?: 'top-banner' | 'feed-inline' | 'sidebar' | 'detail-bottom' | string;
+  page?: string;
   className?: string;
   onUpgradeClick?: () => void;
 }
 
 /**
  * Clean, policy-compliant AdBanner wrapper.
- * Hides for premium/admin users.
- * If AdSense is not configured, silently renders null without UI disruption.
+ * Forwards to the unified AdSlot component.
  */
 export default function AdBanner({
   subscriptionPlan = 'free',
   userRole = 'user',
   slot = 'feed-inline',
+  page = 'home',
   className = '',
 }: AdBannerProps) {
-  // Never show ads to Premium users, Admins, or Owners
-  if (subscriptionPlan === 'premium' || userRole === 'admin' || userRole === 'owner') {
-    return null;
-  }
-
   return (
-    <AdSenseSlot
-      slotId={`ad-slot-${slot}`}
-      format={slot === 'top-banner' ? 'horizontal' : 'auto'}
+    <AdSlot
+      page={page}
+      placement={slot}
+      subscriptionPlan={subscriptionPlan}
+      userRole={userRole}
       className={className}
     />
   );
 }
+

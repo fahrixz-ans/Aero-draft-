@@ -21,6 +21,13 @@ import {
   QUICK_HELP_OPTIONS,
   QUICK_CATEGORIES 
 } from '../../services/customerService';
+import { 
+  AIProcessStep, 
+  buildProcessSteps, 
+  MediaCategory, 
+  SingleProcessBanner, 
+  ProcessDetailModal 
+} from '../common/AIProcessStatus';
 
 interface CustomerServiceViewProps {
   currentUser?: AeroUser | any | null;
@@ -49,7 +56,8 @@ export default function CustomerServiceView({
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<CSAttachment[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const [thinkingStep, setThinkingStep] = useState<string>('Meninjau permintaan..');
+  const [processSteps, setProcessSteps] = useState<AIProcessStep[]>([]);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showEndChatModal, setShowEndChatModal] = useState(false);
   const [isEndingChat, setIsEndingChat] = useState(false);
@@ -59,37 +67,47 @@ export default function CustomerServiceView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Derive authenticated user identity cleanly without hardcoding
+  // Handle visualViewport adjustments for Android keyboard
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    const handleResize = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      }
+    };
+
+    window.visualViewport.addEventListener('resize', handleResize);
+    window.visualViewport.addEventListener('scroll', handleResize);
+    handleResize();
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+        window.visualViewport.removeEventListener('scroll', handleResize);
+      }
+    };
+  }, []);
   const userId = currentUser?.id || currentUser?.uid || currentUser?.email || 'guest-session';
   const userEmail = currentUser?.email || '';
   const userName = currentUser?.name || (userEmail ? userEmail.split('@')[0] : '');
   const greetingName = userName ? `Hai ${userName}` : 'Hai!';
 
-  // 1. Multi-step AI thinking indicator animation
-  useEffect(() => {
-    let timer1: NodeJS.Timeout;
-    let timer2: NodeJS.Timeout;
-    let timer3: NodeJS.Timeout;
-
-    if (isSending) {
-      setThinkingStep('Meninjau permintaan..');
-      timer1 = setTimeout(() => {
-        setThinkingStep('Berpikir....');
-      }, 900);
-      timer2 = setTimeout(() => {
-        setThinkingStep('Mendapatkan jawaban...');
-      }, 1800);
-      timer3 = setTimeout(() => {
-        setThinkingStep('Merespon...');
-      }, 2700);
+  // Function to check API connection before processing
+  const checkApiConnected = async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/customer-service/status');
+      if (res.ok) {
+        const data = await res.json();
+        return data.connected === true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [isSending]);
+  };
 
   // 2. Subscribe to User's Tickets list in Firestore
   useEffect(() => {
@@ -221,8 +239,59 @@ export default function CustomerServiceView({
     // 4. Scroll down immediately to user bubble
     setTimeout(() => scrollToBottom('smooth'), 50);
 
-    // 5. Start background AI / Server processing
+    // 5. VALIDATE API FIRST BEFORE PROCESSING
+    const isConnected = await checkApiConnected();
+    if (!isConnected) {
+      // API key is missing/unconnected -> Immediately display local CS notice without delay/processing
+      const errMessage: CSMessage = {
+        id: `msg-err-${Date.now()}`,
+        ticketId: activeTicketId || '',
+        senderId: 'famo-ai-cs',
+        senderType: 'ai',
+        senderName: 'Famo (Customer Service AI)',
+        message: 'Selamat malam pengguna yang terhormat, pemilik website untuk sementara ini belum menghubungkan API untuk saya, saya akan mengirimkan feedback ke pemilik website agar segera menghubungkan API agar bisa segera membantu kamu.',
+        createdAt: new Date().toISOString()
+      };
+
+      setActiveTicket((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: [...(prev.messages || []), errMessage]
+        };
+      });
+      return;
+    }
+
+    // 6. API is connected -> Determine media category & start process steps
+    let mediaCat: MediaCategory = 'text';
+    if (attachmentsToSend.length === 1) {
+      const type = attachmentsToSend[0].type || '';
+      if (type.startsWith('image/')) mediaCat = 'image';
+      else if (type.startsWith('video/')) mediaCat = 'video';
+      else mediaCat = 'document';
+    } else if (attachmentsToSend.length > 1) {
+      mediaCat = 'multi';
+    }
+
+    const initialSteps = buildProcessSteps(mediaCat);
+    initialSteps[0].status = 'in_progress';
+    setProcessSteps(initialSteps);
     setIsSending(true);
+
+    let currentStepIdx = 0;
+    const interval = setInterval(() => {
+      setProcessSteps((prevSteps) => {
+        if (!prevSteps || prevSteps.length === 0) return prevSteps;
+        const next = [...prevSteps];
+        if (currentStepIdx < next.length - 2) {
+          next[currentStepIdx].status = 'completed';
+          currentStepIdx++;
+          next[currentStepIdx].status = 'in_progress';
+        }
+        return next;
+      });
+    }, 600);
 
     try {
       const res = await sendUserTicketMessage({
@@ -237,17 +306,20 @@ export default function CustomerServiceView({
         attachments: attachmentsToSend
       });
 
+      clearInterval(interval);
+
       if (res.ticket) {
         if (!activeTicketId && res.ticket.id) {
           setActiveTicketId(res.ticket.id);
         }
-        // Reconcile and set confirmed ticket state
+        setProcessSteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
         setActiveTicket(res.ticket);
         setTimeout(() => scrollToBottom('smooth'), 50);
       }
     } catch (err: any) {
+      clearInterval(interval);
       console.warn('[CS Send Error]', err);
-      // Mark message as failed in UI with retry option
+      setProcessSteps((prev) => prev.map((s) => (s.status === 'in_progress' ? { ...s, status: 'failed' } : s)));
       setActiveTicket((prev) => {
         if (!prev) return prev;
         return {
@@ -448,7 +520,11 @@ export default function CustomerServiceView({
   const isInAgentChat = activeTicket?.state === 'IN_AGENT_CHAT' || activeTicket?.state === 'AGENT_ASSIGNED';
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-4 flex flex-col h-[calc(100vh-120px)]" id="customer-service-container">
+    <div 
+      className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-4 flex flex-col h-[calc(100dvh-120px)]" 
+      style={viewportHeight ? { height: `${viewportHeight - 120}px` } : undefined}
+      id="customer-service-container"
+    >
       {/* 1. Header Customer Service */}
       <header className="flex items-center justify-between pb-3 mb-2 border-b border-[#D2D2D7]/60 dark:border-[#38383A] shrink-0">
         <div className="flex items-center gap-3">
@@ -797,13 +873,13 @@ export default function CustomerServiceView({
               </div>
             )}
 
-            {/* AI Multi-Step Thinking Indicator */}
-            {isSending && (
-              <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#1C1C1E] border border-[#D2D2D7]/50 dark:border-[#38383A] w-fit">
-                <Sparkles className="w-4 h-4 text-blue-500 animate-spin" />
-                <span className="text-xs font-medium text-[#6E6E73] dark:text-[#A1A1A6]">
-                  {thinkingStep}
-                </span>
+            {/* AI Multi-Step Process Banner */}
+            {isSending && processSteps.length > 0 && (
+              <div className="flex flex-col items-start gap-1 my-2">
+                <SingleProcessBanner
+                  steps={processSteps}
+                  onOpenDetail={() => setShowDetailModal(true)}
+                />
               </div>
             )}
 
@@ -844,7 +920,7 @@ export default function CustomerServiceView({
             </div>
           )}
 
-          {/* BOTTOM CHAT COMPOSER */}
+          {/* BOTTOM CHAT COMPOSER - Perfect Container Alignment */}
           <div className="pt-2 shrink-0">
             <input
               type="file"
@@ -859,13 +935,14 @@ export default function CustomerServiceView({
                 e.preventDefault();
                 handleSendMessage();
               }}
-              className="flex items-center gap-2 p-1.5 rounded-2xl bg-[#F5F5F7] dark:bg-[#1C1C1E] border border-[#D2D2D7]/60 dark:border-[#38383A]"
+              className="flex items-center gap-2 p-1.5 rounded-2xl bg-[#F5F5F7] dark:bg-[#1C1C1E] border border-[#D2D2D7]/60 dark:border-[#38383A] w-full shadow-xs"
             >
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 rounded-xl text-[#6E6E73] dark:text-[#A1A1A6] hover:text-[#1D1D1F] dark:hover:text-white transition-colors cursor-pointer"
+                className="p-2 rounded-xl text-[#6E6E73] dark:text-[#A1A1A6] hover:text-[#1D1D1F] dark:hover:text-white transition-colors cursor-pointer shrink-0"
                 title="Unggah lampiran"
+                aria-label="Unggah lampiran"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -877,13 +954,13 @@ export default function CustomerServiceView({
                 onKeyDown={handleKeyDown}
                 rows={1}
                 placeholder="Tulis pesan..."
-                className="flex-1 px-2 py-1.5 text-xs sm:text-sm bg-transparent text-[#1D1D1F] dark:text-[#F5F5F7] placeholder-[#6E6E73] dark:placeholder-[#A1A1A6] focus:outline-none resize-none max-h-[100px]"
+                className="flex-1 px-2 py-1.5 text-xs sm:text-sm bg-transparent text-[#1D1D1F] dark:text-[#F5F5F7] placeholder-[#6E6E73] dark:placeholder-[#A1A1A6] focus:outline-none resize-none max-h-[100px] w-full"
                 id="cs-message-input"
               />
 
               <button
                 type="submit"
-                disabled={!inputText.trim() && attachments.length === 0}
+                disabled={(!inputText.trim() && attachments.length === 0) || isSending}
                 className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white transition-colors cursor-pointer shrink-0"
                 title="Kirim Pesan"
                 id="btn-send-message"
@@ -894,6 +971,13 @@ export default function CustomerServiceView({
           </div>
         </div>
       )}
+
+      {/* Process Detail Overlay Modal */}
+      <ProcessDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        steps={processSteps}
+      />
 
       {/* Confirmation Modal to End Chat */}
       {showEndChatModal && (

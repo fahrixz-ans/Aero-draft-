@@ -165,8 +165,10 @@ export default function BannerCarousel({
   };
 
   // Helper to handle banner CTA click
-  const triggerBannerCta = (banner: BannerItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const triggerBannerCta = (banner: BannerItem, e?: React.MouseEvent | any) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (!banner || !banner.destination) return;
 
     if (banner.id) {

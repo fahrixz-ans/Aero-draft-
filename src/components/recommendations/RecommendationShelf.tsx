@@ -67,7 +67,9 @@ export default function RecommendationShelf({
   }, [displayedItems, shelfId, currentUser]);
 
   const handleDismissApp = async (e: React.MouseEvent, scored: ScoredApp) => {
-    e.stopPropagation();
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     const appId = scored.app.id;
     setDismissedAppIds(prev => [...prev, appId]);
 
@@ -156,7 +158,10 @@ export default function RecommendationShelf({
               <AppCard
                 app={app}
                 onSelect={() => handleAppClick(scored)}
-                onDownload={onDownloadApp ? () => {
+                onDownload={onDownloadApp ? (e) => {
+                  if (e && typeof e.stopPropagation === 'function') {
+                    e.stopPropagation();
+                  }
                   trackRecommendationEvent('convert_download', {
                     shelfId,
                     appId: app.id,

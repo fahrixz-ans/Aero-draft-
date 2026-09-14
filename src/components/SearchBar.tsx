@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw, ChevronDown, Calendar, HardDrive, Cpu, Star, X, Sparkles, Building, Layers } from 'lucide-react';
 import { AppData, FilterState, SortOption } from '../types';
 import { CATEGORIES } from '../data/appsData';
 import { trackAnalyticsEvent } from '../utils/analytics';
 import { recordSearchQuery } from '../services';
+import ActiveFilterChips, { FilterChipItem } from './common/ActiveFilterChips';
 
 interface SearchBarProps {
   searchQuery: string;
@@ -78,6 +79,106 @@ export default function SearchBar({
     if (k === 'sort') return false;
     return v !== '' && v !== false && v !== undefined;
   }).length;
+
+  // Active filter chips data
+  const activeChips: FilterChipItem[] = useMemo(() => {
+    const list: FilterChipItem[] = [];
+
+    if (searchQuery && searchQuery.trim()) {
+      list.push({
+        id: 'chip-query',
+        label: 'Kata Kunci',
+        value: `"${searchQuery}"`,
+        icon: <Search className="w-3 h-3 text-blue-500" />,
+        onRemove: () => {
+          setInputValue('');
+          onSearchChange('');
+        }
+      });
+    }
+
+    if (filters.category) {
+      list.push({
+        id: 'chip-category',
+        label: 'Kategori',
+        value: filters.category,
+        icon: <Layers className="w-3 h-3 text-blue-500" />,
+        onRemove: () => handleFilterChange('category', '')
+      });
+    }
+
+    if (filters.developer) {
+      list.push({
+        id: 'chip-developer',
+        label: 'Pengembang',
+        value: filters.developer,
+        icon: <Building className="w-3 h-3 text-blue-500" />,
+        onRemove: () => handleFilterChange('developer', '')
+      });
+    }
+
+    if (filters.rating) {
+      list.push({
+        id: 'chip-rating',
+        label: 'Rating',
+        value: `≥ ${filters.rating} ★`,
+        icon: <Star className="w-3 h-3 text-amber-500 fill-amber-500" />,
+        onRemove: () => handleFilterChange('rating', '')
+      });
+    }
+
+    if (filters.size) {
+      const sizeLabels: Record<string, string> = {
+        small: 'Kecil (< 40 MB)',
+        medium: 'Sedang (40 - 100 MB)',
+        large: 'Besar (> 100 MB)'
+      };
+      list.push({
+        id: 'chip-size',
+        label: 'Ukuran',
+        value: sizeLabels[filters.size] || filters.size,
+        icon: <HardDrive className="w-3 h-3 text-blue-500" />,
+        onRemove: () => handleFilterChange('size', '')
+      });
+    }
+
+    if (filters.minAndroid) {
+      list.push({
+        id: 'chip-android',
+        label: 'Android Minimal',
+        value: `Android ${filters.minAndroid}`,
+        icon: <Cpu className="w-3 h-3 text-blue-500" />,
+        onRemove: () => handleFilterChange('minAndroid', '')
+      });
+    }
+
+    if (filters.updatedDateRange) {
+      const rangeLabels: Record<string, string> = {
+        '7-days': '7 Hari Terakhir',
+        '30-days': '30 Hari Terakhir',
+        '90-days': '90 Hari Terakhir'
+      };
+      list.push({
+        id: 'chip-updated',
+        label: 'Pembaruan',
+        value: rangeLabels[filters.updatedDateRange] || filters.updatedDateRange,
+        icon: <Calendar className="w-3 h-3 text-blue-500" />,
+        onRemove: () => handleFilterChange('updatedDateRange', '')
+      });
+    }
+
+    if (filters.recentlyUpdated) {
+      list.push({
+        id: 'chip-recent',
+        label: 'Status',
+        value: 'Baru Diperbarui',
+        icon: <Sparkles className="w-3 h-3 text-amber-500" />,
+        onRemove: () => handleFilterChange('recentlyUpdated', false)
+      });
+    }
+
+    return list;
+  }, [searchQuery, filters, onSearchChange]);
 
   return (
     <div className="w-full space-y-4" id="search-filter-module">
@@ -325,6 +426,14 @@ export default function SearchBar({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Active Filter Chips with X remove buttons */}
+      {activeChips.length > 0 && (
+        <ActiveFilterChips
+          chips={activeChips}
+          onClearAll={handleReset}
+        />
       )}
 
       {/* Result statistics strip */}

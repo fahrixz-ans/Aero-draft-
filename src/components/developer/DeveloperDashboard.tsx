@@ -12,6 +12,12 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
+  // App Update Modal states
+  const [selectedAppForUpdate, setSelectedAppForUpdate] = useState<any | null>(null);
+  const [newVersionName, setNewVersionName] = useState('');
+  const [whatsNew, setWhatsNew] = useState('');
+  const [updateApkFile, setUpdateApkFile] = useState<File | null>(null);
+
   // Form states
   const [appName, setAppName] = useState('');
   const [slug, setSlug] = useState('');
@@ -43,6 +49,61 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
   useEffect(() => {
     fetchSubmissions();
   }, [user]);
+
+  const handleOpenUpdateModal = (app: any) => {
+    setSelectedAppForUpdate(app);
+    setNewVersionName('');
+    setWhatsNew('');
+    setUpdateApkFile(null);
+    setError('');
+  };
+
+  const handleUpdateVersionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAppForUpdate) return;
+
+    if (!newVersionName.trim()) {
+      setError('Nama versi baru wajib diisi.');
+      return;
+    }
+
+    if (newVersionName.trim() === selectedAppForUpdate.versionName) {
+      setError(`Nama versi baru (${newVersionName.trim()}) tidak boleh sama dengan versi saat ini (v${selectedAppForUpdate.versionName}).`);
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccessMsg('');
+
+      const formData = new FormData();
+      formData.append('newVersionName', newVersionName.trim());
+      formData.append('whatsNew', whatsNew);
+      formData.append('developerEmail', user?.email || 'developer@aeroapk.com');
+      if (updateApkFile) {
+        formData.append('apk', updateApkFile);
+      }
+
+      const res = await fetch(`/api/developer/submissions/${selectedAppForUpdate.id}/update-version`, {
+        method: 'POST',
+        body: formData
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        setSuccessMsg(json.message || `Versi aplikasi berhasil diperbarui ke v${newVersionName.trim()}.`);
+        setSelectedAppForUpdate(null);
+        fetchSubmissions();
+      } else {
+        setError(json.error?.message || 'Gagal menerapkan update aplikasi.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan koneksi.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +176,7 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
             Dashboard Pengembang & Riwayat Rilis
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-            Kelola pengajuan aplikasi, unggah versi APK baru, dan pantau status verifikasi kepemilikan serta keamanan (VirusTotal).
+            Kelola pengajuan aplikasi, unggah versi APK baru, dan pantau status verifikasi kepemilikan serta integritas keamanan (SHA-256).
           </p>
         </div>
 
@@ -180,14 +241,95 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-bold text-slate-400 font-mono">SHA256: {sub.sha256?.substring(0, 12)}...</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-bold text-slate-400 font-mono hidden md:inline">SHA256: {sub.sha256?.substring(0, 10)}...</span>
+                  <button
+                    onClick={() => handleOpenUpdateModal(sub)}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    id={`btn-update-app-${sub.id}`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Terapkan Update Versi</span>
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Update Version Modal */}
+      {selectedAppForUpdate && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#121722] border border-slate-200 dark:border-white/10 rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-black text-slate-900 dark:text-white mb-1">
+              Terapkan Update Aplikasi ({selectedAppForUpdate.appName})
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Perbarui versi rilis aplikasi tanpa membuat dokumen baru. Versi saat ini: <strong className="text-blue-600 dark:text-blue-400 font-mono">v{selectedAppForUpdate.versionName}</strong>
+            </p>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-xs font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateVersionSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Versi Baru *</label>
+                <input
+                  type="text"
+                  required
+                  value={newVersionName}
+                  onChange={e => setNewVersionName(e.target.value)}
+                  placeholder={`Versi baru (misal: 1.1.0, beda dari ${selectedAppForUpdate.versionName})`}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Pembaruan (What&apos;s New)</label>
+                <textarea
+                  rows={3}
+                  value={whatsNew}
+                  onChange={e => setWhatsNew(e.target.value)}
+                  placeholder="Deskripsikan fitur baru, perbaikan bug, atau peningkatan performa..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Berkas APK Baru (*.apk)</label>
+                <input
+                  type="file"
+                  accept=".apk"
+                  onChange={e => setUpdateApkFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAppForUpdate(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                >
+                  {submitting ? 'Memproses Update...' : 'Simpan Versi Baru'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Upload Modal */}
       {showUploadModal && (
@@ -197,7 +339,7 @@ export default function DeveloperDashboard({ user, onBackToHome }: DeveloperDash
               Unggah APK & Pengajuan Aplikasi Baru
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
-              Sistem akan secara otomatis mengekstrak metadata, memvalidasi SHA-256, dan melakukan pemindaian keamanan VirusTotal.
+              Sistem akan secara otomatis mengekstrak metadata, memvalidasi SHA-256, dan melakukan pemindaian keamanan berkas APK.
             </p>
 
             {error && (

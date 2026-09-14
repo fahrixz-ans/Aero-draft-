@@ -224,7 +224,7 @@ export type IntelligenceAnomalyType =
   | 'SEARCH_SPAM'
   | 'SEARCH_ZERO_RESULTS_SURGE'
   | 'RECOMMENDATION_CTR_DROP'
-  | 'VIRUSTOTAL_FAILURE_SURGE'
+  | 'INTEGRITY_FAILURE_SURGE'
   | 'UPLOAD_PROCESSING_DELAY';
 
 export type AnomalyEntityType =

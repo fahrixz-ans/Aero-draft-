@@ -33,7 +33,9 @@ import AppTrustIndicators from './AppTrustIndicators';
 import Breadcrumb from './Breadcrumb';
 import { developerToSlug } from '../utils/developerUtils';
 import { categoryToSlug } from '../utils/categoryUtils';
+import { shareApp } from '../utils/shareUtils';
 import { useLanguage } from '../context/LanguageContext';
+import { useInteractionAnalytics } from '../hooks/useInteractionAnalytics';
 
 interface AppDetailProps {
   app: AppData;
@@ -97,6 +99,9 @@ export default function AppDetail({
   const [selectedVersionForDetail, setSelectedVersionForDetail] = useState<AppVersion | null>(null);
   const [comparisonModalOpen, setComparisonModalOpen] = useState(false);
   const [downloadSelectorOpen, setDownloadSelectorOpen] = useState(false);
+
+  // Analytics hook
+  const { trackDownloadPress, trackInteraction } = useInteractionAnalytics(currentUser?.uid || currentUser?.id);
 
   // Fetch Version History on app ID change
   useEffect(() => {
@@ -193,18 +198,19 @@ export default function AppDetail({
     return num.toString();
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     trackEvent('share_app', { appId: app.id });
     recordUserInteraction('share', app);
-    const shareData = {
-      title: `${app.name} di Aero`,
-      text: `Temukan ${app.name} di Aero — Android App Discovery & APK Archive`,
-      url: window.location.href,
-    };
-    if (navigator.share) {
-      navigator.share(shareData).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(window.location.href);
+    trackInteraction('app_share', {
+      appId: app.id,
+      appName: app.name,
+      appSlug: app.slug || app.id,
+      category: app.category,
+      method: typeof navigator !== 'undefined' && !!navigator.share ? 'native_web_share' : 'clipboard_copy'
+    });
+
+    const res = await shareApp(app);
+    if (res.success && res.method === 'clipboard') {
       setShareToast(true);
       setTimeout(() => setShareToast(false), 2500);
     }
@@ -292,10 +298,12 @@ export default function AppDetail({
     .filter(a => a.category !== app.category && a.id !== app.id)
     .slice(0, 10);
 
-  // 19. Aplikasi serupa
-  const similarAppsList = (relatedApps && relatedApps.length > 0 ? relatedApps : allApps)
-    .filter(a => a.id !== app.id)
-    .slice(0, 8);
+  // 19. Aplikasi serupa (Strict category matching)
+  const sourceApps = allApps && allApps.length > 0 ? allApps : relatedApps;
+  const similarAppsList = sourceApps.filter(a =>
+    a.id !== app.id &&
+    (a.category === app.category || (app.categories && a.categories && app.categories.some(c => a.categories?.includes(c))))
+  ).slice(0, 8);
 
   // 20. Popularitas (Real Database metrics)
   const popular30Days = [...(allApps || [])]
@@ -520,6 +528,28 @@ export default function AppDetail({
               </div>
             )}
           </div>
+
+          {/* Video Preview Section */}
+          {app.videoUrl && (
+            <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4" id="video-preview-section">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-600" />
+                <span>Video Preview</span>
+              </h3>
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-slate-200/60 dark:border-white/10 shadow-sm">
+                <video
+                  src={app.videoUrl}
+                  controls
+                  preload="metadata"
+                  playsInline
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* 15. VERSI APLIKASI */}
           <div className="p-6 bg-white dark:bg-white/[0.03] border border-slate-100 dark:border-white/10 rounded-2xl space-y-4">

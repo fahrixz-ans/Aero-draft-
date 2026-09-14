@@ -107,6 +107,7 @@ export interface AppData {
   contentRating?: string;
   modFeatures?: string;
   contactEmail?: string;
+  videoUrl?: string;
 }
 
 export interface Review {

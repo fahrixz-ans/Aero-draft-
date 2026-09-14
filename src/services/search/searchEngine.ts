@@ -603,13 +603,13 @@ export function generateSearchSuggestions(
         slug: a.slug,
         icon: a.icon || a.iconUrl || '',
         category: a.category,
-        rating: a.ratingAverage || a.rating || 4.5,
+        rating: a.ratingAverage || a.rating || 0,
         developer: a.developer || a.developerName || '',
         downloads: a.downloads
       })),
       developers: developers.slice(0, 4),
       categories: categories.slice(0, 5),
-      queries: ['WhatsApp', 'CapCut', 'Mobile Legends', 'Instagram', 'Spotify'],
+      queries: allApps.slice(0, 5).map(a => a.name).filter(Boolean),
       didYouMean: null
     };
   }

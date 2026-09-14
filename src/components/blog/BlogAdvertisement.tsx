@@ -1,9 +1,10 @@
 import React from 'react';
-import AdSenseSlot from '../common/AdSenseSlot';
+import AdSlot from '../common/AdSlot';
 
 interface BlogAdvertisementProps {
   className?: string;
   slotId?: string;
+  placement?: string;
 }
 
 /**
@@ -12,14 +13,17 @@ interface BlogAdvertisementProps {
  */
 export default function BlogAdvertisement({ 
   className = '', 
-  slotId = 'blog-article-inline' 
+  slotId = 'blog-article-inline',
+  placement = 'in-content'
 }: BlogAdvertisementProps) {
   return (
-    <div className={`w-full max-w-4xl mx-auto my-4 ${className}`}>
-      <AdSenseSlot 
-        slotId={slotId} 
-        format="horizontal" 
-      />
-    </div>
+    <AdSlot 
+      page="blog"
+      placement={placement}
+      slotId={slotId}
+      format="horizontal"
+      className={className} 
+    />
   );
 }
+

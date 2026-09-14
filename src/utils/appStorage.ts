@@ -165,7 +165,7 @@ export const getCustomCategories = (): string[] => {
     const combined = Array.from(new Set([...defaultCategories, ...customList]));
     return combined.filter(c => !deletedCats.includes(c.toLowerCase().trim()));
   } catch (err) {
-    return defaultCategories;
+    return [...defaultCategories];
   }
 };
 

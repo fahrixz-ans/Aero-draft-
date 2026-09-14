@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ShieldCheck, ArrowUpCircle, Check } from 'lucide-react';
+import { Star, ShieldCheck, ArrowUpCircle, Check, Share2 } from 'lucide-react';
 import { AppData, DownloadHistoryRecord } from '../types';
 import { calculateAppBadges } from '../utils/badges';
 import { getAppDownloadStatus } from '../utils/downloadStatus';
 import { getGuestDownloadHistory } from '../services/userService';
+import { shareApp } from '../utils/shareUtils';
 
 interface AppCardProps {
   key?: string;
@@ -43,6 +44,16 @@ export default function AppCard({
   }, [downloadHistory]);
 
   const downloadInfo = getAppDownloadStatus(app, localHistory);
+  const [copied, setCopied] = useState(false);
+
+  const handleShareClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const res = await shareApp(app);
+    if (res.success && res.method === 'clipboard') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div
@@ -105,39 +116,51 @@ export default function AppCard({
         </div>
       </div>
 
-      {/* Right: Apple App Store GET / Pill Button */}
-      <div className="shrink-0 flex flex-col items-end gap-1">
-        {downloadInfo.hasUpdate ? (
+      {/* Right: Apple App Store GET / Pill Button & Share */}
+      <div className="shrink-0 flex flex-col items-end gap-1.5">
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={(e) => onDownload(e, app)}
-            id={`app-card-btn-${app.id}`}
-            className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all cursor-pointer"
-            title={`Perbarui ke v${downloadInfo.latestVersion}`}
+            onClick={handleShareClick}
+            id={`app-card-share-${app.id}`}
+            aria-label="Bagikan aplikasi"
+            className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            title={copied ? "Tautan Disalin!" : "Bagikan Aplikasi"}
           >
-            UPDATE
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Share2 className="w-3.5 h-3.5" />}
           </button>
-        ) : downloadInfo.isDownloaded ? (
-          <button
-            onClick={(e) => onDownload(e, app)}
-            id={`app-card-btn-${app.id}`}
-            className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-blue-600 dark:text-blue-400 transition-all cursor-pointer"
-            title="Unduh Ulang"
-          >
-            UNDUH
-          </button>
-        ) : (
-          <button
-            onClick={(e) => onDownload(e, app)}
-            id={`app-card-btn-${app.id}`}
-            className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:hover:bg-blue-600 text-blue-600 dark:text-blue-400 transition-all cursor-pointer"
-            title="Unduh Aplikasi"
-          >
-            GET
-          </button>
-        )}
+
+          {downloadInfo.hasUpdate ? (
+            <button
+              onClick={(e) => onDownload(e, app)}
+              id={`app-card-btn-${app.id}`}
+              className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all cursor-pointer"
+              title={`Perbarui ke v${downloadInfo.latestVersion}`}
+            >
+              UPDATE
+            </button>
+          ) : downloadInfo.isDownloaded ? (
+            <button
+              onClick={(e) => onDownload(e, app)}
+              id={`app-card-btn-${app.id}`}
+              className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-blue-600 dark:text-blue-400 transition-all cursor-pointer"
+              title="Unduh Ulang"
+            >
+              UNDUH
+            </button>
+          ) : (
+            <button
+              onClick={(e) => onDownload(e, app)}
+              id={`app-card-btn-${app.id}`}
+              className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:hover:bg-blue-600 text-blue-600 dark:text-blue-400 transition-all cursor-pointer"
+              title="Unduh Aplikasi"
+            >
+              GET
+            </button>
+          )}
+        </div>
 
         <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-tight">
-          In-App Purchases
+          {copied ? <span className="text-emerald-500 font-bold">Link Disalin!</span> : 'In-App Purchases'}
         </span>
       </div>
     </div>

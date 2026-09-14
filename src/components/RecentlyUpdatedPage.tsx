@@ -27,8 +27,10 @@ export default function RecentlyUpdatedPage({
   const [expandedChangelogIds, setExpandedChangelogIds] = useState<string[]>([]);
 
   // Toggle changelog expansion
-  const toggleChangelog = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const toggleChangelog = (id: string, e?: React.MouseEvent | any) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     setExpandedChangelogIds(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );

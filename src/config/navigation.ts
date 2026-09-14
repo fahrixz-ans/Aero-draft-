@@ -42,7 +42,7 @@ export interface NavItemConfig {
 // 1. Group 1: Store / Discovery Primary Section
 export const STORE_NAV_ITEMS: NavItemConfig[] = [
   { id: 'home', label: 'Beranda', view: 'home', icon: Home },
-  { id: 'today', label: 'Hari Ini', view: 'articles', icon: Sparkles },
+  { id: 'today', label: 'Hari Ini', view: 'today', icon: Sparkles },
   { id: 'apps', label: 'Aplikasi', view: 'apps', icon: LayoutGrid },
   { id: 'games', label: 'Game', view: 'games', icon: Gamepad2 },
   { id: 'blog', label: 'Blog', view: 'blog', icon: BookOpen },

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Trophy, Star, Download, ShieldCheck } from 'lucide-react';
 import { AppData } from '../../types';
 import { formatDownloads } from '../../utils/badges';
+import AdSlot from '../common/AdSlot';
 
 interface PopularViewProps {
   apps: AppData[];
@@ -24,8 +25,10 @@ export default function PopularView({
     return true;
   }).sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
 
-  const handleDownload = (e: React.MouseEvent, app: AppData) => {
-    e.stopPropagation();
+  const handleDownload = (e: React.MouseEvent | any, app: AppData) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (onDownloadApp) {
       onDownloadApp(e, app);
     } else {
@@ -68,6 +71,9 @@ export default function PopularView({
           ))}
         </div>
       </div>
+
+      {/* Strategic Ad Slot for Popular View */}
+      <AdSlot page="popular" placement="top-banner" slotId="popular-top-banner" />
 
       {/* Apple App Store Top Charts Numbered List */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-slate-200/80 dark:border-white/10 divide-y divide-slate-100 dark:divide-white/5 overflow-hidden">

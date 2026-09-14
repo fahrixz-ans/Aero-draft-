@@ -55,6 +55,7 @@ import BlogMainView from './components/blog/BlogMainView';
 import BlogCategoryView from './components/blog/BlogCategoryView';
 import BlogSearchView from './components/blog/BlogSearchView';
 import BlogDetailView from './components/blog/BlogDetailView';
+import TodayDashboardView from './components/views/TodayDashboardView';
 import ArticlesView from './components/views/ArticlesView';
 import ArticleDetailView from './components/views/ArticleDetailView';
 import EventDetailView from './components/views/EventDetailView';
@@ -148,6 +149,8 @@ import {
 import { AeroUser as User } from './types';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
+import ScrollToTopButton from './components/common/ScrollToTopButton';
+import { useInteractionAnalytics } from './hooks/useInteractionAnalytics';
 
 export default function App() {
   const { isDesktop } = useResponsive(768);
@@ -173,8 +176,16 @@ export default function App() {
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [loading, setLoading] = useState<boolean>(false);
   
-  // Dark mode initialized from localStorage (defaults to true for premium bento mode)
+  // Dark mode initialized from modstation_theme_pref or localStorage (supports system mode)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const pref = localStorage.getItem('modstation_theme_pref');
+      if (pref === 'light') return false;
+      if (pref === 'dark') return true;
+      if (pref === 'system' || !pref) {
+        return typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true;
+      }
+    } catch {}
     const saved = localStorage.getItem('darkMode');
     return saved ? JSON.parse(saved) : true;
   });
@@ -278,6 +289,9 @@ export default function App() {
     }
   });
 
+  // User interaction analytics tracking hook
+  const { trackAppClick, trackDownloadPress, trackSearchQuery, trackInteraction } = useInteractionAnalytics(user?.uid || user?.id);
+
   const [filters, setFilters] = useState<FilterState>({
     category: '',
     rating: '',
@@ -292,7 +306,7 @@ export default function App() {
   const [dmcaForm, setDmcaForm] = useState({ appName: '', url: '', email: '', description: '' });
   const [dmcaSubmitted, setDmcaSubmitted] = useState(false);
 
-  // Synchronize Dark Mode state with HTML classes and Local Storage
+  // Synchronize Dark Mode state with HTML classes, Local Storage, and System Preference Listener
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
     if (darkMode) {
@@ -301,6 +315,34 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      const pref = localStorage.getItem('modstation_theme_pref') || 'system';
+      if (pref === 'system') {
+        setDarkMode(e.matches);
+      }
+    };
+
+    const mediaQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    if (mediaQuery) {
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handleSystemThemeChange);
+      } else if ('addListener' in mediaQuery) {
+        (mediaQuery as any).addListener(handleSystemThemeChange);
+      }
+    }
+
+    return () => {
+      if (mediaQuery) {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', handleSystemThemeChange);
+        } else if ('removeListener' in mediaQuery) {
+          (mediaQuery as any).removeListener(handleSystemThemeChange);
+        }
+      }
+    };
+  }, []);
 
   // Load user data or guest data
   const refreshUserData = async (currentUser: User | null) => {
@@ -604,6 +646,8 @@ export default function App() {
         setCurrentView('blog-detail');
       } else if (hash === '#/blog' || hash === '#/blog/') {
         setCurrentView('blog');
+      } else if (hash === '#/today' || hash === '#/today/' || hash === '#/hari-ini') {
+        setCurrentView('today');
       } else if (hash.startsWith('#/articles/')) {
         const artSlug = hash.replace('#/articles/', '');
         setSelectedBlogSlug(artSlug);
@@ -882,6 +926,10 @@ export default function App() {
         window.location.hash = `/apps/${slug}`;
         setSelectedAppSlug(slug);
         setCurrentView('detail');
+        const matched = apps.find(a => a.slug === slug || a.id === slug);
+        if (matched) {
+          trackAppClick(matched, { source: 'navigation' });
+        }
       } else if (view === 'app-download' && slug) {
         window.location.hash = `/apps/${slug}/download`;
         setSelectedAppSlug(slug);
@@ -973,6 +1021,9 @@ export default function App() {
       } else if (view === 'blog') {
         window.location.hash = '/blog';
         setCurrentView('blog');
+      } else if (view === 'today' || view === 'hari-ini') {
+        window.location.hash = '/today';
+        setCurrentView('today');
       } else if (view === 'blog-category' && slug) {
         window.location.hash = `/blog/category/${slug}`;
         setSelectedBlogCategory(slug);
@@ -1066,6 +1117,7 @@ export default function App() {
 
   // Handle Final Proceed Download (after interstitial or directly for premium)
   const proceedFinalDownload = async (app: AppData, downloadType: 'apk' | 'official_link' = 'apk') => {
+    trackDownloadPress(app, downloadType, app.version);
     // Record download history
     await recordDownloadHistory(user, app, downloadType);
     setDownloadHistory(prev => [{
@@ -1087,21 +1139,33 @@ export default function App() {
   };
 
   // Handle Direct Download from cards (checks subscription plan for interstitial ad)
-  const handleDirectDownload = async (e: React.MouseEvent, app: AppData) => {
-    e.stopPropagation();
+  const handleDirectDownload = async (e?: React.MouseEvent | React.SyntheticEvent | AppData | any, appOrUndefined?: AppData) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
+
+    // Determine target app (supports (e, app) or direct (app))
+    let targetApp: AppData | null = null;
+    if (appOrUndefined && typeof appOrUndefined === 'object' && ('title' in appOrUndefined || 'packageName' in appOrUndefined || 'id' in appOrUndefined)) {
+      targetApp = appOrUndefined;
+    } else if (e && typeof e === 'object' && ('title' in e || 'packageName' in e || 'id' in e)) {
+      targetApp = e as AppData;
+    }
+
+    if (!targetApp) return;
 
     // Section 32: If FREE tier, show interstitial ad first
     if (effectiveSubscriptionPlan === 'free') {
       setInterstitialDownload({
         isOpen: true,
-        app,
+        app: targetApp,
         downloadType: 'apk'
       });
       return;
     }
 
     // If PREMIUM or ADMIN/OWNER: instant direct download without ad delay
-    await proceedFinalDownload(app, 'apk');
+    await proceedFinalDownload(targetApp, 'apk');
   };
 
   const handleUpgradePlan = (planId: 'monthly' | 'yearly') => {
@@ -1491,7 +1555,7 @@ export default function App() {
                       icon={Sparkles}
                       items={forYouRecs}
                       onSelectApp={(app) => navigateTo('detail', app.slug || app.id)}
-                      onDownloadApp={(app) => handleDirectDownload({} as any, app)}
+                      onDownloadApp={(app) => handleDirectDownload(undefined, app)}
                       downloadHistory={downloadHistory}
                       currentUser={user}
                       showExplanationBadges={true}
@@ -1509,7 +1573,7 @@ export default function App() {
                       icon={Compass}
                       items={youMightLikeRecs}
                       onSelectApp={(app) => navigateTo('detail', app.slug || app.id)}
-                      onDownloadApp={(app) => handleDirectDownload({} as any, app)}
+                      onDownloadApp={(app) => handleDirectDownload(undefined, app)}
                       downloadHistory={downloadHistory}
                       currentUser={user}
                       showExplanationBadges={true}
@@ -1527,7 +1591,7 @@ export default function App() {
                       icon={TrendingUp}
                       items={newAndRisingRecs}
                       onSelectApp={(app) => navigateTo('detail', app.slug || app.id)}
-                      onDownloadApp={(app) => handleDirectDownload({} as any, app)}
+                      onDownloadApp={(app) => handleDirectDownload(undefined, app)}
                       downloadHistory={downloadHistory}
                       currentUser={user}
                       showExplanationBadges={true}
@@ -1972,6 +2036,20 @@ export default function App() {
                   onSelectCategory={(catSlug) => {
                     navigateTo('category-detail', catSlug);
                   }}
+                />
+              </div>
+            )}
+
+            {currentView === 'today' && (
+              <div className="w-full animate-fade-in">
+                <TodayDashboardView
+                  allApps={apps}
+                  onSelectApp={(slug) => navigateTo('detail', slug)}
+                  onDownloadApp={handleDirectDownload}
+                  onNavigate={navigateTo}
+                  currentUser={user}
+                  savedAppIds={bookmarks}
+                  downloadHistory={downloadHistory}
                 />
               </div>
             )}
@@ -2496,6 +2574,9 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Floating Scroll to Top button (appears after scrolling past 400px) */}
+      <ScrollToTopButton threshold={400} />
     </div>
   );
 }

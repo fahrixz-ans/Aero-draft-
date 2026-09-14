@@ -239,6 +239,180 @@ router.post('/forgot-password/verify', async (req: any, res) => {
   }
 });
 
+// Change password endpoint for authenticated users
+router.post('/change-password', async (req: any, res) => {
+  try {
+    const user = req.user;
+    if (!user || !user.email) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Sesi login telah berakhir. Silakan login kembali.' }
+      });
+    }
+
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Semua kolom kata sandi wajib diisi.' }
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Konfirmasi kata sandi baru tidak cocok.' }
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Kata sandi baru minimal harus 6 karakter.' }
+      });
+    }
+
+    const normalizedEmail = user.email.toLowerCase().trim();
+    const userId = user.id || `usr_${Buffer.from(normalizedEmail).toString('hex').slice(0, 10)}`;
+    const userDocRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userDocRef);
+
+    if (!userSnap.exists()) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Pengguna tidak ditemukan di sistem.' }
+      });
+    }
+
+    const userData = userSnap.data();
+    if (!userData.passwordHash) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Akun ini terdaftar via Google OAuth dan tidak memiliki kata sandi.' }
+      });
+    }
+
+    const isValid = await bcrypt.compare(oldPassword, userData.passwordHash);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Kata sandi lama yang Anda masukkan salah.' }
+      });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await setDoc(userDocRef, {
+      passwordHash: newPasswordHash,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    return res.json({
+      success: true,
+      message: 'Kata sandi berhasil diperbarui.'
+    });
+  } catch (error: any) {
+    console.error('[Change Password Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Gagal memperbarui kata sandi.' }
+    });
+  }
+});
+
+// Intercept GET /signin/:provider to avoid Auth.js UnknownAction error
+router.get('/signin/:provider', async (req, res) => {
+  const provider = req.params.provider;
+  const callbackUrl = (req.query.callbackUrl as string) || `${req.protocol}://${req.get('host')}/api/auth/callback-success`;
+  
+  res.send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Menghubungkan ke ${encodeURIComponent(provider)}...</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    .box {
+      text-align: center;
+      padding: 2rem;
+    }
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <p>Menghubungkan ke layanan autentikasi...</p>
+  </div>
+  <form id="authForm" method="POST" action="/api/auth/signin/${encodeURIComponent(provider)}">
+    <input type="hidden" name="csrfToken" id="csrfToken" />
+    <input type="hidden" name="callbackUrl" value="${encodeURIComponent(callbackUrl)}" />
+  </form>
+  <script>
+    fetch('/api/auth/csrf')
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.csrfToken) {
+          document.getElementById('csrfToken').value = data.csrfToken;
+        }
+        document.getElementById('authForm').submit();
+      })
+      .catch(() => {
+        document.getElementById('authForm').submit();
+      });
+  </script>
+</body>
+</html>`);
+});
+
+// Guard against unsupported actions reaching Auth.js and throwing UnknownAction
+const VALID_AUTH_ACTIONS = new Set([
+  'signin',
+  'signout',
+  'session',
+  'csrf',
+  'providers',
+  'callback',
+  'error',
+  'verify-request',
+  'webauthn-options'
+]);
+
+router.use((req, res, next) => {
+  if (!req.headers.host) {
+    req.headers.host = 'localhost:3000';
+  }
+  const pathParts = req.path.split('/').filter(Boolean);
+  const action = pathParts[0];
+
+  if (!action || !VALID_AUTH_ACTIONS.has(action)) {
+    return res.status(404).json({
+      success: false,
+      error: { message: `Unsupported auth action: ${action || 'root'}` }
+    });
+  }
+
+  next();
+});
+
 // Mount Auth.js handlers
 const authHandler = ExpressAuth(authConfig as any);
 router.use(authHandler);

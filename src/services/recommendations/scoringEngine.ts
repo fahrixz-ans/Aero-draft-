@@ -8,17 +8,17 @@ import {
 
 // Semantic cross-affinity matrix for related domains
 export const CROSS_CATEGORY_AFFINITIES: Record<string, Record<string, number>> = {
-  'Tools': { 'Productivity': 0.8, 'Utilities': 0.9, 'Personalization': 0.6, 'Security': 0.75 },
-  'Productivity': { 'Tools': 0.8, 'Business': 0.85, 'Finance': 0.65, 'Education': 0.7 },
-  'Photography': { 'Video Players': 0.85, 'Art & Design': 0.8, 'Social': 0.7, 'Media': 0.75 },
-  'Video Players': { 'Photography': 0.85, 'Entertainment': 0.9, 'Music & Audio': 0.8 },
-  'Music & Audio': { 'Entertainment': 0.85, 'Video Players': 0.8, 'Audio': 0.9 },
-  'Entertainment': { 'Video Players': 0.9, 'Music & Audio': 0.85, 'Games': 0.65 },
-  'Social': { 'Communication': 0.95, 'Photography': 0.7, 'Entertainment': 0.6 },
-  'Communication': { 'Social': 0.95, 'Tools': 0.6, 'Productivity': 0.65 },
-  'Finance': { 'Business': 0.8, 'Productivity': 0.65, 'Tools': 0.5 },
-  'Education': { 'Books & Reference': 0.9, 'Productivity': 0.7, 'News': 0.6 },
-  'Games': { 'Entertainment': 0.7, 'Action': 0.9, 'Casual': 0.9 }
+  'Alat': { 'Produktivitas': 0.8, 'Personalis': 0.6, 'Pencarian & Browser': 0.7 },
+  'Produktivitas': { 'Alat': 0.8, 'Bisnis': 0.85, 'Keuangan': 0.65, 'Pendidikan': 0.7 },
+  'Fotografi': { 'Pemutar & Editor Video': 0.85, 'Sosial': 0.7, 'Media': 0.75, 'Seni & Desain': 0.8 },
+  'Pemutar & Editor Video': { 'Fotografi': 0.85, 'Hiburan': 0.9, 'Musik & Audio': 0.8 },
+  'Musik & Audio': { 'Hiburan': 0.85, 'Pemutar & Editor Video': 0.8 },
+  'Hiburan': { 'Pemutar & Editor Video': 0.9, 'Musik & Audio': 0.85, 'Game': 0.65 },
+  'Sosial': { 'Komunikasi': 0.95, 'Fotografi': 0.7, 'Hiburan': 0.6 },
+  'Komunikasi': { 'Sosial': 0.95, 'Alat': 0.6, 'Produktivitas': 0.65 },
+  'Keuangan': { 'Bisnis': 0.8, 'Produktivitas': 0.65, 'Perbankan': 0.9, 'Investasi': 0.9 },
+  'Pendidikan': { 'Buku': 0.9, 'Produktivitas': 0.7, 'Berita & Majalah': 0.6 },
+  'Game': { 'Hiburan': 0.7, 'Game Aksi': 0.9, 'Game Santai': 0.9 }
 };
 
 export function computeAppSimilarityScore(
@@ -181,8 +181,8 @@ export function computePopularityScore(app: AppData): number {
   const dlPoints = Math.min(60, Math.round((logDl / 7) * 60));
 
   // Rating count / rating score (0 to 40 pts)
-  const rating = Number(app.rating) || 4.0;
-  const ratingPoints = Math.min(40, Math.round(((rating - 3.0) / 2.0) * 40));
+  const rating = Number(app.ratingAverage || app.rating) || 0;
+  const ratingPoints = rating > 0 ? Math.min(40, Math.round(((rating - 3.0) / 2.0) * 40)) : 0;
 
   return Math.min(100, Math.max(0, dlPoints + ratingPoints));
 }
@@ -209,7 +209,7 @@ export function computeQualityScore(app: AppData): number {
   let score = 40; // Base score
 
   // Rating value (up to 30 pts)
-  const rating = Number(app.rating) || 4.0;
+  const rating = Number(app.ratingAverage || app.rating) || 0;
   score += Math.min(30, Math.round((rating / 5.0) * 30));
 
   // Verified official security badge (+15 pts)

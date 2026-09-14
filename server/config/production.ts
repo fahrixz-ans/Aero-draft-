@@ -3,12 +3,12 @@ export const productionConfig = {
   port: Number(process.env.PORT) || 3000,
   host: '0.0.0.0',
   cors: {
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['https://aeroapk.com', 'https://www.aeroapk.com'],
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['https://fantra.modstatition.vercel.app'],
     credentials: true
   },
   auth: {
     secret: process.env.AUTH_SECRET,
-    url: process.env.AUTH_URL || 'https://aeroapk.com',
+    url: process.env.AUTH_URL || 'https://fantra.modstatition.vercel.app',
     googleClientId: process.env.GOOGLE_CLIENT_ID,
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     sessionMaxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
@@ -18,20 +18,16 @@ export const productionConfig = {
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
     privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined
   },
-  storage: {
-    r2AccountId: process.env.R2_ACCOUNT_ID,
-    r2AccessKeyId: process.env.R2_ACCESS_KEY_ID,
-    r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    r2BucketName: process.env.R2_BUCKET_NAME || 'aero-apk-production',
-    downloadDomain: process.env.DOWNLOAD_DOMAIN || 'download.aeroapk.com'
-  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET
   },
-  virusTotal: {
-    apiKey: process.env.VIRUSTOTAL_API_KEY
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY
   },
   featureFlags: {
     cacheEnabled: process.env.CACHE_ENABLED !== 'false',

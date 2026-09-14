@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Crown, Check, CheckCircle2 } from 'lucide-react';
+import { Crown, Check, CheckCircle2, AlertCircle } from 'lucide-react';
 import BackButton from './navigation/BackButton';
 import { SubscriptionPlan, UserRole } from '../types';
 
@@ -17,12 +17,11 @@ export default function SubscriptionView({
   subscriptionPlan = 'free',
   userRole = 'user',
   user,
-  onUpgradePlan,
   onSignIn,
   onBack,
   onNavigate
 }: SubscriptionViewProps) {
-  const [loading, setLoading] = useState(false);
+  const [showUnavailableNotice, setShowUnavailableNotice] = useState(false);
 
   const handleBackClick = () => {
     if (onBack) {
@@ -37,22 +36,13 @@ export default function SubscriptionView({
   const isOwnerOrAdmin = userRole === 'owner' || userRole === 'admin';
   const isPremium = subscriptionPlan === 'premium' || isOwnerOrAdmin;
 
-  const handleSubscribe = async () => {
-    if (!user) {
-      if (onSignIn) onSignIn();
+  const handleSubscribe = () => {
+    if (!user && onSignIn) {
+      onSignIn();
       return;
     }
-
-    setLoading(true);
-    try {
-      if (onUpgradePlan) {
-        await onUpgradePlan('yearly');
-      }
-    } catch (err) {
-      console.error('Subscription error:', err);
-    } finally {
-      setLoading(false);
-    }
+    // Rule 35: Payment gateway not connected yet - display explicit user-friendly notice
+    setShowUnavailableNotice(true);
   };
 
   return (
@@ -77,6 +67,20 @@ export default function SubscriptionView({
           </p>
         </div>
       </div>
+
+      {/* Payment Gateway Unavailable Notice Modal/Card as per Rule 35 */}
+      {showUnavailableNotice && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 space-y-2 animate-fade-in shadow-xs" id="premium-unavailable-notice">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-xs sm:text-sm leading-relaxed font-semibold">
+              <p>
+                oops ada kesalahan,saat ini fitur premium belum bisa di akses nih, tim kami akan segera memperbaiki nya kok😅
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Subscription Status Card */}
       <div className="p-4 rounded-2xl bg-[#F5F5F7] dark:bg-[#1C1C1E] border border-[#D2D2D7]/60 dark:border-[#38383A] space-y-2">
@@ -139,11 +143,10 @@ export default function SubscriptionView({
       {!isPremium ? (
         <button
           onClick={handleSubscribe}
-          disabled={loading}
-          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
+          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold text-xs sm:text-sm transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
         >
           <Crown className="w-4 h-4 text-amber-300" />
-          <span>{loading ? 'Memproses...' : 'Berlangganan Sekarang'}</span>
+          <span>Berlangganan Sekarang</span>
         </button>
       ) : (
         <div className="text-center py-2">
@@ -155,4 +158,5 @@ export default function SubscriptionView({
     </div>
   );
 }
+
 

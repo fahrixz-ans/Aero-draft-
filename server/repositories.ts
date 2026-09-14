@@ -45,11 +45,9 @@ export interface VersionEntity {
   securityStatus: 'PENDING' | 'SCANNING' | 'VERIFIED' | 'WARNING' | 'FAILED' | 'QUARANTINED' | 'passed' | 'warning' | 'rejected';
   analysisStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   storageKey?: string;
-  r2ObjectKey?: string;
   storageObjectKey?: string;
   storageProvider?: string;
-  dosyaFileId?: string;
-  dosyaDownloadUrl?: string;
+  downloadUrl?: string;
   changelog: string;
   minSdk: number;
   targetSdk: number;
@@ -242,7 +240,7 @@ export const versionsDb: VersionEntity[] = [
     securityStatus: 'VERIFIED',
     analysisStatus: 'COMPLETED',
     storageKey: 'apks/E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855.apk',
-    r2ObjectKey: 'apps/app_capcut/versions/ver_capcut_1/capcut-11.4.0.apk',
+    downloadUrl: '/api/public/apks/capcut-11.4.0.apk',
     changelog: 'Pembaruan stabilitas dan peningkatan performa editor AI.',
     minSdk: 26,
     targetSdk: 34,
@@ -269,7 +267,7 @@ export const versionsDb: VersionEntity[] = [
     securityStatus: 'VERIFIED',
     analysisStatus: 'COMPLETED',
     storageKey: 'apks/A1B2C3D4E5F678901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF.apk',
-    r2ObjectKey: 'apps/app_whatsapp/versions/ver_wa_1/whatsapp-2.24.12.apk',
+    downloadUrl: '/api/public/apks/whatsapp-2.24.12.apk',
     changelog: 'Dukungan enkripsi pesan grup baru dan perbaikan bug sistem.',
     minSdk: 24,
     targetSdk: 34,
@@ -296,7 +294,7 @@ export const versionsDb: VersionEntity[] = [
     securityStatus: 'VERIFIED',
     analysisStatus: 'COMPLETED',
     storageKey: 'apks/B2C3D4E5F6A178901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF.apk',
-    r2ObjectKey: 'apps/app_spotify/versions/ver_spotify_1/spotify-8.9.30.apk',
+    downloadUrl: '/api/public/apks/spotify-8.9.30.apk',
     changelog: 'Antarmuka pemutar musik mini yang diperbarui.',
     minSdk: 26,
     targetSdk: 34,
@@ -569,7 +567,7 @@ export class VersionRepository {
       securityStatus: 'PENDING',
       analysisStatus: 'COMPLETED',
       storageKey: data.storageKey || '',
-      r2ObjectKey: data.r2ObjectKey || '',
+      downloadUrl: data.downloadUrl || '',
       changelog: data.changelog || 'Rilis versi baru.',
       minSdk: data.minSdk || 24,
       targetSdk: data.targetSdk || 34,
