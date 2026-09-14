@@ -1,43 +1,44 @@
 import { Request, Response, NextFunction } from 'express';
 import { sendError, ERROR_CODES } from '../errors';
-
-interface RateLimitStore {
-  count: number;
-  resetAt: number;
-}
-
-const rateLimitMap = new Map<string, RateLimitStore>();
+import { RateLimitRepository } from '../repositories';
 
 export function createRateLimiter(options: { windowMs: number; max: number; keyPrefix?: string }) {
   const { windowMs, max, keyPrefix = 'rl' } = options;
 
-  return (req: Request, res: Response, next: NextFunction) => {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const key = `${keyPrefix}:${ip}`;
-    const now = Date.now();
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ip = req.ip || req.socket.remoteAddress || 'unknown';
+      const userId = (req as any).user?.id || 'anonymous';
+      const key = `${keyPrefix}:${userId}:${ip}:${req.method}:${req.path}`;
+      const result = await RateLimitRepository.consume(key, windowMs, max);
 
-    let record = rateLimitMap.get(key);
-    if (!record || now > record.resetAt) {
-      record = { count: 1, resetAt: now + windowMs };
-      rateLimitMap.set(key, record);
-    } else {
-      record.count += 1;
-    }
+      res.setHeader('X-RateLimit-Limit', max);
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, max - result.current));
+      res.setHeader('X-RateLimit-Reset', Math.ceil(result.resetAt / 1000));
 
-    res.setHeader('X-RateLimit-Limit', max);
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, max - record.count));
-    res.setHeader('X-RateLimit-Reset', Math.ceil(record.resetAt / 1000));
+      if (!result.allowed) {
+        const retryAfterSeconds = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
+        res.setHeader('Retry-After', retryAfterSeconds);
+        return sendError(
+          res,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          'Batas request terlampaui. Silakan tunggu beberapa saat.',
+          429,
+          { retryAfterSeconds }
+        );
+      }
 
-    if (record.count > max) {
+      next();
+    } catch (error) {
+      // Fail closed for security-sensitive rate limits. A database failure must
+      // never silently disable abuse protection.
+      console.error('[rate-limit] Firestore error:', error);
       return sendError(
         res,
-        ERROR_CODES.RATE_LIMIT_EXCEEDED,
-        'Batas request terlampaui. Silakan tunggu beberapa saat.',
-        429,
-        { retryAfterSeconds: Math.ceil((record.resetAt - now) / 1000) }
+        ERROR_CODES.INTERNAL_ERROR,
+        'Sistem pembatasan permintaan sedang tidak tersedia.',
+        503
       );
     }
-
-    next();
   };
 }
