@@ -1,42 +1,27 @@
-// ---------------------------------------------------------------------------
-// AERO STAGE 9.11 — CENTRALIZED SECURITY, ABUSE PREVENTION & PLATFORM PROTECTION
-// Core security engine, rate limiting, bot protection, abuse scoring & incident tracking
-// ---------------------------------------------------------------------------
-
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { sendError, ERROR_CODES } from '../errors';
-import { auditLogsDb, appsDb, versionsDb, usersDb } from '../repositories';
-import { emitAeroEvent } from '../events';
-
-// ---------------------------------------------------------------------------
-// 1. DATA TYPES & CONTRACTS
-// ---------------------------------------------------------------------------
+import {
+  AuditLogRepository,
+  VersionRepository,
+  SecurityEventRepository,
+  SecurityIncidentRepository,
+  AbuseScoreRepository,
+  IdempotencyRepository,
+} from '../repositories';
 
 export type SecurityEventType =
-  | 'AUTH_FAILURE'
-  | 'AUTH_SUCCESS'
-  | 'FORBIDDEN_ACCESS'
-  | 'RATE_LIMIT_TRIGGERED'
-  | 'ABUSE_DETECTED'
-  | 'UPLOAD_REJECTED'
-  | 'DOWNLOAD_BLOCKED'
-  | 'SECURITY_SCAN_FAILED'
-  | 'OWNERSHIP_REJECTED'
-  | 'MODERATION_REJECTED'
-  | 'ADMIN_PERMISSION_DENIED'
-  | 'SUSPICIOUS_REQUEST'
-  | 'API_VALIDATION_FAILURE'
-  | 'WEBHOOK_REPLAY'
-  | 'BOT_DETECTED'
-  | 'SEARCH_ABUSE'
-  | 'RECOMMENDATION_SCRAPING'
-  | 'IDOR_ATTEMPT'
-  | 'CSRF_BLOCKED'
-  | 'PATH_TRAVERSAL_ATTEMPT'
-  | 'DUPLICATE_APK_DETECTED';
+  | 'AUTH_FAILURE' | 'AUTH_SUCCESS' | 'FORBIDDEN_ACCESS' | 'RATE_LIMIT_TRIGGERED'
+  | 'ABUSE_DETECTED' | 'UPLOAD_REJECTED' | 'DOWNLOAD_BLOCKED' | 'SECURITY_SCAN_FAILED'
+  | 'OWNERSHIP_REJECTED' | 'MODERATION_REJECTED' | 'ADMIN_PERMISSION_DENIED'
+  | 'SUSPICIOUS_REQUEST' | 'API_VALIDATION_FAILURE' | 'WEBHOOK_REPLAY'
+  | 'BOT_DETECTED' | 'SEARCH_ABUSE' | 'RECOMMENDATION_SCRAPING' | 'IDOR_ATTEMPT'
+  | 'CSRF_BLOCKED' | 'PATH_TRAVERSAL_ATTEMPT' | 'DUPLICATE_APK_DETECTED';
 
 export type SecuritySeverity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type RateLimitCategory =
+  | 'AUTH' | 'ADMIN' | 'DEVELOPER_UPLOAD' | 'SEARCH' | 'PUBLIC_APP_DETAIL'
+  | 'DOWNLOAD' | 'ANALYTICS' | 'RECOMMENDATION';
 
 export interface SecurityEvent {
   id: string;
@@ -76,22 +61,7 @@ export interface SecurityIncident {
   updatedAt: string;
 }
 
-export type RateLimitCategory =
-  | 'AUTH'
-  | 'ADMIN'
-  | 'DEVELOPER_UPLOAD'
-  | 'SEARCH'
-  | 'PUBLIC_APP_DETAIL'
-  | 'DOWNLOAD'
-  | 'ANALYTICS'
-  | 'RECOMMENDATION';
-
-interface RateLimitConfig {
-  windowSeconds: number;
-  maxRequests: number;
-}
-
-const RATE_LIMIT_CONFIGS: Record<RateLimitCategory, RateLimitConfig> = {
+const RATE_LIMIT_CONFIGS: Record<RateLimitCategory, { windowSeconds: number; maxRequests: number }> = {
   AUTH: { windowSeconds: 60, maxRequests: 15 },
   ADMIN: { windowSeconds: 60, maxRequests: 120 },
   DEVELOPER_UPLOAD: { windowSeconds: 3600, maxRequests: 20 },
@@ -99,102 +69,23 @@ const RATE_LIMIT_CONFIGS: Record<RateLimitCategory, RateLimitConfig> = {
   PUBLIC_APP_DETAIL: { windowSeconds: 60, maxRequests: 180 },
   DOWNLOAD: { windowSeconds: 3600, maxRequests: 30 },
   ANALYTICS: { windowSeconds: 60, maxRequests: 120 },
-  RECOMMENDATION: { windowSeconds: 60, maxRequests: 90 }
+  RECOMMENDATION: { windowSeconds: 60, maxRequests: 90 },
 };
 
-interface RateLimitRecord {
-  count: number;
-  resetAt: number;
-}
-
-// ---------------------------------------------------------------------------
-// 2. IN-MEMORY STORES (Clean, fast, thread-safe memory stores)
-// ---------------------------------------------------------------------------
-
-export const securityEventsDb: SecurityEvent[] = [];
-export const abuseScoresDb = new Map<string, AbuseScore>();
-export const securityIncidentsDb: SecurityIncident[] = [];
-const rateLimitBuckets = new Map<string, RateLimitRecord>();
-const processedAnalyticsEventIds = new Set<string>();
-
-// Seed default initial baseline state for transparency and security auditing
-(() => {
-  const now = new Date();
-  const seedEvents: SecurityEvent[] = [
-    {
-      id: 'sec_evt_init_1',
-      type: 'AUTH_SUCCESS',
-      severity: 'INFO',
-      actorId: 'usr_superadmin',
-      ipHash: crypto.createHash('sha256').update('127.0.0.1_salt_aero').digest('hex').substring(0, 16),
-      requestId: 'req_system_boot',
-      endpoint: '/api/auth/session',
-      createdAt: new Date(now.getTime() - 24 * 3600 * 1000).toISOString(),
-      metadata: { role: 'SUPER_ADMIN', message: 'Sesi login administratif terverifikasi aman' }
-    },
-    {
-      id: 'sec_evt_init_2',
-      type: 'BOT_DETECTED',
-      severity: 'LOW',
-      ipHash: crypto.createHash('sha256').update('198.51.100.22_salt_aero').digest('hex').substring(0, 16),
-      requestId: 'req_bot_probe',
-      endpoint: '/api/public/search',
-      createdAt: new Date(now.getTime() - 12 * 3600 * 1000).toISOString(),
-      metadata: { userAgent: 'python-requests/2.28', queryBurst: 42, reason: 'Pola scraping agregat terdeteksi' }
-    },
-    {
-      id: 'sec_evt_init_3',
-      type: 'RATE_LIMIT_TRIGGERED',
-      severity: 'LOW',
-      ipHash: crypto.createHash('sha256').update('203.0.113.88_salt_aero').digest('hex').substring(0, 16),
-      requestId: 'req_limit_1',
-      endpoint: '/api/public/search',
-      createdAt: new Date(now.getTime() - 4 * 3600 * 1000).toISOString(),
-      metadata: { category: 'SEARCH', hitCount: 65, maxAllowed: 60 }
-    }
-  ];
-  securityEventsDb.push(...seedEvents);
-
-  // Seed baseline incidents from previous security scans
-  securityIncidentsDb.push({
-    id: 'inc_sec_001',
-    type: 'APK_INTEGRITY_ALERT',
-    severity: 'LOW',
-    entityType: 'APP_VERSION',
-    entityId: 'ver_capcut_1',
-    description: 'Pemeriksaan integritas berkala APK CapCut v11.4.0 lolos 0 ancaman VirusTotal.',
-    status: 'RESOLVED',
-    evidence: { sha256: 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855', enginesPassed: 72 },
-    createdAt: new Date(now.getTime() - 48 * 3600 * 1000).toISOString(),
-    updatedAt: new Date(now.getTime() - 24 * 3600 * 1000).toISOString()
-  });
-})();
-
-// ---------------------------------------------------------------------------
-// 3. SECURITY SERVICE IMPLEMENTATION
-// ---------------------------------------------------------------------------
-
 export class SecurityService {
-  /**
-   * Helper: Anonymize IP address with SHA-256 hash (never store raw IP unnecessarily)
-   */
-  static hashIp(ip: string | undefined): string {
+  static hashIp(ip?: string): string {
     if (!ip) return 'unknown_ip';
-    return crypto.createHash('sha256').update(`${ip}_aero_salt_2026`).digest('hex').substring(0, 16);
+    const salt = process.env.SECURITY_HASH_SALT || process.env.AUTH_SECRET || 'development-only';
+    return crypto.createHash('sha256').update(`${ip}:${salt}`).digest('hex').slice(0, 32);
   }
 
-  /**
-   * Helper: Anonymize User-Agent
-   */
-  static hashUserAgent(ua: string | undefined): string {
+  static hashUserAgent(ua?: string): string {
     if (!ua) return 'unknown_ua';
-    return crypto.createHash('sha256').update(`${ua}_aero_ua`).digest('hex').substring(0, 16);
+    const salt = process.env.SECURITY_HASH_SALT || process.env.AUTH_SECRET || 'development-only';
+    return crypto.createHash('sha256').update(`${ua}:${salt}`).digest('hex').slice(0, 32);
   }
 
-  /**
-   * Record Centralized Security Event
-   */
-  static recordSecurityEvent(params: {
+  static async recordSecurityEvent(params: {
     type: SecurityEventType;
     severity: SecuritySeverity;
     actorId?: string;
@@ -206,322 +97,187 @@ export class SecurityService {
     entityType?: string;
     entityId?: string;
     metadata?: Record<string, unknown>;
-  }): SecurityEvent {
-    const ipHash = this.hashIp(params.ip);
-    const userAgentHash = this.hashUserAgent(params.userAgent);
-
-    const event: SecurityEvent = {
-      id: `sec_evt_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+  }): Promise<SecurityEvent> {
+    const event = await SecurityEventRepository.create({
       type: params.type,
       severity: params.severity,
       actorId: params.actorId,
       anonymousId: params.anonymousId,
-      ipHash,
-      userAgentHash,
+      ipHash: this.hashIp(params.ip),
+      userAgentHash: this.hashUserAgent(params.userAgent),
       requestId: params.requestId,
       endpoint: params.endpoint,
       entityType: params.entityType,
       entityId: params.entityId,
       metadata: params.metadata,
-      createdAt: new Date().toISOString()
-    };
+    });
 
-    securityEventsDb.unshift(event);
-    if (securityEventsDb.length > 5000) {
-      securityEventsDb.length = 5000; // retain last 5,000 security events
-    }
+    if (!event) throw new Error('Failed to persist security event');
 
-    // Evaluate if this event warrants updating abuse score or creating an incident
-    this.processEventForAbuseAndIncidents(event, params.ip);
-
-    return event;
-  }
-
-  /**
-   * Process event to adjust abuse scores and auto-create incidents if severe
-   */
-  private static processEventForAbuseAndIncidents(event: SecurityEvent, rawIp?: string) {
-    const entityKey = event.actorId ? `USER:${event.actorId}` : (rawIp ? `IP:${rawIp}` : `HASH:${event.ipHash}`);
-    const [entityType, entityId] = entityKey.split(':') as [any, string];
-
-    // Penalty points based on event type
-    let penalty = 0;
-    if (event.type === 'RATE_LIMIT_TRIGGERED') penalty = 10;
-    else if (event.type === 'AUTH_FAILURE') penalty = 15;
-    else if (event.type === 'FORBIDDEN_ACCESS' || event.type === 'IDOR_ATTEMPT') penalty = 25;
-    else if (event.type === 'BOT_DETECTED' || event.type === 'SEARCH_ABUSE') penalty = 20;
-    else if (event.type === 'PATH_TRAVERSAL_ATTEMPT' || event.type === 'UPLOAD_REJECTED') penalty = 35;
-    else if (event.type === 'SECURITY_SCAN_FAILED') penalty = 50;
+    const penalty =
+      params.type === 'RATE_LIMIT_TRIGGERED' ? 10 :
+      params.type === 'AUTH_FAILURE' ? 15 :
+      params.type === 'FORBIDDEN_ACCESS' || params.type === 'IDOR_ATTEMPT' ? 25 :
+      params.type === 'BOT_DETECTED' || params.type === 'SEARCH_ABUSE' ? 20 :
+      params.type === 'PATH_TRAVERSAL_ATTEMPT' || params.type === 'UPLOAD_REJECTED' ? 35 :
+      params.type === 'SECURITY_SCAN_FAILED' ? 50 : 0;
 
     if (penalty > 0) {
-      this.evaluateAbuse(entityType, entityId, penalty, `${event.type} pada ${event.endpoint || 'API'}`);
+      const entityType = params.actorId ? 'USER' : 'IP';
+      const entityId = params.actorId || this.hashIp(params.ip);
+      await this.evaluateAbuse(entityType, entityId, penalty, `${params.type} pada ${params.endpoint || 'API'}`);
     }
 
-    // Auto-create incident on CRITICAL or HIGH security failures
-    if (event.severity === 'CRITICAL' || (event.severity === 'HIGH' && ['IDOR_ATTEMPT', 'PATH_TRAVERSAL_ATTEMPT', 'SECURITY_SCAN_FAILED'].includes(event.type))) {
-      this.createSecurityIncident({
-        type: event.type,
-        severity: event.severity,
-        entityType: event.entityType || entityType,
-        entityId: event.entityId || entityId,
-        description: `Insiden terdeteksi: ${event.type} - ${event.metadata?.message || 'Aktivitas mencurigakan pada sistem'}`,
-        evidence: {
-          requestId: event.requestId,
-          endpoint: event.endpoint,
-          metadata: event.metadata
-        }
+    if (
+      params.severity === 'CRITICAL' ||
+      (params.severity === 'HIGH' && ['IDOR_ATTEMPT', 'PATH_TRAVERSAL_ATTEMPT', 'SECURITY_SCAN_FAILED'].includes(params.type))
+    ) {
+      await this.createSecurityIncident({
+        type: params.type,
+        severity: params.severity,
+        entityType: params.entityType || (params.actorId ? 'USER' : 'IP'),
+        entityId: params.entityId || params.actorId || this.hashIp(params.ip),
+        description: `Insiden terdeteksi: ${params.type}`,
+        evidence: { requestId: params.requestId, endpoint: params.endpoint, metadata: params.metadata },
       });
     }
+
+    return event as SecurityEvent;
   }
 
-  /**
-   * Evaluate and update Abuse Score for an entity (Adaptive Rate Limiting & Protection)
-   */
-  static evaluateAbuse(
-    entityType: 'IP' | 'USER' | 'DEVELOPER' | 'SESSION',
+  static async evaluateAbuse(
+    entityType: AbuseScore['entityType'],
     entityId: string,
     scoreDelta: number,
     reason: string
-  ): AbuseScore {
-    const key = `${entityType}:${entityId}`;
-    let record = abuseScoresDb.get(key);
+  ): Promise<AbuseScore> {
+    const current = await AbuseScoreRepository.get(entityType, entityId);
+    const score = Math.min(100, Math.max(0, Number(current?.score || 0) + scoreDelta));
+    const reasons = [...(current?.reasons || [])];
+    if (!reasons.includes(reason)) reasons.unshift(reason);
+    const limitedReasons = reasons.slice(0, 10);
+    const level: AbuseScore['level'] =
+      score >= 85 ? 'BLOCKED' : score >= 60 ? 'RESTRICTED' : score >= 30 ? 'WATCH' : 'NORMAL';
 
-    if (!record) {
-      record = {
-        entityType,
-        entityId,
-        score: 0,
-        level: 'NORMAL',
-        reasons: [],
-        updatedAt: new Date().toISOString()
-      };
-      abuseScoresDb.set(key, record);
-    }
-
-    record.score = Math.min(100, Math.max(0, record.score + scoreDelta));
-    if (!record.reasons.includes(reason)) {
-      record.reasons.unshift(reason);
-      if (record.reasons.length > 5) record.reasons.pop();
-    }
-    record.updatedAt = new Date().toISOString();
-
-    // Determine adaptive level
-    if (record.score >= 85) {
-      record.level = 'BLOCKED';
-    } else if (record.score >= 60) {
-      record.level = 'RESTRICTED';
-    } else if (record.score >= 30) {
-      record.level = 'WATCH';
-    } else {
-      record.level = 'NORMAL';
-    }
-
-    return record;
+    const saved = await AbuseScoreRepository.upsert({
+      id: `${entityType}:${entityId}`,
+      entityType,
+      entityId,
+      score,
+      level,
+      reasons: limitedReasons,
+    });
+    if (!saved) throw new Error('Failed to persist abuse score');
+    return saved as AbuseScore;
   }
 
-  /**
-   * Check Rate Limit with Adaptive Throttling
-   */
-  static checkRateLimit(
+  static async checkRateLimit(
     category: RateLimitCategory,
     identifier: string,
     rawIp?: string
-  ): { allowed: boolean; retryAfterSeconds: number; abuseLevel: string; current: number; max: number } {
+  ): Promise<{ allowed: boolean; retryAfterSeconds: number; abuseLevel: string; current: number; max: number }> {
     const config = RATE_LIMIT_CONFIGS[category];
-    const now = Date.now();
-
-    // Check abuse level of this IP/User
-    const abuseKey = rawIp ? `IP:${rawIp}` : `IDENT:${identifier}`;
-    const abuse = abuseScoresDb.get(abuseKey);
+    const abuse = await AbuseScoreRepository.get('IP', rawIp ? this.hashIp(rawIp) : identifier);
     const abuseLevel = abuse?.level || 'NORMAL';
-
-    // If completely blocked by adaptive score, deny immediately
     if (abuseLevel === 'BLOCKED') {
       return { allowed: false, retryAfterSeconds: 900, abuseLevel, current: 999, max: 0 };
     }
 
-    // Adjust max requests based on abuse level
-    let maxAllowed = config.maxRequests;
-    if (abuseLevel === 'RESTRICTED') {
-      maxAllowed = Math.max(1, Math.floor(config.maxRequests * 0.3)); // 70% reduction
-    } else if (abuseLevel === 'WATCH') {
-      maxAllowed = Math.max(1, Math.floor(config.maxRequests * 0.7)); // 30% reduction
-    }
+    const maxAllowed =
+      abuseLevel === 'RESTRICTED' ? Math.max(1, Math.floor(config.maxRequests * 0.3)) :
+      abuseLevel === 'WATCH' ? Math.max(1, Math.floor(config.maxRequests * 0.7)) :
+      config.maxRequests;
 
-    const bucketKey = `${category}:${identifier}`;
-    let bucket = rateLimitBuckets.get(bucketKey);
+    const { RateLimitRepository } = await import('../repositories');
+    const result = await RateLimitRepository.consume(
+      `${category}:${identifier}:${rawIp ? this.hashIp(rawIp) : 'noip'}`,
+      config.windowSeconds * 1000,
+      maxAllowed
+    );
 
-    if (!bucket || now > bucket.resetAt) {
-      bucket = {
-        count: 1,
-        resetAt: now + config.windowSeconds * 1000
-      };
-      rateLimitBuckets.set(bucketKey, bucket);
-      return { allowed: true, retryAfterSeconds: 0, abuseLevel, current: 1, max: maxAllowed };
-    }
-
-    bucket.count += 1;
-    const remainingTimeSeconds = Math.ceil((bucket.resetAt - now) / 1000);
-
-    if (bucket.count > maxAllowed) {
-      return {
-        allowed: false,
-        retryAfterSeconds: Math.max(1, remainingTimeSeconds),
-        abuseLevel,
-        current: bucket.count,
-        max: maxAllowed
-      };
-    }
-
-    return { allowed: true, retryAfterSeconds: 0, abuseLevel, current: bucket.count, max: maxAllowed };
+    return {
+      allowed: result.allowed,
+      retryAfterSeconds: result.allowed ? 0 : Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000)),
+      abuseLevel,
+      current: result.current,
+      max: maxAllowed,
+    };
   }
 
-  /**
-   * Bot & Web Scraper Detection
-   */
   static detectBotOrScraper(req: Request): { isBot: boolean; reason?: string } {
-    const ua = req.headers['user-agent'] || '';
-    const lowerUa = ua.toLowerCase();
-
-    // Known harmful automated tool signatures
-    const maliciousBots = [
-      'sqlmap', 'nikto', 'acunetix', 'masscan', 'nmap', 'havij', 'zgrab',
-      'wpscan', 'dirbuster', 'gobuster', 'burpcollaborator', 'curl/7.0'
-    ];
-    for (const b of maliciousBots) {
-      if (lowerUa.includes(b)) {
-        return { isBot: true, reason: `Alat pemindaian otomatis terdeteksi (${b})` };
-      }
-    }
-
-    // Missing user agent on public search or download is suspicious
+    const ua = String(req.headers['user-agent'] || '').toLowerCase();
+    const malicious = ['sqlmap', 'nikto', 'acunetix', 'masscan', 'nmap', 'havij', 'zgrab', 'wpscan', 'dirbuster', 'gobuster', 'burpcollaborator'];
+    const found = malicious.find(bot => ua.includes(bot));
+    if (found) return { isBot: true, reason: `Alat pemindaian otomatis terdeteksi (${found})` };
     if (!ua && (req.path.includes('/download') || req.path.includes('/search'))) {
       return { isBot: true, reason: 'Header User-Agent kosong pada endpoint sensitif' };
     }
-
     return { isBot: false };
   }
 
-  /**
-   * Validate and sanitize search queries to prevent search abuse and excessive memory consumption
-   */
-  static sanitizeSearchQuery(query: string | undefined): string {
-    if (!query) return '';
-    // Trim and cap maximum search query length at 100 characters
-    let cleaned = query.trim().substring(0, 100);
-    // Strip control characters and potential null-bytes
-    cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
-    return cleaned;
+  static sanitizeSearchQuery(query?: string): string {
+    return String(query || '').trim().slice(0, 100).replace(/[\x00-\x1F\x7F]/g, '');
   }
 
-  /**
-   * Validate analytics payload: check eventId deduplication, clock drift, and reject fake volume
-   */
-  static validateAnalyticsEvent(payload: {
+  static async validateAnalyticsEvent(payload: {
     eventId?: string;
     eventType?: string;
     timestamp?: string;
     appId?: string;
     value?: number;
-  }): { valid: boolean; reason?: string } {
-    if (!payload.eventType) {
-      return { valid: false, reason: 'Tipe event analitik wajib diisi.' };
-    }
+  }): Promise<{ valid: boolean; reason?: string }> {
+    if (!payload.eventType) return { valid: false, reason: 'Tipe event analitik wajib diisi.' };
 
-    // Event deduplication protection
     if (payload.eventId) {
-      if (processedAnalyticsEventIds.has(payload.eventId)) {
-        return { valid: false, reason: 'Event ID duplikat (Replay event diabaikan).' };
-      }
-      processedAnalyticsEventIds.add(payload.eventId);
-      if (processedAnalyticsEventIds.size > 20000) {
-        // Prune oldest entries
-        const iterator = processedAnalyticsEventIds.values();
-        for (let i = 0; i < 5000; i++) {
-          processedAnalyticsEventIds.delete(iterator.next().value!);
-        }
-      }
+      const claimed = await IdempotencyRepository.claim(`analytics:${payload.eventId}`, 24 * 60 * 60 * 1000);
+      if (!claimed) return { valid: false, reason: 'Event ID duplikat (replay event diabaikan).' };
     }
 
-    // Validate timestamp clock drift (must be within +/- 15 minutes of server time)
     if (payload.timestamp) {
-      const eventTime = new Date(payload.timestamp).getTime();
-      const now = Date.now();
-      if (isNaN(eventTime) || Math.abs(now - eventTime) > 15 * 60 * 1000) {
-        return { valid: false, reason: 'Timestamp event berada di luar toleransi sinkronisasi server (maksimal 15 menit).' };
+      const eventTime = Date.parse(payload.timestamp);
+      if (!Number.isFinite(eventTime) || Math.abs(Date.now() - eventTime) > 15 * 60 * 1000) {
+        return { valid: false, reason: 'Timestamp event berada di luar toleransi 15 menit.' };
       }
     }
 
-    // Reject inflated / manipulated metrics: client cannot report download counts > 1 in a single event
     if (payload.value && payload.value > 1 && payload.eventType === 'download_completed') {
-      return { valid: false, reason: 'Manipulasi metrik kuantitas terdeteksi: Nilai unduhan klien ditolak.' };
+      return { valid: false, reason: 'Nilai unduhan per event tidak valid.' };
     }
 
     return { valid: true };
   }
 
-  /**
-   * APK Filename Sanitization & Path Traversal Prevention
-   */
   static sanitizeApkFileName(originalName: string, slug: string, versionName: string): string {
-    // Strip directories, null-bytes, and path traversal tokens
-    let sanitized = originalName.replace(/(\.\.[\/\\]|[\/\\]|\0)/g, '');
-    sanitized = sanitized.replace(/[^a-zA-Z0-9._-]/g, '_');
-
-    if (!sanitized.toLowerCase().endsWith('.apk')) {
-      sanitized = `${sanitized}.apk`;
-    }
-
-    // Ensure it doesn't exceed 120 chars
-    if (sanitized.length > 120) {
-      sanitized = `${slug}_${versionName}.apk`;
-    }
-
-    return sanitized;
+    let value = String(originalName || '').replace(/(\.\.[/\\]|\0|[/\\])/g, '');
+    value = value.replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (!value.toLowerCase().endsWith('.apk')) value += '.apk';
+    return value.length > 120 ? `${slug}_${versionName}.apk` : value;
   }
 
-  /**
-   * Check for duplicate APK by SHA-256
-   */
-  static checkDuplicateApk(sha256: string, appId?: string): { isDuplicate: boolean; existingVersionId?: string } {
-    const existing = versionsDb.find(v => v.sha256.toUpperCase() === sha256.toUpperCase());
-    if (existing) {
-      return { isDuplicate: true, existingVersionId: existing.id };
-    }
-    return { isDuplicate: false };
+  static async checkDuplicateApk(sha256: string) {
+    const existing = await VersionRepository.findBySha256(sha256);
+    return existing ? { isDuplicate: true, existingVersionId: existing.id } : { isDuplicate: false };
   }
 
-  /**
-   * Verify Developer Resource Ownership (IDOR Protection)
-   */
   static verifyDeveloperOwnership(user: any, resourceDeveloperEmail?: string, resourceDeveloperId?: string): boolean {
     if (!user) return false;
-    // Super Admin & Admin can access all
-    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return true;
-
-    // For developer roles, email or ID must strictly match
-    const userEmail = (user.email || '').toLowerCase();
-    const targetEmail = (resourceDeveloperEmail || '').toLowerCase();
-
-    if (targetEmail && userEmail === targetEmail) return true;
-    if (resourceDeveloperId && user.id === resourceDeveloperId) return true;
-
-    return false;
+    if (['SUPER_ADMIN', 'ADMIN', 'OWNER'].includes(String(user.role).toUpperCase())) return true;
+    const email = String(user.email || '').toLowerCase();
+    return (!!resourceDeveloperEmail && email === resourceDeveloperEmail.toLowerCase()) ||
+      (!!resourceDeveloperId && user.id === resourceDeveloperId);
   }
 
-  /**
-   * Create Security Incident
-   */
-  static createSecurityIncident(data: {
+  static async createSecurityIncident(data: {
     type: string;
-    severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    severity: SecurityIncident['severity'];
     entityType?: string;
     entityId?: string;
     description: string;
     evidence?: Record<string, unknown>;
-  }): SecurityIncident {
-    const incident: SecurityIncident = {
-      id: `inc_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+  }): Promise<SecurityIncident> {
+    const id = `inc_${crypto.randomUUID()}`;
+    const saved = await SecurityIncidentRepository.create({
+      id,
       type: data.type,
       severity: data.severity,
       entityType: data.entityType,
@@ -529,130 +285,118 @@ export class SecurityService {
       description: data.description,
       evidence: data.evidence,
       status: 'OPEN',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    securityIncidentsDb.unshift(incident);
-    return incident;
+    });
+    if (!saved) throw new Error('Failed to persist security incident');
+    return saved as SecurityIncident;
   }
 
-  /**
-   * Update Security Incident Status
-   */
-  static updateIncidentStatus(
+  static async updateIncidentStatus(
     incidentId: string,
-    status: 'OPEN' | 'INVESTIGATING' | 'MITIGATED' | 'RESOLVED' | 'DISMISSED',
+    status: SecurityIncident['status'],
     note: string,
     actor: any
-  ): SecurityIncident | null {
-    const incident = securityIncidentsDb.find(i => i.id === incidentId);
+  ): Promise<SecurityIncident | null> {
+    const incident = await SecurityIncidentRepository.findById(incidentId);
     if (!incident) return null;
 
-    incident.status = status;
-    incident.updatedAt = new Date().toISOString();
-    incident.evidence = {
-      ...(incident.evidence || {}),
-      resolutionNote: note,
-      resolvedBy: actor?.email || actor?.name || 'admin'
-    };
-
-    // Record admin audit log
-    auditLogsDb.unshift({
-      id: `audit_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      adminId: actor?.id || 'admin',
-      adminEmail: actor?.email || 'admin@aeroapk.com',
-      action: 'SECURITY_INCIDENT_STATUS_UPDATE',
-      entityType: 'SECURITY_INCIDENT',
-      entityId: incident.id,
-      entityName: incident.type,
-      metadata: { newStatus: status, note },
-      createdAt: new Date().toISOString()
+    const updated = await SecurityIncidentRepository.update(incidentId, {
+      status,
+      evidence: {
+        ...(incident.evidence || {}),
+        resolutionNote: note,
+        resolvedBy: actor?.email || actor?.name || actor?.id || 'admin',
+      },
     });
 
-    return incident;
+    if (updated) {
+      await AuditLogRepository.create({
+        id: `audit_${crypto.randomUUID()}`,
+        adminId: actor?.id || 'admin',
+        adminEmail: actor?.email || 'unknown',
+        action: 'SECURITY_INCIDENT_STATUS_UPDATE',
+        entityType: 'SECURITY_INCIDENT',
+        entityId: incidentId,
+        entityName: incident.type,
+        metadata: { newStatus: status, note },
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return updated as SecurityIncident | null;
   }
 
-  /**
-   * Get Comprehensive Security Overview for Admin Intelligence
-   */
-  static getSecurityOverview() {
-    const totalEvents = securityEventsDb.length;
-    const blockedCount = securityEventsDb.filter(e => e.type === 'RATE_LIMIT_TRIGGERED' || e.type === 'DOWNLOAD_BLOCKED' || e.type === 'FORBIDDEN_ACCESS').length;
-    const botCount = securityEventsDb.filter(e => e.type === 'BOT_DETECTED').length;
-    const rateLimitEvents = securityEventsDb.filter(e => e.type === 'RATE_LIMIT_TRIGGERED').length;
-    const quarantinedCount = versionsDb.filter(v => v.securityStatus === 'QUARANTINED').length;
-    const revokedCount = versionsDb.filter(v => v.status === 'REVOKED').length;
+  static async getSecurityOverview() {
+    const [events, incidents, abuseScores, versions] = await Promise.all([
+      SecurityEventRepository.list({ limit: 500 }),
+      SecurityIncidentRepository.list(500),
+      AbuseScoreRepository.list(500),
+      VersionRepository.listAll(),
+    ]);
 
-    const openIncidents = securityIncidentsDb.filter(i => i.status === 'OPEN' || i.status === 'INVESTIGATING').length;
-    const flaggedEntities = Array.from(abuseScoresDb.values()).filter(a => a.level !== 'NORMAL');
+    const blockedTypes = new Set(['RATE_LIMIT_TRIGGERED', 'DOWNLOAD_BLOCKED', 'FORBIDDEN_ACCESS']);
+    const blockedCount = events.filter(e => blockedTypes.has(e.type)).length;
+    const botCount = events.filter(e => e.type === 'BOT_DETECTED').length;
+    const rateLimitEvents = events.filter(e => e.type === 'RATE_LIMIT_TRIGGERED').length;
+    const quarantinedCount = versions.filter(v => v.securityStatus === 'QUARANTINED').length;
+    const revokedCount = versions.filter(v => v.status === 'REVOKED').length;
+    const openIncidents = incidents.filter(i => i.status === 'OPEN' || i.status === 'INVESTIGATING').length;
 
     return {
       metrics: {
-        totalEvents,
+        totalEvents: events.length,
         blockedCount,
         rateLimitEvents,
         botCount,
         quarantinedCount,
         revokedCount,
         openIncidents,
-        flaggedEntitiesCount: flaggedEntities.length,
-        virusTotalHealth: 'HEALTHY'
+        flaggedEntitiesCount: abuseScores.filter(a => a.level !== 'NORMAL').length,
+        virusTotalHealth: 'UNAVAILABLE',
       },
-      recentEvents: securityEventsDb.slice(0, 50),
-      incidents: securityIncidentsDb,
-      abuseScores: Array.from(abuseScoresDb.values()).slice(0, 30),
-      timestamp: new Date().toISOString()
+      recentEvents: events.slice(0, 50),
+      incidents,
+      abuseScores: abuseScores.slice(0, 30),
+      timestamp: new Date().toISOString(),
     };
   }
 }
 
-// ---------------------------------------------------------------------------
-// 4. EXPRESS RATE LIMITING MIDDLEWARE FACTORY
-// ---------------------------------------------------------------------------
-
 export function createRateLimiter(category: RateLimitCategory) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const rawIp = (req.ip || req.socket.remoteAddress || '127.0.0.1').replace(/^.*:/, '');
-    const user = (req as any).user;
-    const identifier = user ? `user_${user.id}` : `ip_${rawIp}`;
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rawIp = (req.ip || req.socket.remoteAddress || 'unknown').replace(/^::ffff:/, '');
+      const user = (req as any).user;
+      const identifier = user ? `user_${user.id}` : `ip_${SecurityService.hashIp(rawIp)}`;
+      const check = await SecurityService.checkRateLimit(category, identifier, rawIp);
 
-    const check = SecurityService.checkRateLimit(category, identifier, rawIp);
-
-    if (!check.allowed) {
-      res.setHeader('Retry-After', check.retryAfterSeconds);
       res.setHeader('X-RateLimit-Limit', check.max);
-      res.setHeader('X-RateLimit-Remaining', 0);
-      res.setHeader('X-RateLimit-Reset', check.retryAfterSeconds);
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, check.max - check.current));
+      res.setHeader('X-RateLimit-Reset', Math.ceil((Date.now() + check.retryAfterSeconds * 1000) / 1000));
 
-      // Record rate limit security event
-      SecurityService.recordSecurityEvent({
-        type: 'RATE_LIMIT_TRIGGERED',
-        severity: 'LOW',
-        actorId: user?.id,
-        ip: rawIp,
-        userAgent: req.headers['user-agent'],
-        requestId: (req as any).id || `req_${Date.now()}`,
-        endpoint: req.originalUrl || req.path,
-        metadata: {
-          category,
-          current: check.current,
-          max: check.max,
-          retryAfterSeconds: check.retryAfterSeconds
-        }
-      });
+      if (!check.allowed) {
+        await SecurityService.recordSecurityEvent({
+          type: 'RATE_LIMIT_TRIGGERED',
+          severity: 'LOW',
+          actorId: user?.id,
+          ip: rawIp,
+          userAgent: req.headers['user-agent'],
+          requestId: (req as any).id || crypto.randomUUID(),
+          endpoint: req.originalUrl || req.path,
+          metadata: { category, current: check.current, max: check.max, retryAfterSeconds: check.retryAfterSeconds },
+        }).catch(error => console.error('[security] event persistence failed:', error));
 
-      return sendError(
-        res,
-        ERROR_CODES.RATE_LIMITED,
-        `Terlalu banyak permintaan pada kategori '${category}'. Silakan coba kembali dalam ${check.retryAfterSeconds} detik.`,
-        429,
-        { retryAfter: check.retryAfterSeconds, category }
-      );
+        return sendError(
+          res,
+          ERROR_CODES.RATE_LIMITED,
+          `Terlalu banyak permintaan pada kategori '${category}'.`,
+          429,
+          { retryAfter: check.retryAfterSeconds, category }
+        );
+      }
+
+      next();
+    } catch (error) {
+      console.error('[security] Firestore protection failure:', error);
+      return sendError(res, ERROR_CODES.INTERNAL_ERROR, 'Sistem proteksi sedang tidak tersedia.', 503);
     }
-
-    res.setHeader('X-RateLimit-Limit', check.max);
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, check.max - check.current));
-    next();
   };
 }
