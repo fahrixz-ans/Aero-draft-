@@ -58,7 +58,7 @@ publicRouter.get('/apps/:slug/versions/:versionId/download', createRateLimiter('
   try {
     const ip = req.ip || req.socket.remoteAddress;
     const sessionId = (req.headers['x-session-id'] as string) || 'guest_session';
-    const userId = (req.headers['x-user-id'] as string) || undefined;
+    const userId = (req as any).user?.id || undefined;
 
     const result = await PublicAppService.getVersionDownloadTarget(req.params.slug, req.params.versionId, { ip, sessionId, userId });
     if (result.error) {
@@ -86,7 +86,7 @@ publicRouter.get('/apps/:slug/download', createRateLimiter('DOWNLOAD'), async (r
   try {
     const ip = req.ip || req.socket.remoteAddress;
     const sessionId = (req.headers['x-session-id'] as string) || 'guest_session';
-    const userId = (req.headers['x-user-id'] as string) || undefined;
+    const userId = (req as any).user?.id || undefined;
 
     const result = await PublicAppService.getDownloadTarget(req.params.slug, { ip, sessionId, userId });
     if (result.error) {
@@ -299,3 +299,4 @@ publicRouter.get('/download-modstation-client', (req, res) => {
     return sendError(res, 'INTERNAL_ERROR', err.message, 500);
   }
 });
+  
