@@ -14,13 +14,8 @@ service cloud.firestore {
     // Checking if user has admin privileges.
     // Bootstrapped using the user's registered runtime email or an admins collection document.
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'fantrastore.id@gmail.com' ||
-        request.auth.token.email == 'fahriandriansaputra123@gmail.com' ||
-        request.auth.token.email == 'fahriandriansptr@gmail.com' ||
-        request.auth.token.email == 'admin@aeroapk.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     // Users & private data
@@ -200,11 +195,28 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Developer Submissions (IDOR Protection)
+
+    // Server-managed operational state. The backend uses Firebase Admin SDK,
+    // which bypasses Firestore client rules. Client-side reads/writes are denied.
+    match /rateLimits/{id} {
+      allow read, write: if false;
+    }
+
+    match /apiCache/{id} {
+      allow read, write: if false;
+    }
+
+    match /performanceMetrics/{id} {
+      allow read, write: if false;
+    }
+
+    match /idempotencyKeys/{id} {
+      allow read, write: if false;
+    }
+
+    // Developer submissions are written/read through the Auth.js server API.
     match /developerSubmissions/{submissionId} {
-      allow read: if (isSignedIn() && resource.data.developerEmail == request.auth.token.email) || isAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
+      allow read, write: if false;
     }
   }
 }
