@@ -1,7 +1,27 @@
 // ---------------------------------------------------------------------------
-// AERO REPOSITORY LAYER (STAGE 8.8 & 8.9)
-// Encapsulates database operations for Firestore and in-memory persistent stores
+// MOD STATION FIRESTORE REPOSITORY LAYER
 // ---------------------------------------------------------------------------
+// IMPORTANT:
+// - Firestore is the only persistent data source in this module.
+// - No seed arrays, in-memory databases, hardcoded users, or fake metrics.
+// - Server-side access uses Firebase Admin SDK so Auth.js remains the auth
+//   system while Firestore remains the database.
+// - Timestamps are stored as Firestore server timestamps and normalized to ISO
+//   strings only at the repository boundary.
+// ---------------------------------------------------------------------------
+
+import { cert, getApps, initializeApp, type App as FirebaseAdminApp } from 'firebase-admin/app';
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+  type DocumentData,
+  type Firestore,
+  type Query,
+  type QueryConstraint,
+  type WhereFilterOp,
+} from 'firebase-admin/firestore';
+import crypto from 'crypto';
 
 export interface AppEntity {
   id: string;
@@ -32,6 +52,7 @@ export interface AppEntity {
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
+  [key: string]: any;
 }
 
 export interface VersionEntity {
@@ -42,7 +63,7 @@ export interface VersionEntity {
   packageName?: string;
   sha256: string;
   status: 'DRAFT' | 'UPLOADING' | 'QUEUED' | 'PROCESSING' | 'VERIFIED' | 'PENDING_REVIEW' | 'APPROVED' | 'PUBLISHED' | 'REJECTED' | 'FAILED' | 'QUARANTINED' | 'ARCHIVED' | 'REVOKED';
-  securityStatus: 'PENDING' | 'SCANNING' | 'VERIFIED' | 'WARNING' | 'FAILED' | 'QUARANTINED' | 'passed' | 'warning' | 'rejected';
+  securityStatus: 'PENDING' | 'SCANNING' | 'VERIFIED' | 'WARNING' | 'FAILED' | 'QUARANTINED' | 'passed' | 'warning' | 'rejected' | 'CLEAN' | 'MALICIOUS';
   analysisStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   storageKey?: string;
   storageObjectKey?: string;
@@ -68,6 +89,7 @@ export interface VersionEntity {
   archiveReason?: string;
   createdAt: string;
   updatedAt: string;
+  [key: string]: any;
 }
 
 export interface CategoryEntity {
@@ -79,6 +101,7 @@ export interface CategoryEntity {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  [key: string]: any;
 }
 
 export interface CollectionEntity {
@@ -93,6 +116,7 @@ export interface CollectionEntity {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  [key: string]: any;
 }
 
 export interface UploadEntity {
@@ -111,14 +135,18 @@ export interface UploadEntity {
   completedAt?: string;
   errorCode?: string;
   errorMessage?: string;
+  [key: string]: any;
 }
+
+export type JobType =
+  | 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION'
+  | 'GENERATE_SITEMAP' | 'VALIDATE_SEO' | 'REFRESH_METADATA' | 'CHECK_INTERNAL_LINKS' | 'CHECK_STALE_PAGES' | 'REBUILD_COLLECTION_SEO'
+  | 'CLASSIFY_QUERY' | 'EXPAND_QUERY' | 'GENERATE_EMBEDDING' | 'UPDATE_APP_EMBEDDING' | 'REBUILD_SEMANTIC_INDEX'
+  | 'GENERATE_RECOMMENDATION' | 'REBUILD_COLLECTION' | 'EVALUATE_DISCOVERY' | 'GENERATE_AI_REPORT' | 'DETECT_DISCOVERY_OPPORTUNITY';
 
 export interface JobEntity {
   jobId: string;
-  type: 
-    | 'APK_PROCESSING' | 'SECURITY_SCAN' | 'SEARCH_INDEX' | 'RECONCILIATION' 
-    | 'GENERATE_SITEMAP' | 'VALIDATE_SEO' | 'REFRESH_METADATA' | 'CHECK_INTERNAL_LINKS' | 'CHECK_STALE_PAGES' | 'REBUILD_COLLECTION_SEO'
-    | 'CLASSIFY_QUERY' | 'EXPAND_QUERY' | 'GENERATE_EMBEDDING' | 'UPDATE_APP_EMBEDDING' | 'REBUILD_SEMANTIC_INDEX' | 'GENERATE_RECOMMENDATION' | 'REBUILD_COLLECTION' | 'EVALUATE_DISCOVERY' | 'GENERATE_AI_REPORT' | 'DETECT_DISCOVERY_OPPORTUNITY';
+  type: JobType;
   status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'DEAD_LETTERED';
   uploadId?: string;
   appId?: string;
@@ -133,633 +161,841 @@ export interface JobEntity {
   completedAt?: string;
   failedAt?: string;
   nextRetryAt?: string;
+  [key: string]: any;
 }
 
-// ---------------------------------------------------------------------------
-// In-Memory Database Stores (Initialized with Seed Records)
-// ---------------------------------------------------------------------------
+export interface ModerationEntity {
+  id: string;
+  appId?: string;
+  resourceType?: string;
+  status: string;
+  priority?: string;
+  reason?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
 
-export const categoriesDb: CategoryEntity[] = [
-  { id: 'cat_1', name: 'Alat & Utilitas', slug: 'alat-utilitas', status: 'ACTIVE', description: 'Utilitas harian dan perkakas sistem Android.', sortOrder: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_2', name: 'Sosial & Komunikasi', slug: 'sosial-komunikasi', status: 'ACTIVE', description: 'Aplikasi perpesanan dan jejaring sosial terpopuler.', sortOrder: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_3', name: 'Produktivitas', slug: 'produktivitas', status: 'ACTIVE', description: 'Dokumen, catatan kerja, dan manajemen waktu.', sortOrder: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_4', name: 'Game & Hiburan', slug: 'game-hiburan', status: 'ACTIVE', description: 'Hiburan interaktif, streaming, dan permainan mobile.', sortOrder: 4, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_5', name: 'Fotografi & Video', slug: 'fotografi-video', status: 'ACTIVE', description: 'Penyuntingan foto profesional dan kreasi video AI.', sortOrder: 5, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-];
+export interface SecurityScanEntity {
+  id?: string;
+  versionId: string;
+  status: string;
+  severity?: string;
+  vulnerabilitiesCount?: number;
+  scannedAt?: string;
+  scanner?: string;
+  findings?: any[];
+  [key: string]: any;
+}
 
-export const appsDb: AppEntity[] = [
-  {
-    id: 'app_capcut',
-    name: 'CapCut - Video Editor',
-    slug: 'capcut-video-editor',
-    packageName: 'com.lemon.lv',
-    developerName: 'Bytedance Pte. Ltd.',
-    shortDescription: 'Aplikasi penyunting video all-in-one profesional dengan fitur AI canggih.',
-    description: 'CapCut adalah editor video resmi serbaguna dan pembuat video gratis dengan semua yang Anda butuhkan untuk membuat konten berkualitas tinggi.',
-    category: 'Fotografi & Video',
-    categoryId: 'cat_5',
-    iconUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=150',
-    bannerUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800',
-    status: 'PUBLISHED',
-    distributionType: 'APK',
-    downloads: 1450000,
-    rating: 4.8,
-    reviewsCount: 32000,
-    size: '124 MB',
-    versionName: '11.4.0',
-    versionCode: 11400,
-    sha256: 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855',
-    latestVersionId: 'ver_capcut_1',
-    publishedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 2 * 86400000).toISOString()
-  },
-  {
-    id: 'app_whatsapp',
-    name: 'WhatsApp Messenger',
-    slug: 'whatsapp-messenger',
-    packageName: 'com.whatsapp',
-    developerName: 'WhatsApp LLC',
-    shortDescription: 'Pesan instan yang simpel, aman, dan dapat diandalkan tanpa batas.',
-    description: 'WhatsApp Messenger adalah aplikasi pesan gratis yang tersedia untuk Android dan ponsel cerdas lainnya dengan enkripsi ujung ke ujung.',
-    category: 'Sosial & Komunikasi',
-    categoryId: 'cat_2',
-    iconUrl: 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?w=150',
-    bannerUrl: 'https://images.unsplash.com/photo-1611746872915-64382b5c76da?w=800',
-    status: 'PUBLISHED',
-    distributionType: 'APK',
-    downloads: 5200000,
-    rating: 4.7,
-    reviewsCount: 98000,
-    size: '48 MB',
-    versionName: '2.24.12',
-    versionCode: 241200,
-    sha256: 'A1B2C3D4E5F678901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF',
-    latestVersionId: 'ver_wa_1',
-    publishedAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-    createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 1 * 86400000).toISOString()
-  },
-  {
-    id: 'app_spotify',
-    name: 'Spotify: Music & Podcasts',
-    slug: 'spotify-music-podcasts',
-    packageName: 'com.spotify.music',
-    developerName: 'Spotify AB',
-    shortDescription: 'Streaming musik, album, dan podcast favorit Anda kapan saja.',
-    description: 'Dengarkan musik, podcast, dan album jutaan musisi gratis di ponsel dan tablet Anda dengan Spotify.',
-    category: 'Game & Hiburan',
-    categoryId: 'cat_4',
-    iconUrl: 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?w=150',
-    bannerUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800',
-    status: 'PUBLISHED',
-    distributionType: 'APK',
-    downloads: 3100000,
-    rating: 4.6,
-    reviewsCount: 45000,
-    size: '86 MB',
-    versionName: '8.9.30',
-    versionCode: 89300,
-    sha256: 'B2C3D4E5F6A178901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF',
-    latestVersionId: 'ver_spotify_1',
-    publishedAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-    createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 5 * 86400000).toISOString()
+export interface UserEntity {
+  id: string;
+  email: string;
+  name?: string;
+  image?: string;
+  role?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLogin?: string;
+  [key: string]: any;
+}
+
+const COLLECTIONS = {
+  apps: 'applications',
+  versions: 'appVersions',
+  categories: 'categories',
+  collections: 'collections',
+  moderation: 'moderation',
+  securityScans: 'securityScans',
+  auditLogs: 'adminAuditLogs',
+  uploads: 'uploads',
+  jobs: 'jobs',
+  deadLetterJobs: 'deadLetterJobs',
+  users: 'users',
+  settings: 'settings',
+} as const;
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || !value.trim()) throw new Error(`Missing required environment variable: ${name}`);
+  return value.trim();
+}
+
+function getAdminApp(): FirebaseAdminApp {
+  const existing = getApps()[0];
+  if (existing) return existing;
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || 'mod-station-prod';
+
+  // Firestore emulator intentionally does not require a service-account key.
+  // Production always requires explicit server credentials.
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return initializeApp({ projectId });
   }
-];
 
-export const versionsDb: VersionEntity[] = [
-  {
-    id: 'ver_capcut_1',
-    appId: 'app_capcut',
-    versionName: '11.4.0',
-    versionCode: 11400,
-    packageName: 'com.lemon.lv',
-    sha256: 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855',
-    status: 'PUBLISHED',
-    securityStatus: 'VERIFIED',
-    analysisStatus: 'COMPLETED',
-    storageKey: 'apks/E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855.apk',
-    downloadUrl: '/api/public/apks/capcut-11.4.0.apk',
-    changelog: 'Pembaruan stabilitas dan peningkatan performa editor AI.',
-    minSdk: 26,
-    targetSdk: 34,
-    fileSize: 130023400,
-    permissions: ['INTERNET', 'READ_EXTERNAL_STORAGE', 'RECORD_AUDIO'],
-    architectures: ['arm64-v8a', 'armeabi-v7a'],
-    signingCertificate: {
-      sha256: '9A:B1:C2:D3:E4:F5:06:17:28:39:4A:5B:6C:7D:8E:9F:A0:B1:C2:D3:E4:F5:06:17:28:39:4A:5B:6C:7D:8E:9F',
-      issuer: 'C=SG, O=Bytedance, CN=CapCut Release',
-      subject: 'C=SG, O=Bytedance, CN=CapCut Release'
-    },
-    moderationStatus: 'APPROVED',
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 30 * 86400000).toISOString()
-  },
-  {
-    id: 'ver_wa_1',
-    appId: 'app_whatsapp',
-    versionName: '2.24.12',
-    versionCode: 241200,
-    packageName: 'com.whatsapp',
-    sha256: 'A1B2C3D4E5F678901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF',
-    status: 'PUBLISHED',
-    securityStatus: 'VERIFIED',
-    analysisStatus: 'COMPLETED',
-    storageKey: 'apks/A1B2C3D4E5F678901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF.apk',
-    downloadUrl: '/api/public/apks/whatsapp-2.24.12.apk',
-    changelog: 'Dukungan enkripsi pesan grup baru dan perbaikan bug sistem.',
-    minSdk: 24,
-    targetSdk: 34,
-    fileSize: 50331648,
-    permissions: ['INTERNET', 'READ_CONTACTS', 'CAMERA', 'RECORD_AUDIO', 'ACCESS_FINE_LOCATION'],
-    architectures: ['arm64-v8a', 'armeabi-v7a'],
-    signingCertificate: {
-      sha256: '3F:9C:A2:8D:7B:E1:90:54:E3:FA:31:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:12',
-      issuer: 'C=US, O=WhatsApp LLC, CN=WhatsApp Release',
-      subject: 'C=US, O=WhatsApp LLC, CN=WhatsApp Release'
-    },
-    moderationStatus: 'APPROVED',
-    createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 60 * 86400000).toISOString()
-  },
-  {
-    id: 'ver_spotify_1',
-    appId: 'app_spotify',
-    versionName: '8.9.30',
-    versionCode: 89300,
-    packageName: 'com.spotify.music',
-    sha256: 'B2C3D4E5F6A178901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF',
-    status: 'PUBLISHED',
-    securityStatus: 'VERIFIED',
-    analysisStatus: 'COMPLETED',
-    storageKey: 'apks/B2C3D4E5F6A178901234567890ABCDEF1234567890ABCDEF1234567890ABCDEF.apk',
-    downloadUrl: '/api/public/apks/spotify-8.9.30.apk',
-    changelog: 'Antarmuka pemutar musik mini yang diperbarui.',
-    minSdk: 26,
-    targetSdk: 34,
-    fileSize: 90177536,
-    permissions: ['INTERNET', 'WAKE_LOCK', 'FOREGROUND_SERVICE'],
-    architectures: ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
-    signingCertificate: {
-      sha256: '44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:11:22:33:44:55',
-      issuer: 'C=SE, O=Spotify AB, CN=Spotify Release',
-      subject: 'C=SE, O=Spotify AB, CN=Spotify Release'
-    },
-    moderationStatus: 'APPROVED',
-    createdAt: new Date(Date.now() - 45 * 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 45 * 86400000).toISOString()
+  const clientEmail = requiredEnv('FIREBASE_CLIENT_EMAIL');
+  const privateKey = requiredEnv('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n');
+
+  return initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
+    projectId,
+  });
+}
+
+export const firestore: Firestore = getFirestore(
+  getAdminApp(),
+  process.env.FIRESTORE_DATABASE_ID && process.env.FIRESTORE_DATABASE_ID !== '(default)'
+    ? process.env.FIRESTORE_DATABASE_ID
+    : '(default)'
+);
+
+function normalize(value: any): any {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(normalize);
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, item] of Object.entries(value)) out[key] = normalize(item);
+    return out;
   }
-];
+  return value;
+}
 
-export const collectionsDb: CollectionEntity[] = [
-  {
-    id: 'col_1',
-    title: 'Aplikasi Terpopuler Minggu Ini',
-    slug: 'aplikasi-terpopuler-minggu-ini',
-    description: 'Pilihan aplikasi paling banyak diunduh oleh komunitas Aero dengan performa stabil.',
-    status: 'PUBLISHED',
-    visibility: 'PUBLIC',
-    bannerUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800',
-    appIds: ['app_capcut', 'app_whatsapp', 'app_spotify'],
-    sortOrder: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+function withId<T>(id: string, data: DocumentData | undefined): T | null {
+  if (!data) return null;
+  return { id, ...normalize(data) } as T;
+}
+
+function cleanUndefined<T extends Record<string, any>>(value: T): T {
+  const out: Record<string, any> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item !== undefined) out[key] = item;
   }
-];
+  return out as T;
+}
 
-export const moderationDb: any[] = [
-  {
-    id: 'mod_1',
-    appId: 'app_capcut',
-    resourceType: 'application',
-    status: 'approved',
-    priority: 'medium',
-    reason: 'Verifikasi rilis editor versi stabil',
-    description: 'Aplikasi telah lolos pemeriksaan keamanan SHA-256 dan izin sistem.',
-    createdAt: new Date().toISOString()
-  }
-];
+function nowFields() {
+  return { createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
+}
 
-export const securityScansDb: any[] = [
-  {
-    versionId: 'ver_capcut_1',
-    status: 'VERIFIED',
-    severity: 'INFO',
-    vulnerabilitiesCount: 0,
-    scannedAt: new Date().toISOString(),
-    scanner: 'AeroShield Security Engine v5.0',
-    findings: []
-  },
-  {
-    versionId: 'ver_wa_1',
-    status: 'VERIFIED',
-    severity: 'INFO',
-    vulnerabilitiesCount: 0,
-    scannedAt: new Date().toISOString(),
-    scanner: 'AeroShield Security Engine v5.0',
-    findings: []
-  }
-];
+function updateFields(updates: Record<string, any>) {
+  return cleanUndefined({ ...updates, updatedAt: FieldValue.serverTimestamp() });
+}
 
-export const auditLogsDb: any[] = [];
-export const uploadsDb: UploadEntity[] = [];
-export const jobsDb: JobEntity[] = [];
-export const deadLetterJobsDb: any[] = [];
+function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
+}
 
-export const usersDb = [
-  { id: 'usr_0', email: 'fantrastore.id@gmail.com', name: 'Super Admin', role: 'SUPER_ADMIN', status: 'ACTIVE', createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() },
-  { id: 'usr_1', email: 'fahriandriansaputra123@gmail.com', name: 'Super Admin', role: 'SUPER_ADMIN', status: 'ACTIVE', createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() },
-  { id: 'usr_2', email: 'moderator@aeroapk.com', name: 'Moderator Utama', role: 'MODERATOR', status: 'ACTIVE', createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() }
-];
+async function getById<T>(collectionName: string, id: string): Promise<T | null> {
+  const snap = await firestore.collection(collectionName).doc(id).get();
+  return withId<T>(snap.id, snap.exists ? snap.data() : undefined);
+}
 
-export const systemSettingsDb = {
-  general: { siteName: 'AeroAPK', maintenanceMode: false, maxDailyDownloadsPerIp: 50 },
-  security: { scanRequired: true, maxApkSizeMB: 200, enforceStrictSignatureCheck: true },
-  analytics: { trackingEnabled: true, anonymizeIp: true }
-};
+async function listAll<T>(collectionName: string): Promise<T[]> {
+  const snap = await firestore.collection(collectionName).get();
+  return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+}
 
-// ---------------------------------------------------------------------------
-// Repository Classes
-// ---------------------------------------------------------------------------
+async function queryAll<T>(collectionName: string, wheres: Array<[string, WhereFilterOp, any]> = []): Promise<T[]> {
+  let query: Query = firestore.collection(collectionName);
+  for (const [field, op, value] of wheres) query = query.where(field, op, value);
+  const snap = await query.get();
+  return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+}
+
+function normalizePage(page?: number, pageSize?: number) {
+  const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const safePageSize = Math.min(1000, Math.max(1, Math.floor(Number(pageSize) || 20)));
+  return { page: safePage, pageSize: safePageSize };
+}
+
+function sortApps(list: AppEntity[], sort = 'popular', order = 'desc') {
+  const direction = order === 'asc' ? 1 : -1;
+  const value = (a: AppEntity) => {
+    if (sort === 'rating') return a.rating || 0;
+    if (sort === 'updated' || sort === 'recently_updated') return Date.parse(a.updatedAt || '') || 0;
+    if (sort === 'new_releases' || sort === 'created') return Date.parse(a.createdAt || '') || 0;
+    return a.downloads || 0;
+  };
+  return [...list].sort((a, b) => (value(a) - value(b)) * direction);
+}
 
 export class AppRepository {
   static async findPublished(filters: { search?: string; category?: string; sort?: string; order?: string; page?: number; pageSize?: number }) {
-    let list = appsDb.filter(a => a.status === 'PUBLISHED');
-
+    const constraints: Array<[string, WhereFilterOp, any]> = [['status', '==', 'PUBLISHED']];
     if (filters.category) {
+      constraints.push(['categoryId', '==', filters.category]);
+    }
+    // Do not rely on a Firestore full-text search that does not exist. Search is
+    // performed over the Firestore result set, never over a local seed database.
+    let list = await queryAll<AppEntity>(COLLECTIONS.apps, constraints as any);
+
+    if (filters.category && list.length === 0) {
+      list = await queryAll<AppEntity>(COLLECTIONS.apps, [['status', '==', 'PUBLISHED']]);
       const cat = filters.category.toLowerCase();
-      list = list.filter(a => a.category.toLowerCase() === cat || a.categoryId === cat);
+      list = list.filter(a => String(a.category || '').toLowerCase() === cat || a.categoryId === filters.category);
     }
 
-    if (filters.search) {
+    if (filters.search?.trim()) {
       const q = filters.search.trim().toLowerCase();
-      if (q) {
-        list = list.filter(a =>
-          a.name.toLowerCase().includes(q) ||
-          a.slug.toLowerCase().includes(q) ||
-          a.packageName.toLowerCase().includes(q) ||
-          a.developerName.toLowerCase().includes(q)
-        );
-      }
+      list = list.filter(a => [a.name, a.slug, a.packageName, a.developerName].some(v => String(v || '').toLowerCase().includes(q)));
     }
 
-    const sortField = filters.sort || 'popular';
-    const sortOrder = filters.order === 'asc' ? 1 : -1;
-
-    list.sort((a, b) => {
-      if (sortField === 'popular') return (b.downloads - a.downloads) * (sortOrder === 1 ? -1 : 1);
-      if (sortField === 'rating') return (b.rating - a.rating) * (sortOrder === 1 ? -1 : 1);
-      if (sortField === 'updated' || sortField === 'recently_updated') {
-        return (new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()) * (sortOrder === 1 ? -1 : 1);
-      }
-      if (sortField === 'new_releases' || sortField === 'created') {
-        return (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) * (sortOrder === 1 ? -1 : 1);
-      }
-      return 0;
-    });
-
-    const page = filters.page || 1;
-    const pageSize = filters.pageSize || 20;
+    list = sortApps(list, filters.sort, filters.order);
+    const { page, pageSize } = normalizePage(filters.page, filters.pageSize);
     const total = list.length;
-    const paginated = list.slice((page - 1) * pageSize, page * pageSize);
-
-    return { data: paginated, total, page, pageSize };
+    return { data: list.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
   }
 
   static async findBySlug(slug: string): Promise<AppEntity | null> {
-    return appsDb.find(a => a.slug === slug && a.status === 'PUBLISHED') || null;
+    const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', slug).limit(10).get();
+    const app = snap.docs.map(d => withId<AppEntity>(d.id, d.data())!).find(a => a.status === 'PUBLISHED');
+    return app || null;
   }
 
   static async findById(id: string): Promise<AppEntity | null> {
-    return appsDb.find(a => a.id === id || a.slug === id) || null;
+    const direct = await getById<AppEntity>(COLLECTIONS.apps, id);
+    if (direct) return direct;
+    const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', id).limit(1).get();
+    return snap.empty ? null : withId<AppEntity>(snap.docs[0].id, snap.docs[0].data());
   }
 
   static async findAllAdmin(filters: { search?: string; status?: string; category?: string; distributionType?: string; page?: number; pageSize?: number }) {
-    let list = [...appsDb];
-
-    if (filters.status) {
-      list = list.filter(a => a.status === filters.status);
-    }
+    const constraints: QueryConstraint[] = [];
+    if (filters.status) constraints.push(['status', '==', filters.status]);
+    if (filters.category) constraints.push(['categoryId', '==', filters.category]);
+    if (filters.distributionType) constraints.push(['distributionType', '==', filters.distributionType]);
+    let list = await queryAll<AppEntity>(COLLECTIONS.apps, constraints as any);
     if (filters.category) {
-      list = list.filter(a => a.categoryId === filters.category || a.category.toLowerCase() === filters.category!.toLowerCase());
+      const c = filters.category.toLowerCase();
+      list = list.filter(a => a.categoryId === filters.category || String(a.category || '').toLowerCase() === c);
     }
-    if (filters.distributionType) {
-      list = list.filter(a => a.distributionType === filters.distributionType);
+    if (filters.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      list = list.filter(a => [a.name, a.slug, a.packageName, a.developerName].some(v => String(v || '').toLowerCase().includes(q)));
     }
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      list = list.filter(a =>
-        a.name.toLowerCase().includes(q) ||
-        a.slug.toLowerCase().includes(q) ||
-        a.packageName.toLowerCase().includes(q)
-      );
-    }
-
-    const page = filters.page || 1;
-    const pageSize = filters.pageSize || 50;
-    const total = list.length;
-    const paginated = list.slice((page - 1) * pageSize, page * pageSize);
-
-    return { data: paginated, total, page, pageSize };
+    list.sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+    const { page, pageSize } = normalizePage(filters.page, filters.pageSize || 50);
+    return { data: list.slice((page - 1) * pageSize, page * pageSize), total: list.length, page, pageSize };
   }
 
   static async create(appData: Partial<AppEntity>): Promise<AppEntity> {
-    const newApp: AppEntity = {
-      id: `app_${Date.now()}`,
-      name: appData.name || '',
-      slug: appData.slug || '',
+    if (!appData.name || !appData.slug || !appData.categoryId) throw new Error('name, slug, and categoryId are required');
+    const duplicateSlug = await firestore.collection(COLLECTIONS.apps).where('slug', '==', appData.slug).limit(1).get();
+    if (!duplicateSlug.empty) throw new Error('APP_ALREADY_EXISTS');
+    if (appData.packageName) {
+      const duplicatePackage = await firestore.collection(COLLECTIONS.apps).where('packageName', '==', appData.packageName).limit(1).get();
+      if (!duplicatePackage.empty) throw new Error('APP_ALREADY_EXISTS');
+    }
+    const id = newId('app');
+    const ref = firestore.collection(COLLECTIONS.apps).doc(id);
+    const data = cleanUndefined({
+      name: appData.name,
+      slug: appData.slug,
       packageName: appData.packageName || '',
-      developerName: appData.developerName || 'Aero Developer',
+      developerName: appData.developerName || '',
       shortDescription: appData.shortDescription || '',
       description: appData.description || '',
-      category: appData.category || 'Alat & Utilitas',
-      categoryId: appData.categoryId || 'cat_1',
-      iconUrl: appData.iconUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
-      bannerUrl: appData.bannerUrl || 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800',
-      status: 'DRAFT',
+      category: appData.category || '',
+      categoryId: appData.categoryId,
+      iconUrl: appData.iconUrl || '',
+      bannerUrl: appData.bannerUrl || '',
+      status: appData.status || 'DRAFT',
       distributionType: appData.distributionType || 'APK',
       officialWebsiteUrl: appData.officialWebsiteUrl,
-      downloads: 0,
-      rating: 5.0,
-      reviewsCount: 0,
-      size: appData.size || '45 MB',
-      versionName: appData.versionName || '1.0.0',
-      versionCode: appData.versionCode || 100,
+      downloads: Number(appData.downloads || 0),
+      rating: Number(appData.rating || 0),
+      reviewsCount: Number(appData.reviewsCount || 0),
+      size: appData.size || '',
+      versionName: appData.versionName || '',
+      versionCode: Number(appData.versionCode || 0),
       sha256: appData.sha256 || '',
-      latestVersionId: appData.latestVersionId || '',
+      latestVersionId: appData.latestVersionId,
       createdBy: appData.createdBy,
       updatedBy: appData.updatedBy,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    appsDb.push(newApp);
-    return newApp;
+      ...nowFields(),
+    });
+    await ref.create(data);
+    return (await getById<AppEntity>(COLLECTIONS.apps, id))!;
   }
 
   static async update(id: string, updates: Partial<AppEntity>): Promise<AppEntity | null> {
-    const app = appsDb.find(a => a.id === id);
-    if (!app) return null;
-    Object.assign(app, updates, { updatedAt: new Date().toISOString() });
-    return app;
+    const ref = firestore.collection(COLLECTIONS.apps).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    const protectedUpdates = { ...updates } as Record<string, any>;
+    delete protectedUpdates.id;
+    delete protectedUpdates.createdAt;
+    await ref.update(updateFields(protectedUpdates));
+    return getById<AppEntity>(COLLECTIONS.apps, id);
   }
 
   static async publish(id: string): Promise<AppEntity | null> {
-    const app = appsDb.find(a => a.id === id);
-    if (!app) return null;
-    app.status = 'PUBLISHED';
-    app.publishedAt = new Date().toISOString();
-    app.updatedAt = new Date().toISOString();
-    return app;
+    const ref = firestore.collection(COLLECTIONS.apps).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.update(updateFields({ status: 'PUBLISHED', publishedAt: FieldValue.serverTimestamp(), archivedAt: FieldValue.delete() }));
+    return getById<AppEntity>(COLLECTIONS.apps, id);
   }
 
   static async archive(id: string): Promise<AppEntity | null> {
-    const app = appsDb.find(a => a.id === id);
-    if (!app) return null;
-    app.status = 'ARCHIVED';
-    app.archivedAt = new Date().toISOString();
-    app.updatedAt = new Date().toISOString();
-    return app;
+    const ref = firestore.collection(COLLECTIONS.apps).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.update(updateFields({ status: 'ARCHIVED', archivedAt: FieldValue.serverTimestamp() }));
+    return getById<AppEntity>(COLLECTIONS.apps, id);
   }
 
   static async restore(id: string): Promise<AppEntity | null> {
-    const app = appsDb.find(a => a.id === id);
-    if (!app) return null;
-    app.status = 'DRAFT';
-    app.updatedAt = new Date().toISOString();
-    return app;
+    const ref = firestore.collection(COLLECTIONS.apps).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.update(updateFields({ status: 'DRAFT', archivedAt: FieldValue.delete() }));
+    return getById<AppEntity>(COLLECTIONS.apps, id);
   }
 
   static async incrementDownloads(id: string): Promise<void> {
-    const app = appsDb.find(a => a.id === id || a.slug === id);
-    if (app) {
-      app.downloads = (app.downloads || 0) + 1;
-    }
+    await firestore.collection(COLLECTIONS.apps).doc(id).update({ downloads: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+  }
+
+  static async listAll(): Promise<AppEntity[]> {
+    return listAll<AppEntity>(COLLECTIONS.apps);
   }
 }
 
 export class VersionRepository {
+  private static collection(appId: string) {
+    return firestore.collection(COLLECTIONS.apps).doc(appId).collection(COLLECTIONS.versions);
+  }
+
+  private static async findRefById(id: string) {
+    const snap = await firestore.collectionGroup(COLLECTIONS.versions).get();
+    const doc = snap.docs.find(item => item.id === id);
+    return doc ? doc.ref : null;
+  }
+
   static async findPublishedByAppId(appId: string): Promise<VersionEntity[]> {
-    return versionsDb
-      .filter(v => v.appId === appId && v.status === 'PUBLISHED')
-      .sort((a, b) => b.versionCode - a.versionCode);
+    const snap = await this.collection(appId).where('status', '==', 'PUBLISHED').get();
+    return snap.docs
+      .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
+      .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
   }
 
   static async findById(id: string): Promise<VersionEntity | null> {
-    return versionsDb.find(v => v.id === id) || null;
+    const ref = await this.findRefById(id);
+    if (!ref) return null;
+    const snap = await ref.get();
+    return withId<VersionEntity>(snap.id, snap.exists ? snap.data() : undefined);
   }
 
   static async findAllByAppId(appId: string): Promise<VersionEntity[]> {
-    return versionsDb
-      .filter(v => v.appId === appId)
-      .sort((a, b) => b.versionCode - a.versionCode);
+    const snap = await this.collection(appId).get();
+    return snap.docs
+      .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
+      .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
   }
 
   static async create(data: Partial<VersionEntity>): Promise<VersionEntity> {
-    const newVer: VersionEntity = {
-      id: `ver_${Date.now()}`,
-      appId: data.appId || '',
-      versionName: data.versionName || '1.0.0',
-      versionCode: data.versionCode || 1,
-      packageName: data.packageName || '',
-      sha256: data.sha256 || '',
-      status: 'DRAFT',
-      securityStatus: 'PENDING',
-      analysisStatus: 'COMPLETED',
-      storageKey: data.storageKey || '',
-      downloadUrl: data.downloadUrl || '',
-      changelog: data.changelog || 'Rilis versi baru.',
-      minSdk: data.minSdk || 24,
-      targetSdk: data.targetSdk || 34,
-      fileSize: data.fileSize || 0,
+    if (!data.appId || !data.versionName || !Number.isFinite(Number(data.versionCode))) {
+      throw new Error('appId, versionName, and versionCode are required');
+    }
+    const id = newId('ver');
+    await this.collection(data.appId).doc(id).create(cleanUndefined({
+      appId: data.appId, versionName: data.versionName, versionCode: Number(data.versionCode),
+      packageName: data.packageName, sha256: data.sha256 || '', status: data.status || 'DRAFT',
+      securityStatus: data.securityStatus || 'PENDING', analysisStatus: data.analysisStatus || 'PENDING',
+      storageKey: data.storageKey, storageObjectKey: data.storageObjectKey, storageProvider: data.storageProvider,
+      downloadUrl: data.downloadUrl, changelog: data.changelog || '', minSdk: Number(data.minSdk || 0),
+      targetSdk: Number(data.targetSdk || 0), fileSize: Number(data.fileSize || 0),
       permissions: Array.isArray(data.permissions) ? data.permissions : [],
-      architectures: Array.isArray(data.architectures) ? data.architectures : ['arm64-v8a', 'armeabi-v7a'],
-      signingCertificate: data.signingCertificate,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    versionsDb.push(newVer);
-    return newVer;
+      architectures: Array.isArray(data.architectures) ? data.architectures : [],
+      signingCertificate: data.signingCertificate, moderationStatus: data.moderationStatus,
+      downloadAllowed: data.downloadAllowed, securityRevoked: data.securityRevoked, ...nowFields(),
+    }));
+    return (await this.findById(id))!;
   }
 
   static async update(id: string, updates: Partial<VersionEntity>): Promise<VersionEntity | null> {
-    const ver = versionsDb.find(v => v.id === id);
-    if (!ver) return null;
-    Object.assign(ver, updates, { updatedAt: new Date().toISOString() });
-    return ver;
+    const ref = await this.findRefById(id);
+    if (!ref || !(await ref.get()).exists) return null;
+    const safe = { ...updates } as Record<string, any>;
+    delete safe.id; delete safe.createdAt; delete safe.appId;
+    await ref.update(updateFields(safe));
+    return this.findById(id);
   }
 
   static async publish(id: string): Promise<VersionEntity | null> {
-    const ver = versionsDb.find(v => v.id === id);
-    if (!ver) return null;
-    ver.status = 'PUBLISHED';
-    ver.updatedAt = new Date().toISOString();
-    return ver;
+    return this.update(id, { status: 'PUBLISHED', downloadAllowed: true, securityRevoked: false });
   }
 
   static async archive(id: string): Promise<VersionEntity | null> {
-    const ver = versionsDb.find(v => v.id === id);
-    if (!ver) return null;
-    ver.status = 'ARCHIVED';
-    ver.archivedAt = new Date().toISOString();
-    ver.updatedAt = new Date().toISOString();
-    return ver;
+    return this.update(id, { status: 'ARCHIVED', archivedAt: FieldValue.serverTimestamp() as any, downloadAllowed: false });
   }
 
   static async revoke(id: string, reason?: string): Promise<VersionEntity | null> {
-    const ver = versionsDb.find(v => v.id === id);
-    if (!ver) return null;
-    ver.status = 'REVOKED';
-    ver.downloadAllowed = false;
-    ver.securityRevoked = true;
-    ver.revokedAt = new Date().toISOString();
-    ver.archiveReason = reason || 'Security or policy violation revocation';
-    ver.updatedAt = new Date().toISOString();
-    return ver;
+    return this.update(id, { status: 'REVOKED', downloadAllowed: false, securityRevoked: true, revokedAt: FieldValue.serverTimestamp() as any, archiveReason: reason || 'Security or policy violation revocation' });
+  }
+
+  static async listAll(): Promise<VersionEntity[]> {
+    const snap = await firestore.collectionGroup(COLLECTIONS.versions).get();
+    return snap.docs.map(doc => withId<VersionEntity>(doc.id, doc.data())!).filter(Boolean);
+  }
+
+  static async findBySha256(sha256: string): Promise<VersionEntity | null> {
+    const normalized = sha256.toUpperCase();
+    const snap = await firestore.collectionGroup(COLLECTIONS.versions).where('sha256', '==', normalized).limit(1).get();
+    return snap.empty ? null : withId<VersionEntity>(snap.docs[0].id, snap.docs[0].data());
   }
 }
 
 export class CategoryRepository {
   static async findActive(): Promise<CategoryEntity[]> {
-    return categoriesDb
-      .filter(c => c.status === 'ACTIVE')
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const list = await queryAll<CategoryEntity>(COLLECTIONS.categories, [['status', '==', 'ACTIVE']]);
+    return list.sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
   }
-
   static async findBySlug(slug: string): Promise<CategoryEntity | null> {
-    return categoriesDb.find(c => c.slug === slug) || null;
+    const snap = await firestore.collection(COLLECTIONS.categories).where('slug', '==', slug).limit(1).get();
+    return snap.empty ? null : withId<CategoryEntity>(snap.docs[0].id, snap.docs[0].data());
   }
-
-  static async findById(id: string): Promise<CategoryEntity | null> {
-    return categoriesDb.find(c => c.id === id) || null;
-  }
-
-  static async findAll(): Promise<CategoryEntity[]> {
-    return [...categoriesDb].sort((a, b) => a.sortOrder - b.sortOrder);
-  }
-
+  static async findById(id: string): Promise<CategoryEntity | null> { return getById<CategoryEntity>(COLLECTIONS.categories, id); }
+  static async findAll(): Promise<CategoryEntity[]> { const list = await listAll<CategoryEntity>(COLLECTIONS.categories); return list.sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0)); }
   static async create(data: Partial<CategoryEntity>): Promise<CategoryEntity> {
-    const newCat: CategoryEntity = {
-      id: `cat_${Date.now()}`,
-      name: data.name || '',
-      slug: data.slug || '',
-      status: 'ACTIVE',
-      description: data.description || '',
-      sortOrder: data.sortOrder || categoriesDb.length + 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    categoriesDb.push(newCat);
-    return newCat;
+    if (!data.name || !data.slug) throw new Error('name and slug are required');
+    const duplicate = await firestore.collection(COLLECTIONS.categories).where('slug', '==', data.slug).limit(1).get();
+    if (!duplicate.empty) throw new Error('CATEGORY_ALREADY_EXISTS');
+    const id = newId('cat');
+    await firestore.collection(COLLECTIONS.categories).doc(id).create(cleanUndefined({ name: data.name, slug: data.slug, status: data.status || 'ACTIVE', description: data.description || '', sortOrder: Number(data.sortOrder || 0), ...nowFields() }));
+    return (await getById<CategoryEntity>(COLLECTIONS.categories, id))!;
   }
-
-  static async update(id: string, updates: Partial<CategoryEntity>): Promise<CategoryEntity | null> {
-    const cat = categoriesDb.find(c => c.id === id);
-    if (!cat) return null;
-    Object.assign(cat, updates, { updatedAt: new Date().toISOString() });
-    return cat;
-  }
-
-  static async archive(id: string): Promise<CategoryEntity | null> {
-    const cat = categoriesDb.find(c => c.id === id);
-    if (!cat) return null;
-    cat.status = 'ARCHIVED';
-    cat.updatedAt = new Date().toISOString();
-    return cat;
-  }
-
-  static async restore(id: string): Promise<CategoryEntity | null> {
-    const cat = categoriesDb.find(c => c.id === id);
-    if (!cat) return null;
-    cat.status = 'ACTIVE';
-    cat.updatedAt = new Date().toISOString();
-    return cat;
-  }
+  static async update(id: string, updates: Partial<CategoryEntity>): Promise<CategoryEntity | null> { const ref = firestore.collection(COLLECTIONS.categories).doc(id); if (!(await ref.get()).exists) return null; await ref.update(updateFields({ ...updates, id: undefined, createdAt: undefined })); return getById<CategoryEntity>(COLLECTIONS.categories, id); }
+  static async archive(id: string): Promise<CategoryEntity | null> { return this.update(id, { status: 'ARCHIVED' }); }
+  static async restore(id: string): Promise<CategoryEntity | null> { return this.update(id, { status: 'ACTIVE' }); }
 }
 
 export class CollectionRepository {
-  static async findPublished(): Promise<CollectionEntity[]> {
-    return collectionsDb
-      .filter(c => c.status === 'PUBLISHED' && c.visibility === 'PUBLIC')
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+  static async findPublished(): Promise<CollectionEntity[]> { const list = await listAll<CollectionEntity>(COLLECTIONS.collections); return list.filter(c => c.status === 'PUBLISHED' && c.visibility === 'PUBLIC').sort((a,b)=>Number(a.sortOrder||0)-Number(b.sortOrder||0)); }
+  static async findBySlug(slug: string): Promise<CollectionEntity | null> { const snap = await firestore.collection(COLLECTIONS.collections).where('slug','==',slug).limit(1).get(); const c=snap.empty?null:withId<CollectionEntity>(snap.docs[0].id,snap.docs[0].data()); return c?.status==='PUBLISHED'?c:null; }
+  static async findById(id: string): Promise<CollectionEntity | null> { return getById<CollectionEntity>(COLLECTIONS.collections,id); }
+  static async findAll(): Promise<CollectionEntity[]> { return listAll<CollectionEntity>(COLLECTIONS.collections); }
+  static async create(data: Partial<CollectionEntity>): Promise<CollectionEntity> { if(!data.title||!data.slug) throw new Error('title and slug are required'); const id=newId('col'); await firestore.collection(COLLECTIONS.collections).doc(id).create(cleanUndefined({...data,title:data.title,slug:data.slug,description:data.description||'',status:data.status||'DRAFT',visibility:data.visibility||'PUBLIC',bannerUrl:data.bannerUrl,appIds:Array.isArray(data.appIds)?data.appIds:[],sortOrder:Number(data.sortOrder||0),...nowFields()})); return (await getById<CollectionEntity>(COLLECTIONS.collections,id))!; }
+  static async update(id:string,updates:Partial<CollectionEntity>):Promise<CollectionEntity|null>{const ref=firestore.collection(COLLECTIONS.collections).doc(id);if(!(await ref.get()).exists)return null;await ref.update(updateFields({...updates,id:undefined,createdAt:undefined}));return getById<CollectionEntity>(COLLECTIONS.collections,id);}
+  static async publish(id:string){return this.update(id,{status:'PUBLISHED'});}
+  static async archive(id:string){return this.update(id,{status:'ARCHIVED'});}
+  static async addApp(id:string,appId:string){await firestore.collection(COLLECTIONS.collections).doc(id).update({appIds:FieldValue.arrayUnion(appId),updatedAt:FieldValue.serverTimestamp()});return getById<CollectionEntity>(COLLECTIONS.collections,id);}
+  static async removeApp(id:string,appId:string){await firestore.collection(COLLECTIONS.collections).doc(id).update({appIds:FieldValue.arrayRemove(appId),updatedAt:FieldValue.serverTimestamp()});return getById<CollectionEntity>(COLLECTIONS.collections,id);}
+  static async reorderApps(id:string,orderedAppIds:string[]){await firestore.collection(COLLECTIONS.collections).doc(id).update({appIds:orderedAppIds,updatedAt:FieldValue.serverTimestamp()});return getById<CollectionEntity>(COLLECTIONS.collections,id);}
+}
+
+export class ModerationRepository {
+  static async list(filters: {status?:string;priority?:string} = {}): Promise<ModerationEntity[]> { let list=await listAll<ModerationEntity>(COLLECTIONS.moderation); if(filters.status)list=list.filter(x=>x.status===filters.status); if(filters.priority)list=list.filter(x=>x.priority===filters.priority); return list.sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||'')); }
+  static async findById(id:string){return getById<ModerationEntity>(COLLECTIONS.moderation,id);}
+  static async update(id:string,updates:Partial<ModerationEntity>){const ref=firestore.collection(COLLECTIONS.moderation).doc(id);if(!(await ref.get()).exists)return null;await ref.update(updateFields(updates));return getById<ModerationEntity>(COLLECTIONS.moderation,id);}
+}
+
+export class SecurityScanRepository {
+  static async list():Promise<SecurityScanEntity[]>{return listAll<SecurityScanEntity>(COLLECTIONS.securityScans);}
+  static async findByVersionId(versionId:string):Promise<SecurityScanEntity|null>{const snap=await firestore.collection(COLLECTIONS.securityScans).where('versionId','==',versionId).limit(1).get();return snap.empty?null:withId<SecurityScanEntity>(snap.docs[0].id,snap.docs[0].data());}
+  static async upsert(versionId:string,data:Partial<SecurityScanEntity>):Promise<SecurityScanEntity>{const existing=await this.findByVersionId(versionId);const ref=existing?firestore.collection(COLLECTIONS.securityScans).doc(existing.id!):firestore.collection(COLLECTIONS.securityScans).doc(newId('scan'));if(existing)await ref.update(updateFields(data));else await ref.create(cleanUndefined({versionId,...data,...nowFields()}));return (await getById<SecurityScanEntity>(COLLECTIONS.securityScans,ref.id))!;}
+}
+
+export class AuditLogRepository {
+  static async create(data:Record<string,any>){const id=newId('audit');await firestore.collection(COLLECTIONS.auditLogs).doc(id).create(cleanUndefined({...data,id,...nowFields()}));return getById<any>(COLLECTIONS.auditLogs,id);}
+  static async list(page=1,pageSize=50){const all=await listAll<any>(COLLECTIONS.auditLogs);all.sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||''));const {page:p,pageSize:s}=normalizePage(page,pageSize);return {data:all.slice((p-1)*s,p*s),total:all.length,page:p,pageSize:s};}
+  static async findById(id:string){return getById<any>(COLLECTIONS.auditLogs,id);}
+}
+
+export class UserRepository {
+  static async findAll():Promise<UserEntity[]>{return listAll<UserEntity>(COLLECTIONS.users);}
+  static async findById(id:string){return getById<UserEntity>(COLLECTIONS.users,id);}
+  static async findByEmail(email:string){const normalized=email.toLowerCase().trim();const snap=await firestore.collection(COLLECTIONS.users).where('email','==',normalized).limit(1).get();return snap.empty?null:withId<UserEntity>(snap.docs[0].id,snap.docs[0].data());}
+  static async create(data:Partial<UserEntity>):Promise<UserEntity>{if(!data.email)throw new Error('email is required');const id=data.id||newId('usr');await firestore.collection(COLLECTIONS.users).doc(id).create(cleanUndefined({...data,id,email:data.email.toLowerCase().trim(),...nowFields()}));return (await getById<UserEntity>(COLLECTIONS.users,id))!;}
+  static async update(id:string,updates:Partial<UserEntity>){const ref=firestore.collection(COLLECTIONS.users).doc(id);if(!(await ref.get()).exists)return null;await ref.update(updateFields(updates));return getById<UserEntity>(COLLECTIONS.users,id);}
+}
+
+export class SettingsRepository {
+  static async get(settingId='global'):Promise<Record<string,any>>{const value=await getById<any>(COLLECTIONS.settings,settingId);return value||{};}
+  static async set(settingId:string,data:Record<string,any>){const ref=firestore.collection(COLLECTIONS.settings).doc(settingId);await ref.set(cleanUndefined({...data,updatedAt:FieldValue.serverTimestamp()}),{merge:true});return this.get(settingId);}
+}
+
+export class UploadRepository {
+  static async create(data:Omit<UploadEntity,'createdAt'|'updatedAt'>):Promise<UploadEntity>{const ref=firestore.collection(COLLECTIONS.uploads).doc(data.uploadId);await ref.create(cleanUndefined({...data,...nowFields()}));return (await getById<UploadEntity>(COLLECTIONS.uploads,ref.id))!;}
+  static async findById(uploadId:string){return getById<UploadEntity>(COLLECTIONS.uploads,uploadId);}
+  static async update(uploadId:string,updates:Partial<UploadEntity>){const ref=firestore.collection(COLLECTIONS.uploads).doc(uploadId);if(!(await ref.get()).exists)return null;await ref.update(updateFields(updates));return getById<UploadEntity>(COLLECTIONS.uploads,uploadId);}
+  static async listAll(){return listAll<UploadEntity>(COLLECTIONS.uploads);}
+}
+
+export class JobRepository {
+  static async findById(jobId:string){return getById<JobEntity>(COLLECTIONS.jobs,jobId);}
+  static async findActive(type?:string,uploadId?:string){let list=await listAll<JobEntity>(COLLECTIONS.jobs);list=list.filter(j=>j.status==='QUEUED'||j.status==='PROCESSING');if(type)list=list.filter(j=>j.type===type);if(uploadId)list=list.filter(j=>j.uploadId===uploadId);return list;}
+  static async create(data:JobEntity){const ref=firestore.collection(COLLECTIONS.jobs).doc(data.jobId);await ref.create(cleanUndefined({...data,...nowFields()}));return (await getById<JobEntity>(COLLECTIONS.jobs,ref.id))!;}
+  static async update(jobId:string,updates:Partial<JobEntity>){const ref=firestore.collection(COLLECTIONS.jobs).doc(jobId);if(!(await ref.get()).exists)return null;await ref.update(updateFields(updates));return getById<JobEntity>(COLLECTIONS.jobs,jobId);}
+  static async listAll(){return listAll<JobEntity>(COLLECTIONS.jobs);}
+}
+
+export class DeadLetterJobRepository {
+  static async create(data:Record<string,any>){const id=data.jobId||newId('dlq');await firestore.collection(COLLECTIONS.deadLetterJobs).doc(id).create(cleanUndefined({...data,jobId:id,...nowFields()}));return getById<any>(COLLECTIONS.deadLetterJobs,id);}
+  static async list(){return listAll<any>(COLLECTIONS.deadLetterJobs);}
+  static async findByJobId(jobId:string){const direct=await getById<any>(COLLECTIONS.deadLetterJobs,jobId);if(direct)return direct;const snap=await firestore.collection(COLLECTIONS.deadLetterJobs).where('jobId','==',jobId).limit(1).get();return snap.empty?null:withId<any>(snap.docs[0].id,snap.docs[0].data());}
+  static async update(jobId:string,updates:Record<string,any>){const ref=firestore.collection(COLLECTIONS.deadLetterJobs).doc(jobId);if(!(await ref.get()).exists)return null;await ref.update(updateFields(updates));return getById<any>(COLLECTIONS.deadLetterJobs,jobId);}
+  static async deleteByJobId(jobId:string){await firestore.collection(COLLECTIONS.deadLetterJobs).doc(jobId).delete();}
+}
+
+// Explicitly exported so callers cannot accidentally reintroduce a mutable
+// in-memory database. There are intentionally NO appsDb/versionsDb/usersDb/etc.
+// exports in this module.
+export const FirestoreCollections = COLLECTIONS;
+
+export interface SecurityEventEntity extends SecurityEventRepositoryInput {
+  id: string;
+  createdAt: string;
+}
+export interface SecurityEventRepositoryInput {
+  type: string;
+  severity: string;
+  actorId?: string;
+  anonymousId?: string;
+  ipHash?: string;
+  userAgentHash?: string;
+  requestId: string;
+  endpoint?: string;
+  entityType?: string;
+  entityId?: string;
+  metadata?: Record<string, unknown>;
+}
+export interface SecurityIncidentEntity {
+  id: string;
+  type: string;
+  severity: string;
+  entityType?: string;
+  entityId?: string;
+  description: string;
+  evidence?: Record<string, unknown>;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AbuseScoreEntity {
+  id: string;
+  entityType: string;
+  entityId: string;
+  score: number;
+  level: string;
+  reasons: string[];
+  updatedAt: string;
+}
+export interface RateLimitEntity {
+  id: string;
+  count: number;
+  resetAt: string;
+  updatedAt: string;
+}
+export interface IdempotencyEntity {
+  id: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export class SecurityEventRepository {
+  static async create(data: SecurityEventRepositoryInput & { id?: string }) {
+    const id = data.id || newId('sec_evt');
+    const ref = firestore.collection('securityEvents').doc(id);
+    const createdAt = FieldValue.serverTimestamp();
+    await ref.create(cleanUndefined({ ...data, id, createdAt }));
+    return getById<SecurityEventEntity>('securityEvents', id);
   }
 
-  static async findBySlug(slug: string): Promise<CollectionEntity | null> {
-    return collectionsDb.find(c => c.slug === slug && c.status === 'PUBLISHED') || null;
+  static async list(options: { limit?: number; type?: string; severity?: string } = {}) {
+    let q: Query = firestore.collection('securityEvents').orderBy('createdAt', 'desc');
+    if (options.type) q = q.where('type', '==', options.type);
+    if (options.severity) q = q.where('severity', '==', options.severity);
+    q = q.limit(Math.min(Math.max(options.limit || 50, 1), 500));
+    const snap = await q.get();
+    return snap.docs.map(d => withId<SecurityEventEntity>(d.id, d.data())!).filter(Boolean);
   }
 
-  static async findById(id: string): Promise<CollectionEntity | null> {
-    return collectionsDb.find(c => c.id === id) || null;
+  static async count(options: { type?: string; since?: Date } = {}) {
+    let q: Query = firestore.collection('securityEvents');
+    if (options.type) q = q.where('type', '==', options.type);
+    if (options.since) q = q.where('createdAt', '>=', Timestamp.fromDate(options.since));
+    const snap = await q.count().get();
+    return snap.data().count;
+  }
+}
+
+export class SecurityIncidentRepository {
+  static async create(data: Omit<SecurityIncidentEntity, 'createdAt' | 'updatedAt'>) {
+    const ref = firestore.collection('securityIncidents').doc(data.id);
+    await ref.create(cleanUndefined({ ...data, ...nowFields() }));
+    return getById<SecurityIncidentEntity>('securityIncidents', data.id);
   }
 
-  static async findAll(): Promise<CollectionEntity[]> {
-    return [...collectionsDb];
+  static async findById(id: string) {
+    return getById<SecurityIncidentEntity>('securityIncidents', id);
   }
 
-  static async create(data: Partial<CollectionEntity>): Promise<CollectionEntity> {
-    const newCol: CollectionEntity = {
-      id: `col_${Date.now()}`,
-      title: data.title || '',
-      slug: data.slug || '',
-      description: data.description || '',
-      status: 'DRAFT',
-      visibility: data.visibility || 'PUBLIC',
-      bannerUrl: data.bannerUrl,
-      appIds: Array.isArray(data.appIds) ? data.appIds : [],
-      sortOrder: data.sortOrder || collectionsDb.length + 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    collectionsDb.push(newCol);
-    return newCol;
+  static async list(limit = 100) {
+    const snap = await firestore.collection('securityIncidents').orderBy('createdAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
+    return snap.docs.map(d => withId<SecurityIncidentEntity>(d.id, d.data())!).filter(Boolean);
   }
 
-  static async update(id: string, updates: Partial<CollectionEntity>): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    Object.assign(col, updates, { updatedAt: new Date().toISOString() });
-    return col;
+  static async update(id: string, updates: Partial<SecurityIncidentEntity>) {
+    const ref = firestore.collection('securityIncidents').doc(id);
+    if (!(await ref.get()).exists) return null;
+    await ref.update(updateFields(updates));
+    return getById<SecurityIncidentEntity>('securityIncidents', id);
+  }
+}
+
+export class AbuseScoreRepository {
+  static async get(entityType: string, entityId: string) {
+    return getById<AbuseScoreEntity>('abuseScores', `${entityType}:${entityId}`);
   }
 
-  static async publish(id: string): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    col.status = 'PUBLISHED';
-    col.updatedAt = new Date().toISOString();
-    return col;
+  static async upsert(data: Omit<AbuseScoreEntity, 'updatedAt'>) {
+    const ref = firestore.collection('abuseScores').doc(data.id);
+    await ref.set(cleanUndefined({ ...data, updatedAt: FieldValue.serverTimestamp() }), { merge: true });
+    return getById<AbuseScoreEntity>('abuseScores', data.id);
   }
 
-  static async archive(id: string): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    col.status = 'ARCHIVED';
-    col.updatedAt = new Date().toISOString();
-    return col;
+  static async list(limit = 100) {
+    const snap = await firestore.collection('abuseScores').orderBy('updatedAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
+    return snap.docs.map(d => withId<AbuseScoreEntity>(d.id, d.data())!).filter(Boolean);
   }
 
-  static async addApp(id: string, appId: string): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    if (!col.appIds.includes(appId)) {
-      col.appIds.push(appId);
-      col.updatedAt = new Date().toISOString();
+  static async reset(entityType: string, entityId: string) {
+    const ref = firestore.collection('abuseScores').doc(`${entityType}:${entityId}`);
+    if (!(await ref.get()).exists) return null;
+    await ref.update({
+      score: 0,
+      level: 'NORMAL',
+      reasons: [],
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return getById<AbuseScoreEntity>('abuseScores', ref.id);
+  }
+}
+
+export class RateLimitRepository {
+  static async consume(
+    key: string,
+    windowMs: number,
+    max: number
+  ): Promise<{ allowed: boolean; current: number; resetAt: number }> {
+    const ref = firestore.collection('rateLimits').doc(crypto.createHash('sha256').update(key).digest('hex'));
+    const now = Date.now();
+    const result = await firestore.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? normalize(snap.data()) as RateLimitEntity : null;
+      if (!data || now >= new Date(data.resetAt).getTime()) {
+        const resetAt = now + windowMs;
+        tx.set(ref, {
+          count: 1,
+          resetAt: Timestamp.fromMillis(resetAt),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        return { allowed: 1 <= max, current: 1, resetAt };
+      }
+
+      const nextCount = Number(data.count || 0) + 1;
+      tx.update(ref, {
+        count: nextCount,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return {
+        allowed: nextCount <= max,
+        current: nextCount,
+        resetAt: new Date(data.resetAt).getTime(),
+      };
+    });
+    return result;
+  }
+}
+
+export class IdempotencyRepository {
+  static async claim(id: string, ttlMs = 24 * 60 * 60 * 1000): Promise<boolean> {
+    const ref = firestore.collection('idempotencyKeys').doc(crypto.createHash('sha256').update(id).digest('hex'));
+    const now = Date.now();
+    return firestore.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (snap.exists) {
+        const expiresAt = snap.data()?.expiresAt;
+        if (expiresAt && normalize(expiresAt) && new Date(normalize(expiresAt)).getTime() > now) return false;
+      }
+      tx.set(ref, {
+        expiresAt: Timestamp.fromMillis(now + ttlMs),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+  }
+}
+
+export interface ApiCacheEntity {
+  key: string;
+  body: unknown;
+  headers?: Record<string, string>;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export class ApiCacheRepository {
+  static async get(key: string) {
+    const id = crypto.createHash('sha256').update(key).digest('hex');
+    const value = await getById<ApiCacheEntity>('apiCache', id);
+    if (!value) return null;
+    if (new Date(value.expiresAt).getTime() <= Date.now()) {
+      await firestore.collection('apiCache').doc(id).delete().catch(() => undefined);
+      return null;
     }
-    return col;
+    return value;
   }
 
-  static async removeApp(id: string, appId: string): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    col.appIds = col.appIds.filter(a => a !== appId);
-    col.updatedAt = new Date().toISOString();
-    return col;
+  static async set(key: string, body: unknown, ttlSeconds: number, headers: Record<string, string> = {}) {
+    const id = crypto.createHash('sha256').update(key).digest('hex');
+    await firestore.collection('apiCache').doc(id).set({
+      key,
+      body,
+      headers,
+      expiresAt: Timestamp.fromMillis(Date.now() + ttlSeconds * 1000),
+      createdAt: FieldValue.serverTimestamp(),
+    });
   }
 
-  static async reorderApps(id: string, orderedAppIds: string[]): Promise<CollectionEntity | null> {
-    const col = collectionsDb.find(c => c.id === id);
-    if (!col) return null;
-    col.appIds = orderedAppIds;
-    col.updatedAt = new Date().toISOString();
-    return col;
+  static async invalidate(pattern?: string | RegExp) {
+    const ref = firestore.collection('apiCache');
+    const snap = await ref.limit(500).get();
+    const batch = firestore.batch();
+    let count = 0;
+    for (const doc of snap.docs) {
+      const key = String(doc.data().key || '');
+      const matches = !pattern || (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key));
+      if (matches) {
+        batch.delete(doc.ref);
+        count++;
+      }
+    }
+    if (count) await batch.commit();
+  }
+
+  static async stats() {
+    const snap = await firestore.collection('apiCache').count().get();
+    return { size: snap.data().count, enabled: process.env.CACHE_ENABLED !== 'false' };
+  }
+}
+
+export interface PerformanceMetricEntity {
+  id: string;
+  requestId: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  durationMs: number;
+  category: string;
+  cacheHit: boolean;
+  createdAt: string;
+}
+
+export class PerformanceMetricRepository {
+  static async create(data: Omit<PerformanceMetricEntity, 'createdAt'>) {
+    const ref = firestore.collection('performanceMetrics').doc(data.id);
+    await ref.create(cleanUndefined({ ...data, createdAt: FieldValue.serverTimestamp() }));
+    return getById<PerformanceMetricEntity>('performanceMetrics', data.id);
+  }
+
+  static async list(limit = 1000) {
+    const snap = await firestore.collection('performanceMetrics')
+      .orderBy('createdAt', 'desc')
+      .limit(Math.min(Math.max(limit, 1), 5000))
+      .get();
+    return snap.docs.map(d => withId<PerformanceMetricEntity>(d.id, d.data())!).filter(Boolean);
+  }
+
+  static async stats(limit = 1000) {
+    const metrics = await this.list(limit);
+    if (!metrics.length) return { totalRequests: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0, errorRate: 0, cacheHitRatio: 0 };
+
+    const durations = metrics.map(m => Number(m.durationMs || 0)).sort((a, b) => a - b);
+    const percentile = (p: number) => durations[Math.min(durations.length - 1, Math.floor(durations.length * p))] || 0;
+    const errors = metrics.filter(m => Number(m.statusCode) >= 400).length;
+    const hits = metrics.filter(m => m.cacheHit).length;
+
+    return {
+      totalRequests: metrics.length,
+      p50Ms: percentile(0.5),
+      p95Ms: percentile(0.95),
+      p99Ms: percentile(0.99),
+      errorRate: Number(((errors / metrics.length) * 100).toFixed(2)),
+      cacheHitRatio: Number(((hits / metrics.length) * 100).toFixed(2)),
+    };
+  }
+}
+
+export interface DeveloperSubmissionEntity {
+  id: string;
+  developerId: string;
+  developerEmail: string;
+  appId?: string;
+  appName: string;
+  slug: string;
+  packageName: string;
+  category: string;
+  categoryId?: string;
+  shortDescription: string;
+  description: string;
+  downloadUrl: string;
+  officialUrl: string;
+  ownershipStatus: string;
+  securityStatus: string;
+  reviewStatus: string;
+  status: string;
+  versionName: string;
+  versionCode: number;
+  sha256: string;
+  fileSize: number;
+  whatsNew?: string;
+  versionHistory?: Record<string, any>[];
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: any;
+}
+
+export class DeveloperSubmissionRepository {
+  private static collection() {
+    return firestore.collection('developerSubmissions');
+  }
+
+  static async create(data: Omit<DeveloperSubmissionEntity, 'createdAt' | 'updatedAt'>) {
+    const ref = this.collection().doc(data.id);
+    await ref.create(cleanUndefined({ ...data, ...nowFields() }));
+    return getById<DeveloperSubmissionEntity>('developerSubmissions', data.id);
+  }
+
+  static async findById(id: string) {
+    return getById<DeveloperSubmissionEntity>('developerSubmissions', id);
+  }
+
+  static async listByDeveloper(developerId?: string, email?: string) {
+    let snap;
+    if (developerId) {
+      snap = await this.collection().where('developerId', '==', developerId).get();
+    } else {
+      snap = await this.collection().where('developerEmail', '==', String(email || '').toLowerCase()).get();
+    }
+    return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean)
+      .sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+  }
+
+  static async listAll(limit = 500) {
+    const snap = await this.collection().orderBy('updatedAt', 'desc').limit(limit).get();
+    return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean);
+  }
+
+  static async update(id: string, updates: Partial<DeveloperSubmissionEntity>) {
+    const ref = this.collection().doc(id);
+    if (!(await ref.get()).exists) return null;
+    await ref.update(updateFields(updates));
+    return getById<DeveloperSubmissionEntity>('developerSubmissions', id);
   }
 }
