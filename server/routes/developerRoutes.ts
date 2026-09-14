@@ -4,224 +4,363 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { SecurityService } from '../services/securityService';
-import { resolveUserSession } from '../auth';
+import { requireAuth, requirePermission, resolveUserSession } from '../auth';
+import {
+  AppRepository,
+  VersionRepository,
+  CategoryRepository,
+  DeveloperSubmissionRepository,
+} from '../repositories';
 
 export const developerRouter = express.Router();
 
 const memoryUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+  limits: {
+    fileSize: Number(process.env.MAX_APK_SIZE_MB || 150) * 1024 * 1024,
+    files: 1,
+  },
 });
 
-// Helper for parsing file buffer
-function parseFileBuffer(buffer: Buffer, originalName: string) {
-  const sha256Hex = crypto.createHash('sha256').update(buffer).digest('hex').toUpperCase();
-  const sizeMb = (buffer.length / (1024 * 1024)).toFixed(1) + ' MB';
-  return {
-    packageName: 'com.developer.' + originalName.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9]/g, ''),
-    versionName: '1.0.0',
-    versionCode: 1,
-    sha256: sha256Hex,
-    fileSize: sizeMb
-  };
+function safeFileName(name: string) {
+  const value = path.basename(String(name || 'upload.apk')).replace(/[^a-zA-Z0-9._-]/g, '_');
+  return value.toLowerCase().endsWith('.apk') ? value : `${value}.apk`;
 }
 
-// In-memory developer submissions store
-export const developerSubmissionsStore: any[] = [];
+function isApkContainer(buffer: Buffer) {
+  return buffer.length >= 4 &&
+    buffer[0] === 0x50 &&
+    buffer[1] === 0x4b &&
+    ([0x03, 0x05, 0x07].includes(buffer[2]) && [0x04, 0x06, 0x08].includes(buffer[3]));
+}
 
-// GET /api/developer/submissions - List submissions for authenticated developer
-developerRouter.get('/submissions', (req: any, res) => {
-  const sessionUser = resolveUserSession(req);
-  const email = (sessionUser?.email || '').toLowerCase();
+function sha256(buffer: Buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex').toUpperCase();
+}
 
-  // If superadmin/admin, can view all if requested
-  if ((sessionUser?.role === 'SUPER_ADMIN' || sessionUser?.role === 'ADMIN') && req.query.all === 'true') {
-    return res.json({ success: true, data: developerSubmissionsStore });
+function storeApk(buffer: Buffer, originalName: string, slug: string, versionName: string) {
+  if (process.env.VERCEL || process.env.APK_LOCAL_STORAGE_ENABLED !== 'true') {
+    throw new Error('APK_DURABLE_STORAGE_NOT_CONFIGURED');
   }
 
-  const submissions = developerSubmissionsStore.filter(s => (s.developerEmail || '').toLowerCase() === email);
-  return res.json({ success: true, data: submissions });
-});
+  const fileName = `${slug}_${versionName}_${sha256(buffer).slice(0, 16)}_${safeFileName(originalName)}`;
+  const dir = path.join(process.cwd(), 'uploads', 'apks');
+  fs.mkdirSync(dir, { recursive: true });
+  const fullPath = path.join(dir, fileName);
+  fs.writeFileSync(fullPath, buffer, { mode: 0o640 });
+  return `/uploads/apks/${fileName}`;
+}
 
-// GET /api/developer/submissions/:id - View specific submission with ownership protection
-developerRouter.get('/submissions/:id', (req: any, res) => {
-  const sessionUser = resolveUserSession(req);
-  const submission = developerSubmissionsStore.find(s => s.id === req.params.id);
+function userCanManageSubmission(user: any, submission: any) {
+  return SecurityService.verifyDeveloperOwnership(
+    user,
+    submission?.developerEmail,
+    submission?.developerId
+  );
+}
 
-  if (!submission) {
-    return res.status(404).json({ success: false, error: { code: 'RESOURCE_NOT_FOUND', message: 'Pengajuan tidak ditemukan.' } });
-  }
-
-  const isOwner = SecurityService.verifyDeveloperOwnership(sessionUser, submission.developerEmail, submission.developerId);
-  if (!isOwner && sessionUser?.email?.toLowerCase() !== (submission.developerEmail || '').toLowerCase()) {
-    return res.status(403).json({
-      success: false,
-      error: { code: 'FORBIDDEN', message: 'Akses ditolak: Anda tidak berhak mengakses pengajuan pengembang lain.' }
-    });
-  }
-
-  return res.json({ success: true, data: submission });
-});
-
-// POST /api/developer/submissions - Submit new app with metadata and download URL
-developerRouter.post('/submissions', memoryUpload.single('apk') as any, async (req: any, res) => {
+developerRouter.get('/submissions', requireAuth, requirePermission('apps.read'), async (req: any, res) => {
   try {
-    const sessionUser = resolveUserSession(req);
-    const { name, slug, packageName, category, shortDescription, description, downloadUrl, officialUrl, versionName } = req.body;
-    const developerEmail = sessionUser?.email || '';
+    const user = resolveUserSession(req);
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN'].includes(String(user?.role || '').toUpperCase());
 
-    if (!name || !slug) {
-      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama dan slug aplikasi wajib diisi.' } });
+    const data = isAdmin && req.query.all === 'true'
+      ? await DeveloperSubmissionRepository.listAll()
+      : await DeveloperSubmissionRepository.listByDeveloper(user?.id, user?.email);
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('[developer/submissions:list]', error);
+    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat pengajuan.' } });
+  }
+});
+
+developerRouter.get('/submissions/:id', requireAuth, requirePermission('apps.read'), async (req: any, res) => {
+  try {
+    const user = resolveUserSession(req);
+    const submission = await DeveloperSubmissionRepository.findById(req.params.id);
+
+    if (!submission) {
+      return res.status(404).json({ success: false, error: { code: 'RESOURCE_NOT_FOUND', message: 'Pengajuan tidak ditemukan.' } });
     }
 
-    let apkMeta: any = {
-      packageName: packageName || `com.developer.${slug.replace(/[^a-z0-9]/g, '')}`,
-      versionName: versionName || '1.0.0',
-      versionCode: 1,
-      sha256: crypto.createHash('sha256').update(name + Date.now()).digest('hex').toUpperCase(),
-      fileSize: 'N/A'
-    };
+    if (!userCanManageSubmission(user, submission)) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Akses ditolak.' } });
+    }
 
-    let actualDownloadUrl = downloadUrl || officialUrl || '';
+    return res.json({ success: true, data: submission });
+  } catch (error) {
+    console.error('[developer/submissions:get]', error);
+    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat pengajuan.' } });
+  }
+});
+
+developerRouter.post('/submissions', requireAuth, requirePermission('apps.create'), memoryUpload.single('apk') as any, async (req: any, res) => {
+  try {
+    const user = resolveUserSession(req);
+    if (!user) return res.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Otentikasi diperlukan.' } });
+
+    const name = String(req.body.name || '').trim();
+    const slug = String(req.body.slug || '').trim().toLowerCase();
+    const packageName = String(req.body.packageName || '').trim();
+    const versionName = String(req.body.versionName || '').trim();
+    const categoryValue = String(req.body.categoryId || req.body.category || '').trim();
+    const downloadUrl = String(req.body.downloadUrl || '').trim();
+    const officialUrl = String(req.body.officialUrl || '').trim();
+
+    if (!name || !slug || !packageName || !versionName || !categoryValue) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Nama, slug, package name, versi, dan kategori wajib diisi.' }
+      });
+    }
+
+    if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(slug)) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Slug tidak valid.' } });
+    }
+
+    const category = await CategoryRepository.findById(categoryValue) ||
+      await CategoryRepository.findBySlug(categoryValue);
+
+    if (!category) {
+      return res.status(400).json({ success: false, error: { code: 'CATEGORY_NOT_FOUND', message: 'Kategori belum tersedia di Firestore.' } });
+    }
+
+    let actualDownloadUrl = downloadUrl || officialUrl;
+    let distributionType: 'APK' | 'OFFICIAL_WEBSITE' = actualDownloadUrl ? 'OFFICIAL_WEBSITE' : 'APK';
+    let fileSize = 0;
+    let fileSha256 = '';
+    let storageKey: string | undefined;
 
     if (req.file) {
-      const sanitizedName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
-      apkMeta = parseFileBuffer(req.file.buffer, sanitizedName);
+      if (!isApkContainer(req.file.buffer)) {
+        await SecurityService.recordSecurityEvent({
+          type: 'UPLOAD_REJECTED',
+          severity: 'MEDIUM',
+          actorId: user.id,
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          requestId: (req as any).id || crypto.randomUUID(),
+          endpoint: req.originalUrl,
+          metadata: { reason: 'Invalid APK/ZIP signature', fileName: req.file.originalname }
+        }).catch(() => undefined);
+        return res.status(400).json({ success: false, error: { code: 'INVALID_APK', message: 'File bukan container APK yang valid.' } });
+      }
 
-      const destDir = path.join(process.cwd(), 'uploads', 'apks');
-      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-      const destPath = path.join(destDir, `${Date.now()}_${sanitizedName}`);
-      fs.writeFileSync(destPath, req.file.buffer);
-      actualDownloadUrl = `/uploads/apks/${path.basename(destPath)}`;
+      fileSize = req.file.size;
+      fileSha256 = sha256(req.file.buffer);
+
+      const duplicate = await SecurityService.checkDuplicateApk(fileSha256);
+      if (duplicate.isDuplicate) {
+        return res.status(409).json({ success: false, error: { code: 'DUPLICATE_APK', message: 'APK dengan SHA-256 tersebut sudah terdaftar.' } });
+      }
+
+      try {
+        storageKey = storeApk(req.file.buffer, req.file.originalname, slug, versionName);
+        actualDownloadUrl = storageKey;
+        distributionType = 'APK';
+      } catch (error: any) {
+        if (error?.message === 'APK_DURABLE_STORAGE_NOT_CONFIGURED') {
+          return res.status(503).json({
+            success: false,
+            error: { code: 'STORAGE_NOT_CONFIGURED', message: 'Penyimpanan APK durable belum dikonfigurasi.' }
+          });
+        }
+        throw error;
+      }
     }
 
-    const newSubmission = {
-      id: `sub_${Date.now()}`,
-      developerId: sessionUser?.id || `dev_${Math.random().toString(36).substring(2, 9)}`,
-      developerEmail,
-      appName: name,
-      slug,
-      packageName: packageName || apkMeta.packageName,
-      category: category || 'Alat & Utilitas',
-      shortDescription: shortDescription || '',
-      description: description || '',
-      downloadUrl: actualDownloadUrl,
-      officialUrl: officialUrl || '',
-      ownershipStatus: 'VERIFIED',
-      securityStatus: 'VERIFIED',
-      reviewStatus: 'APPROVED',
-      status: 'PUBLISHED',
-      versionName: versionName || apkMeta.versionName,
-      versionCode: apkMeta.versionCode,
-      sha256: apkMeta.sha256,
-      fileSize: apkMeta.fileSize,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    if (distributionType === 'OFFICIAL_WEBSITE' && !/^https?:\/\//i.test(actualDownloadUrl)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_URL', message: 'URL download tidak valid.' } });
+    }
 
-    developerSubmissionsStore.push(newSubmission);
+    const app = await AppRepository.create({
+      name,
+      slug,
+      packageName,
+      developerName: user.name,
+      shortDescription: String(req.body.shortDescription || ''),
+      description: String(req.body.description || ''),
+      category: category.name,
+      categoryId: category.id,
+      iconUrl: String(req.body.iconUrl || ''),
+      bannerUrl: String(req.body.bannerUrl || ''),
+      status: 'PENDING_REVIEW',
+      distributionType,
+      officialWebsiteUrl: officialUrl || undefined,
+      downloads: 0,
+      rating: 0,
+      reviewsCount: 0,
+      size: fileSize ? `${(fileSize / 1024 / 1024).toFixed(1)} MB` : '',
+      versionName,
+      versionCode: Number(req.body.versionCode || 1),
+      sha256: fileSha256,
+      createdBy: user.id,
+      updatedBy: user.id,
+    });
+
+    const version = await VersionRepository.create({
+      appId: app.id,
+      versionName,
+      versionCode: Number(req.body.versionCode || 1),
+      packageName,
+      sha256: fileSha256,
+      status: 'PENDING_REVIEW',
+      securityStatus: 'PENDING',
+      analysisStatus: 'PENDING',
+      storageKey,
+      storageProvider: storageKey ? 'local' : undefined,
+      downloadUrl: actualDownloadUrl || undefined,
+      changelog: String(req.body.whatsNew || ''),
+      minSdk: 0,
+      targetSdk: 0,
+      fileSize,
+      permissions: [],
+      architectures: [],
+      moderationStatus: 'PENDING',
+      downloadAllowed: false,
+    });
+
+    const submission = await DeveloperSubmissionRepository.create({
+      id: `sub_${crypto.randomUUID()}`,
+      developerId: user.id,
+      developerEmail: user.email,
+      appId: app.id,
+      appName: app.name,
+      slug: app.slug,
+      packageName,
+      category: category.name,
+      categoryId: category.id,
+      shortDescription: app.shortDescription,
+      description: app.description,
+      downloadUrl: actualDownloadUrl,
+      officialUrl,
+      ownershipStatus: 'PENDING_REVIEW',
+      securityStatus: 'PENDING',
+      reviewStatus: 'PENDING',
+      status: 'PENDING_REVIEW',
+      versionName,
+      versionCode: Number(req.body.versionCode || 1),
+      sha256: fileSha256,
+      fileSize,
+      whatsNew: String(req.body.whatsNew || ''),
+      versionHistory: [],
+    });
+
+    await AppRepository.update(app.id, { latestVersionId: version.id });
 
     return res.status(201).json({
       success: true,
-      data: newSubmission,
-      message: 'Aplikasi berhasil didaftarkan.'
+      data: submission,
+      message: 'Aplikasi berhasil diajukan dan menunggu pemeriksaan.',
     });
-  } catch (err: any) {
-    console.error('Developer submission error:', err);
-    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message || 'Gagal memproses pendaftaran aplikasi.' } });
+  } catch (error: any) {
+    console.error('[developer/submissions:create]', error);
+    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal memproses pengajuan aplikasi.' } });
   }
 });
 
-// POST /api/developer/submissions/:id/update-version - Apply app update without creating duplicate app
-developerRouter.post('/submissions/:id/update-version', memoryUpload.single('apk') as any, async (req: any, res) => {
+developerRouter.post('/submissions/:id/update-version', requireAuth, requirePermission('apps.update'), memoryUpload.single('apk') as any, async (req: any, res) => {
   try {
-    const sessionUser = resolveUserSession(req);
-    const { id } = req.params;
-    const { newVersionName, whatsNew, downloadUrl } = req.body;
-    const developerEmail = sessionUser?.email || '';
+    const user = resolveUserSession(req);
+    const submission: any = await DeveloperSubmissionRepository.findById(req.params.id);
 
-    const submission = developerSubmissionsStore.find(s => s.id === id);
-    if (!submission) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'RESOURCE_NOT_FOUND', message: 'Aplikasi tidak ditemukan.' }
-      });
+    if (!submission) return res.status(404).json({ success: false, error: { code: 'RESOURCE_NOT_FOUND', message: 'Pengajuan tidak ditemukan.' } });
+    if (!userCanManageSubmission(user, submission)) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Akses ditolak.' } });
+    if (!submission.appId) return res.status(409).json({ success: false, error: { code: 'APP_ID_MISSING', message: 'Pengajuan lama tidak memiliki appId Firestore.' } });
+
+    const app = await AppRepository.findById(submission.appId);
+    if (!app) return res.status(404).json({ success: false, error: { code: 'APP_NOT_FOUND', message: 'Aplikasi tidak ditemukan di Firestore.' } });
+
+    const newVersionName = String(req.body.newVersionName || '').trim();
+    const currentVersions = await VersionRepository.findAllByAppId(app.id);
+    const currentVersion = currentVersions[0];
+
+    if (!newVersionName) return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Versi baru wajib diisi.' } });
+    if (currentVersion && newVersionName === currentVersion.versionName) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Versi baru tidak boleh sama dengan versi aktif.' } });
     }
 
-    // Ownership check
-    const isOwner = SecurityService.verifyDeveloperOwnership(sessionUser, submission.developerEmail, submission.developerId);
-    const isAdmin = sessionUser?.role === 'SUPER_ADMIN' || sessionUser?.role === 'ADMIN';
-    if (!isOwner && !isAdmin && sessionUser?.email?.toLowerCase() !== (submission.developerEmail || '').toLowerCase()) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Akses ditolak: Anda hanya dapat memperbarui aplikasi milik Anda sendiri.' }
-      });
+    let downloadUrl = String(req.body.downloadUrl || submission.downloadUrl || '').trim();
+    let fileSize = 0;
+    let fileSha256 = '';
+
+    if (req.file) {
+      if (!isApkContainer(req.file.buffer)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_APK', message: 'File APK tidak valid.' } });
+      }
+      fileSize = req.file.size;
+      fileSha256 = sha256(req.file.buffer);
+      const duplicate = await SecurityService.checkDuplicateApk(fileSha256);
+      if (duplicate.isDuplicate) return res.status(409).json({ success: false, error: { code: 'DUPLICATE_APK', message: 'APK tersebut sudah terdaftar.' } });
+      downloadUrl = storeApk(req.file.buffer, req.file.originalname, app.slug, newVersionName);
     }
 
-    // Validation: newVersionName required
-    if (!newVersionName || !newVersionName.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Nama versi baru wajib diisi.' }
-      });
-    }
+    const nextCode = Math.max(
+      Number(req.body.versionCode || 0),
+      Number(currentVersion?.versionCode || 0) + 1
+    );
 
-    // Validation: newVersionName cannot match current version
-    const trimmedNewVersion = newVersionName.trim();
-    if (trimmedNewVersion === submission.versionName) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: `Versi baru (${trimmedNewVersion}) tidak boleh sama dengan versi yang sedang aktif (v${submission.versionName}).` }
-      });
-    }
-
-    // Archive current version to history
-    if (!submission.versionHistory) {
-      submission.versionHistory = [];
-    }
-    submission.versionHistory.push({
-      versionName: submission.versionName,
-      whatsNew: submission.whatsNew || '',
-      sha256: submission.sha256,
-      fileSize: submission.fileSize,
-      downloadUrl: submission.downloadUrl,
-      updatedAt: submission.updatedAt || submission.createdAt
+    const version = await VersionRepository.create({
+      appId: app.id,
+      versionName: newVersionName,
+      versionCode: nextCode,
+      packageName: app.packageName,
+      sha256: fileSha256,
+      status: 'PENDING_REVIEW',
+      securityStatus: 'PENDING',
+      analysisStatus: 'PENDING',
+      downloadUrl,
+      storageKey: downloadUrl.startsWith('/uploads/') ? downloadUrl : undefined,
+      storageProvider: downloadUrl.startsWith('/uploads/') ? 'local' : undefined,
+      changelog: String(req.body.whatsNew || ''),
+      minSdk: currentVersion?.minSdk || 0,
+      targetSdk: currentVersion?.targetSdk || 0,
+      fileSize,
+      permissions: currentVersion?.permissions || [],
+      architectures: currentVersion?.architectures || [],
+      moderationStatus: 'PENDING',
+      downloadAllowed: false,
     });
 
-    // Handle new APK file if uploaded
-    if (req.file) {
-      const sanitizedName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
-      const apkMeta = parseFileBuffer(req.file.buffer, sanitizedName);
+    const updated = await DeveloperSubmissionRepository.update(submission.id, {
+      versionName: newVersionName,
+      versionCode: nextCode,
+      sha256: fileSha256,
+      fileSize,
+      downloadUrl,
+      whatsNew: String(req.body.whatsNew || ''),
+      reviewStatus: 'PENDING',
+      status: 'PENDING_REVIEW',
+      securityStatus: 'PENDING',
+      versionHistory: [
+        ...(submission.versionHistory || []),
+        {
+          versionName: currentVersion?.versionName || submission.versionName,
+          versionCode: currentVersion?.versionCode || submission.versionCode,
+          whatsNew: currentVersion?.changelog || submission.whatsNew || '',
+          sha256: currentVersion?.sha256 || submission.sha256,
+          fileSize: currentVersion?.fileSize || submission.fileSize,
+        },
+      ],
+    });
 
-      const destDir = path.join(process.cwd(), 'uploads', 'apks');
-      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-      const destPath = path.join(destDir, `${Date.now()}_${sanitizedName}`);
-      fs.writeFileSync(destPath, req.file.buffer);
-
-      submission.downloadUrl = `/uploads/apks/${path.basename(destPath)}`;
-      submission.sha256 = apkMeta.sha256;
-      submission.fileSize = apkMeta.fileSize;
-    } else if (downloadUrl) {
-      submission.downloadUrl = downloadUrl;
-    }
-
-    // Update main fields
-    submission.versionName = trimmedNewVersion;
-    submission.whatsNew = whatsNew || '';
-    submission.updatedAt = new Date().toISOString();
-    submission.reviewStatus = 'APPROVED';
+    await AppRepository.update(app.id, {
+      versionName: newVersionName,
+      versionCode: nextCode,
+      sha256: fileSha256,
+      size: fileSize ? `${(fileSize / 1024 / 1024).toFixed(1)} MB` : app.size,
+      updatedBy: user.id,
+      latestVersionId: version.id,
+    });
 
     return res.json({
       success: true,
-      data: submission,
-      message: `Versi aplikasi berhasil diperbarui ke v${trimmedNewVersion}.`
+      data: { submission: updated, version },
+      message: `Versi aplikasi berhasil diajukan ke v${newVersionName}.`,
     });
-  } catch (err: any) {
-    console.error('Update app version error:', err);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: err.message || 'Gagal menerapkan update aplikasi.' }
-    });
+  } catch (error: any) {
+    console.error('[developer/submissions:update-version]', error);
+    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal memproses update aplikasi.' } });
   }
 });
-           
