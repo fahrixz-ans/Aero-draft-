@@ -32,7 +32,7 @@ export const developerSubmissionsStore: any[] = [];
 // GET /api/developer/submissions - List submissions for authenticated developer
 developerRouter.get('/submissions', (req: any, res) => {
   const sessionUser = resolveUserSession(req);
-  const email = (sessionUser?.email || req.query.email || req.headers['x-user-email'] || '').toLowerCase();
+  const email = (sessionUser?.email || '').toLowerCase();
 
   // If superadmin/admin, can view all if requested
   if ((sessionUser?.role === 'SUPER_ADMIN' || sessionUser?.role === 'ADMIN') && req.query.all === 'true') {
@@ -68,7 +68,7 @@ developerRouter.post('/submissions', memoryUpload.single('apk') as any, async (r
   try {
     const sessionUser = resolveUserSession(req);
     const { name, slug, packageName, category, shortDescription, description, downloadUrl, officialUrl, versionName } = req.body;
-    const developerEmail = sessionUser?.email || req.body.developerEmail || req.headers['x-user-email'] || 'developer@modstation.id';
+    const developerEmail = sessionUser?.email || '';
 
     if (!name || !slug) {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama dan slug aplikasi wajib diisi.' } });
@@ -138,7 +138,7 @@ developerRouter.post('/submissions/:id/update-version', memoryUpload.single('apk
     const sessionUser = resolveUserSession(req);
     const { id } = req.params;
     const { newVersionName, whatsNew, downloadUrl } = req.body;
-    const developerEmail = sessionUser?.email || req.body.developerEmail || req.headers['x-user-email'] || 'developer@modstation.id';
+    const developerEmail = sessionUser?.email || '';
 
     const submission = developerSubmissionsStore.find(s => s.id === id);
     if (!submission) {
@@ -224,3 +224,4 @@ developerRouter.post('/submissions/:id/update-version', memoryUpload.single('apk
     });
   }
 });
+           
