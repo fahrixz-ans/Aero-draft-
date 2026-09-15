@@ -4,10 +4,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
-import { getSession } from '@auth/express';
-
-import { authConfig } from './auth';
-import { resolveOrCreateFirestoreUser } from './server/auth';
+import { resolveUserSession } from './server/auth';
 import { publicRouter } from './server/routes/publicRoutes';
 import { adminRouter } from './server/routes/adminRoutes';
 import { internalRouter } from './server/routes/internalRoutes';
@@ -84,21 +81,17 @@ app.use((req: any, res, next) => {
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Resolve the real Auth.js session for protected routes.
+// Resolve the real Firebase Authentication session for protected routes.
 // There is deliberately no x-user-email identity fallback here.
 app.use(async (req: any, res, next) => {
   if (!req.path.startsWith('/api/')) return next();
 
   try {
-    const session = await getSession(req, authConfig as any);
-    if (session?.user?.email) {
-      req.session = session;
-      req.user = await resolveOrCreateFirestoreUser(
-        session.user.email,
-        session.user.name || session.user.email.split('@')[0],
-        session.user.image || undefined
-      );
+    const user = await resolveUserSession(req);
+    if (user) {
+      req.user = user;
     }
   } catch {
     // Protected routers perform their own authorization and will return 401.
@@ -139,7 +132,7 @@ app.post('/api/upload-image', memoryUpload.single('image') as any, async (req: a
     }
 
     const type = String(req.body?.type || 'upload');
-    const result = await CloudinaryService.uploadImage(req.file.buffer, type);
+    const result = await CloudinaryService.uploadImage(req.file.buffer, type, req.file.originalname);
 
     return res.status(200).json({
       success: true,
@@ -347,6 +340,16 @@ app.use((err: any, req: any, res: any, next: any) => {
 // Frontend
 // ---------------------------------------------------------------------------
 async function startServer() {
+  // Sync in-memory DBs from Firestore and start background workers
+  try {
+    const { syncInMemoryDbs } = await import('./server/repositories');
+    await syncInMemoryDbs();
+    initializeBackgroundWorkers();
+    console.log('[Mod Station] In-memory DB sync and background workers initialized successfully.');
+  } catch (err) {
+    console.error('[Mod Station] Failed to initialize DB sync or background workers:', err);
+  }
+
   if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true, allowedHosts: true },

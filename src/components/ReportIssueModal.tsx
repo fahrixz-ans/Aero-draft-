@@ -21,7 +21,9 @@ const REPORT_OPTIONS: { type: ReportType; label: string; priority: ReportPriorit
   { type: 'incorrect_screenshot', label: 'Screenshot tidak sesuai', priority: 'low' },
   { type: 'broken_official_link', label: 'Link website tidak bekerja', priority: 'medium' },
   { type: 'unavailable_app', label: 'Aplikasi sudah tidak tersedia', priority: 'medium' },
-  { type: 'other', label: 'Masalah lainnya', priority: 'low' }
+  { type: 'other', label: 'Masalah lainnya', priority: 'low' },
+  { type: 'dmca_takedown', label: 'DMCA Takedown Request', priority: 'high' },
+  { type: 'malware_report', label: 'Report Malware', priority: 'high' }
 ];
 
 export default function ReportIssueModal({

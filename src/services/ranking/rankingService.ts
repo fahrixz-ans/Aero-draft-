@@ -95,8 +95,8 @@ export function getAppCategories(app: AppData): { primary: string; secondary: st
 /**
   * Computes Confidence Score (0.0 to 1.0) and Confidence Level (HIGH, MEDIUM, LOW)
   */
-export function computeAppConfidence(app: AppData): { score: number; level: 'HIGH' | 'MEDIUM' | 'LOW' } {
-  const events = getStoredAeroEvents().filter(e => e.appId === app.id);
+export function computeAppConfidence(app: AppData, preloadedEvents: any[] = []): { score: number; level: 'HIGH' | 'MEDIUM' | 'LOW' } {
+  const events = preloadedEvents;
   const sampleSize = events.length + (app.downloads ? Math.log10(app.downloads) * 5 : 2);
   
   let score = 0.5; // base

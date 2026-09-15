@@ -59,7 +59,7 @@ export default function AppCard({
     <div
       onClick={() => onSelect(app.slug)}
       id={`app-card-${app.id}`}
-      className="group relative flex items-center justify-between gap-3.5 p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-slate-200/60 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 transition-all duration-200 cursor-pointer select-none active:scale-[0.99]"
+      className="group relative flex items-center justify-between gap-3.5 p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-slate-200/60 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 transition-all duration-200 cursor-pointer select-none active:scale-[0.99] hover:scale-105 hover:shadow-lg"
     >
       {/* Left: App Icon + App Hierarchy Details */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">

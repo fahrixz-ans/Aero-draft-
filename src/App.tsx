@@ -148,8 +148,10 @@ import {
 
 import { AeroUser as User } from './types';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db, auth } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import ScrollToTopButton from './components/common/ScrollToTopButton';
+import OfflineBanner from './components/common/OfflineBanner';
 import { useInteractionAnalytics } from './hooks/useInteractionAnalytics';
 
 export default function App() {
@@ -368,56 +370,64 @@ export default function App() {
     }
   };
 
-  // Synchronize Auth.js session state and real-time Firestore user preferences
+  // Synchronize Firebase Auth state and real-time Firestore user preferences
   useEffect(() => {
     let unmounted = false;
-    async function loadAuthSession() {
-      try {
-        const res = await fetch('/api/auth/session');
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.user && !unmounted) {
-            const activeUser: User = {
-              uid: data.user.id || 'usr_default',
-              email: data.user.email,
-              displayName: data.user.name,
-              photoURL: data.user.image,
-              role: data.user.role
-            };
-            setUser(activeUser);
-            refreshUserData(activeUser);
-            setAuthLoading(false);
-            return;
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const token = await firebaseUser.getIdToken();
+          // Fetch synced server-side user record (this ensures server-enforced role role-mapping)
+          const res = await fetch('/api/auth/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.user && !unmounted) {
+              const activeUser: User = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || data.user.email,
+                displayName: firebaseUser.displayName || data.user.displayName || data.user.name,
+                photoURL: firebaseUser.photoURL || data.user.photoURL || data.user.image,
+                role: data.user.role || 'USER'
+              };
+              setUser(activeUser);
+              refreshUserData(activeUser);
+              setAuthLoading(false);
+              return;
+            }
           }
+        } catch (e) {
+          console.error('Firebase Auth sync fetch error:', e);
         }
-      } catch (e) {
-        console.warn('Auth.js session fetch error:', e);
-      }
 
-      if (!unmounted) {
-        setUser(null);
-        refreshUserData(null);
-        setAuthLoading(false);
+        if (!unmounted) {
+          // Fallback basic client identity if backend fetch experiences an issue
+          const activeUser: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || '',
+            photoURL: firebaseUser.photoURL || undefined,
+            role: 'USER'
+          };
+          setUser(activeUser);
+          refreshUserData(activeUser);
+          setAuthLoading(false);
+        }
+      } else {
+        if (!unmounted) {
+          setUser(null);
+          refreshUserData(null);
+          setAuthLoading(false);
+        }
       }
-    }
-
-    loadAuthSession();
-
-    // Listen for cross-origin OAuth messages from the popup
-    const handleMessage = async (event: MessageEvent) => {
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
-        return;
-      }
-      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        await loadAuthSession();
-      }
-    };
-    window.addEventListener('message', handleMessage);
+    });
 
     return () => {
       unmounted = true;
-      window.removeEventListener('message', handleMessage);
+      unsubscribe();
     };
   }, []);
 
@@ -490,25 +500,24 @@ export default function App() {
     }
   };
 
-  // Google Sign-In trigger with Auth.js (Real Popup OAuth)
+  // Google Sign-In trigger with Firebase
   const handleSignIn = async () => {
     try {
-      const callbackUrl = encodeURIComponent(`${window.location.origin}/api/auth/callback-success`);
-      const authUrl = `/api/auth/signin/google?callbackUrl=${callbackUrl}`;
-      
-      const authWindow = window.open(authUrl, 'oauth_popup', 'width=600,height=700');
-      if (!authWindow) {
-        alert('Silakan aktifkan pop-up untuk melakukan login.');
-      }
-    } catch (err) {
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
       console.error("Sign-In failed:", err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        alert('Login gagal: ' + (err.message || err));
+      }
     }
   };
 
   // Sign-Out trigger
   const handleSignOut = async () => {
     try {
-      await fetch('/api/auth/signout', { method: 'POST' });
+      await signOut(auth);
       setUser(null);
       refreshUserData(null);
     } catch (err) {
@@ -1342,6 +1351,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
+      <OfflineBanner />
       
       {/* Dynamic SEO Meta & JSON-LD Manager */}
       <DynamicSEO 

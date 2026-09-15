@@ -29,9 +29,9 @@ healthRouter.get('/readiness', (req, res) => {
   });
 });
 
-healthRouter.get('/', (req, res) => {
+healthRouter.get('/', async (req, res) => {
   const memory = process.memoryUsage();
-  const performanceSummary = performanceTracker.getSummary();
+  const performanceSummary = await performanceTracker.getSummary();
   const cacheStats = apiCacheManager.getStats();
 
   let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';

@@ -69,8 +69,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Gagal mengunggah gambar.');
+        let errMsg = 'Gagal mengunggah gambar.';
+        try {
+          const errData = await response.json();
+          errMsg = errData.error?.message || errData.error || errData.message || errMsg;
+        } catch {
+          try {
+            const textMsg = await response.text();
+            if (textMsg && textMsg.length < 200) {
+              errMsg = textMsg;
+            }
+          } catch {}
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();

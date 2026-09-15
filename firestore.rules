@@ -195,6 +195,21 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Help Center & Knowledge Base Rules
+    match /help_articles/{articleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /ai_knowledge/{knowledgeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /ai_jobs/{jobId} {
+      allow read, write: if true; // Allows clients to write/listen to jobs in real-time
+    }
+
 
     // Server-managed operational state. The backend uses Firebase Admin SDK,
     // which bypasses Firestore client rules. Client-side reads/writes are denied.

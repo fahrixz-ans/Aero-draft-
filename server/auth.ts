@@ -4,8 +4,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { ERROR_CODES, sendError } from './errors';
-import { db } from '../src/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { UserRepository } from './repositories';
 
 export interface AuthSessionUser {
   id: string;
@@ -84,29 +83,27 @@ activeSessions.set('sess_default_admin', defaultSuperAdminSession);
 export async function resolveOrCreateFirestoreUser(email: string, name: string, image?: string): Promise<AuthSessionUser> {
   const normalizedEmail = email.toLowerCase().trim();
   const userId = `usr_${Buffer.from(normalizedEmail).toString('hex').slice(0, 10)}`;
-  const userDocRef = doc(db, 'users', userId);
 
   try {
-    const docSnap = await getDoc(userDocRef);
+    const existingUser = await UserRepository.findById(userId);
     const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
     const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
     const permissions = getRolePermissions(role);
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
+    if (existingUser) {
       // Update last login
-      await setDoc(userDocRef, {
+      await UserRepository.update(userId, {
         lastLogin: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      });
 
       return {
         id: userId,
         email: normalizedEmail,
-        name: data.name || name,
-        image: data.image || image,
-        role: (data.role || role) as any,
-        permissions: getRolePermissions(data.role || role)
+        name: existingUser.name || name,
+        image: existingUser.image || image,
+        role: (existingUser.role || role) as any,
+        permissions: getRolePermissions(existingUser.role || role)
       };
     } else {
       // Create profile
@@ -122,7 +119,7 @@ export async function resolveOrCreateFirestoreUser(email: string, name: string, 
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(userDocRef, newUser);
+      await UserRepository.create(newUser);
       return {
         id: userId,
         email: normalizedEmail,
@@ -133,7 +130,7 @@ export async function resolveOrCreateFirestoreUser(email: string, name: string, 
       };
     }
   } catch (error) {
-    console.error("Firestore user resolution error:", error);
+    console.error("UserRepository user resolution error:", error);
     const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
     const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
     return {

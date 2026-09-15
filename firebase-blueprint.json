@@ -257,6 +257,15 @@
     }
   },
   "firestore": {
+    "/help_articles/{articleId}": {
+      "description": "Knowledge Base articles for the Help Center, including AI auto-generated content."
+    },
+    "/ai_knowledge/{knowledgeId}": {
+      "description": "AI-generated source knowledge base articles segregated from public articles."
+    },
+    "/ai_jobs/{jobId}": {
+      "description": "Background jobs for generating AI knowledge articles and processing answers."
+    },
     "/banners/{bannerId}": {
       "schema": "Banner",
       "description": "Dynamic promotional banners and curated carousel items."

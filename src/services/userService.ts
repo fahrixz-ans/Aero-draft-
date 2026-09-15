@@ -552,7 +552,7 @@ export async function getFcmToken(userId?: string): Promise<string | null> {
     if (!messaging) return null;
 
     const token = await getToken(messaging, {
-      vapidKey: config.vapidKey
+      vapidKey: (config as any).vapidKey
     });
 
     if (token && userId) {

@@ -18,13 +18,13 @@ developerIntelligenceRouter.use(requireAuth);
  * GET /api/developer/intelligence
  * Returns metrics and performance strictly for current developer
  */
-developerIntelligenceRouter.get('/', (req, res) => {
+developerIntelligenceRouter.get('/', async (req, res) => {
   try {
     const user = (req as any).user;
     const developerName = user.developerName || user.name || user.email?.split('@')[0];
 
     // Filter developer summary
-    const devSummaries = IntelligenceService.getDevelopersIntelligence(developerName);
+    const devSummaries = await IntelligenceService.getDevelopersIntelligence(developerName);
     const summary = devSummaries[0] || {
       developerId: `dev_${user.id}`,
       developerName,
@@ -41,7 +41,7 @@ developerIntelligenceRouter.get('/', (req, res) => {
     };
 
     // Filter apps owned by this developer
-    const allApps = IntelligenceService.getAppsIntelligence({ limit: 500 }).items;
+    const allApps = (await IntelligenceService.getAppsIntelligence({ limit: 500 })).items;
     const myApps = allApps.filter(a => 
       a.developerName.toLowerCase() === developerName.toLowerCase() ||
       (a as any).developerId === user.id
@@ -64,7 +64,7 @@ developerIntelligenceRouter.get('/', (req, res) => {
  * GET /api/developer/intelligence/apps/:appId
  * Detailed intelligence for a specific app owned by the developer
  */
-developerIntelligenceRouter.get('/apps/:appId', (req, res) => {
+developerIntelligenceRouter.get('/apps/:appId', async (req, res) => {
   try {
     const user = (req as any).user;
     const developerName = user.developerName || user.name || user.email?.split('@')[0];
@@ -85,7 +85,7 @@ developerIntelligenceRouter.get('/apps/:appId', (req, res) => {
       return sendError(res, ERROR_CODES.FORBIDDEN, 'Anda tidak memiliki akses ke analytics aplikasi pengembang lain.', 403);
     }
 
-    const item = IntelligenceService.getAppDetailIntelligence(req.params.appId);
+    const item = await IntelligenceService.getAppDetailIntelligence(req.params.appId);
     return sendSuccess(res, item);
   } catch (err: any) {
     return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message, 500);

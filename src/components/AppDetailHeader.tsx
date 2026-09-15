@@ -135,26 +135,28 @@ export default function AppDetailHeader({
               <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
             </button>
 
-            {/* Bagikan (Native Web Share API) */}
+            {/* Share App */}
             <button
               onClick={onShare}
               className="px-3.5 py-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-              title="Bagikan Halaman Aplikasi (Web Share API)"
-              aria-label="Bagikan halaman aplikasi"
-              id="app-native-share-btn"
+              title="Share App"
+              aria-label="Share App"
+              id="app-share-btn"
             >
               <Share2 className="w-3.5 h-3.5" />
               <span>Bagikan</span>
             </button>
 
-            {/* Laporkan */}
+            {/* Report App */}
             <button
               onClick={() => onReport('general_issue')}
-              className="p-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-950/20 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-all cursor-pointer flex items-center justify-center"
-              title="Laporkan Kendala"
-              aria-label="Laporkan aplikasi"
+              className="px-3.5 py-2 rounded-full border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-300 dark:hover:border-red-800 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+              title="Report App (DMCA / Malware)"
+              aria-label="Report App"
+              id="report-app-btn"
             >
-              <AlertCircle className="w-4 h-4" />
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Report App</span>
             </button>
           </div>
         </div>

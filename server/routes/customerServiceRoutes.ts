@@ -1,9 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../../src/lib/firebase';
-import { 
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, 
-  query, where, orderBy, runTransaction 
-} from 'firebase/firestore';
+import { firestore } from '../repositories';
 import { generateFamoResponse } from '../services/famoAiService';
 import { CSTicket, CSMessage, CSConversationState } from '../../src/types';
 
@@ -15,11 +11,11 @@ const CS_COLLECTION = 'cs_tickets';
  * Check if ChatGPT API is connected for Customer Service
  */
 customerServiceRouter.get('/status', (req: Request, res: Response) => {
-  const isConnected = !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0;
+  const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || (!!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
   return res.json({
     success: true,
     connected: isConnected,
-    provider: 'ChatGPT API'
+    provider: process.env.OPENAI_API_KEY ? 'ChatGPT API' : 'Gemini CS Engine'
   });
 });
 
@@ -34,12 +30,9 @@ function generateTicketCode(): string {
  */
 async function calculateRealQueuePosition(ticketId: string, createdAt: string): Promise<{ position: number; estimatedMinutes: number }> {
   try {
-    const colRef = collection(db, CS_COLLECTION);
-    const q = query(
-      colRef,
-      where('state', '==', 'WAITING_QUEUE')
-    );
-    const snap = await getDocs(q);
+    const snap = await firestore.collection(CS_COLLECTION)
+      .where('state', '==', 'WAITING_QUEUE')
+      .get();
     
     // Sort by requestedAgentAt or createdAt
     const queueTickets: Array<{ id: string; time: number }> = [];
@@ -70,12 +63,12 @@ customerServiceRouter.post('/chat', async (req: any, res: Response) => {
   try {
     const { ticketId, message, attachments = [], category = 'Umum', messageId } = req.body;
 
-    const isConnected = !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0;
+    const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || (!!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
     if (!isConnected) {
       return res.status(400).json({
         success: false,
         code: 'API_NOT_CONNECTED',
-        error: { message: 'Error. The API is not connected yet.' }
+        error: { message: 'Error. No AI API keys (OpenAI or Gemini) are configured yet.' }
       });
     }
 
@@ -98,9 +91,9 @@ customerServiceRouter.post('/chat', async (req: any, res: Response) => {
     let targetTicket: CSTicket | null = null;
 
     if (currentTicketId) {
-      const docRef = doc(db, CS_COLLECTION, currentTicketId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
+      const docRef = firestore.collection(CS_COLLECTION).doc(currentTicketId);
+      const snap = await docRef.get();
+      if (snap.exists) {
         targetTicket = snap.data() as CSTicket;
       }
     }
@@ -167,8 +160,8 @@ customerServiceRouter.post('/chat', async (req: any, res: Response) => {
         messages: updatedMessages
       };
 
-      const docRef = doc(db, CS_COLLECTION, targetTicket.id);
-      await setDoc(docRef, targetTicket, { merge: true });
+      const docRef = firestore.collection(CS_COLLECTION).doc(targetTicket.id);
+      await docRef.set(targetTicket, { merge: true });
 
       return res.json({
         success: true,
@@ -205,8 +198,8 @@ customerServiceRouter.post('/chat', async (req: any, res: Response) => {
         updatedAt: now
       };
 
-      const docRef = doc(db, CS_COLLECTION, newDocId);
-      await setDoc(docRef, newTicket);
+      const docRef = firestore.collection(CS_COLLECTION).doc(newDocId);
+      await docRef.set(newTicket);
 
       return res.json({
         success: true,
@@ -234,9 +227,9 @@ customerServiceRouter.post('/request-agent', async (req: any, res: Response) => 
       return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
     }
 
-    const docRef = doc(db, CS_COLLECTION, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
       return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
     }
 
@@ -268,7 +261,7 @@ customerServiceRouter.post('/request-agent', async (req: any, res: Response) => 
       messages: [...(ticketData.messages || []), queueMessage]
     };
 
-    await setDoc(docRef, updatedTicket, { merge: true });
+    await docRef.set(updatedTicket, { merge: true });
 
     return res.json({
       success: true,
@@ -293,9 +286,9 @@ customerServiceRouter.post('/cancel-agent', async (req: any, res: Response) => {
       return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
     }
 
-    const docRef = doc(db, CS_COLLECTION, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
       return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
     }
 
@@ -321,7 +314,7 @@ customerServiceRouter.post('/cancel-agent', async (req: any, res: Response) => {
       messages: [...(ticketData.messages || []), cancelMessage]
     };
 
-    await setDoc(docRef, updatedTicket, { merge: true });
+    await docRef.set(updatedTicket, { merge: true });
 
     return res.json({
       success: true,
@@ -349,9 +342,9 @@ customerServiceRouter.post('/claim-ticket', async (req: any, res: Response) => {
       return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
     }
 
-    const docRef = doc(db, CS_COLLECTION, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
       return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
     }
 
@@ -388,7 +381,7 @@ customerServiceRouter.post('/claim-ticket', async (req: any, res: Response) => {
       messages: [...(ticketData.messages || []), joinMessage]
     };
 
-    await setDoc(docRef, updatedTicket, { merge: true });
+    await docRef.set(updatedTicket, { merge: true });
 
     return res.json({
       success: true,
@@ -411,9 +404,9 @@ customerServiceRouter.post('/end-chat', async (req: any, res: Response) => {
       return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
     }
 
-    const docRef = doc(db, CS_COLLECTION, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
       return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
     }
 
@@ -439,7 +432,7 @@ customerServiceRouter.post('/end-chat', async (req: any, res: Response) => {
       messages: [...(ticketData.messages || []), endMessage]
     };
 
-    await setDoc(docRef, updatedTicket, { merge: true });
+    await docRef.set(updatedTicket, { merge: true });
 
     return res.json({
       success: true,
@@ -458,9 +451,9 @@ customerServiceRouter.post('/end-chat', async (req: any, res: Response) => {
 customerServiceRouter.get('/queue-status/:ticketId', async (req: Request, res: Response) => {
   try {
     const { ticketId } = req.params;
-    const docRef = doc(db, CS_COLLECTION, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
+    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
       return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
     }
 

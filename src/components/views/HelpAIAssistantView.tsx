@@ -24,6 +24,8 @@ import {
   SingleProcessBanner, 
   ProcessDetailModal 
 } from '../common/AIProcessStatus';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface HelpAIAssistantViewProps {
   initialQuestion?: string;
@@ -42,6 +44,8 @@ interface ChatMessage {
   feedback?: 'positive' | 'negative' | null;
   timestamp: string;
   isError?: boolean;
+  canRetry?: boolean;
+  failedQuestion?: string;
 }
 
 export default function HelpAIAssistantView({
@@ -58,6 +62,15 @@ export default function HelpAIAssistantView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const unsubRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (unsubRef.current) {
+        unsubRef.current();
+      }
+    };
+  }, []);
 
   const handleBackClick = () => {
     if (onBack) {
@@ -112,9 +125,90 @@ export default function HelpAIAssistantView({
     }
   };
 
+  const buildJobProcessSteps = (jobData: any): AIProcessStep[] => {
+    const steps: AIProcessStep[] = [
+      { id: '1', label: 'Menerima pertanyaan...', status: 'completed' },
+      { id: '2', label: 'Memahami kueri...', status: 'completed' },
+      { id: '3', label: 'Mencari artikel di knowledge base...', status: 'completed' },
+      { id: '4', label: 'Merancang draf artikel bantuan...', status: 'pending' },
+      { id: '5', label: 'Menulis isi panduan...', status: 'pending' },
+      { id: '6', label: 'Memvalidasi instruksi sistem...', status: 'pending' },
+      { id: '7', label: 'Mencari gambar ilustrasi...', status: 'pending' },
+      { id: '8', label: 'Menyimpan artikel ke Firestore...', status: 'pending' },
+      { id: '9', label: 'Reprocessing kueri awal...', status: 'pending' },
+      { id: '10', label: 'Menyusun jawaban ramah...', status: 'pending' }
+    ];
+
+    const status = jobData?.status || 'QUEUED';
+    
+    if (status === 'QUEUED') {
+      steps[3].status = 'in_progress';
+    } else if (status === 'ANALYZING') {
+      steps[3].status = 'completed';
+      steps[4].status = 'in_progress';
+    } else if (status === 'SEARCHING_KNOWLEDGE') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'in_progress';
+    } else if (status === 'GENERATING_TITLE' || status === 'GENERATING_OUTLINE') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'completed';
+      steps[6].status = 'in_progress';
+    } else if (status === 'GENERATING_CONTENT') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'completed';
+      steps[6].status = 'completed';
+      steps[7].status = 'in_progress';
+    } else if (status === 'VALIDATING_CONTENT') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'completed';
+      steps[6].status = 'completed';
+      steps[7].status = 'completed';
+      steps[8].status = 'in_progress';
+    } else if (status === 'SEARCHING_MEDIA' || status === 'VALIDATING_MEDIA') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'completed';
+      steps[6].status = 'completed';
+      steps[7].status = 'completed';
+      steps[8].status = 'completed';
+      steps[9].status = 'in_progress';
+    } else if (status === 'SAVING_ARTICLE' || status === 'ARTICLE_READY') {
+      steps[3].status = 'completed';
+      steps[4].status = 'completed';
+      steps[5].status = 'completed';
+      steps[6].status = 'completed';
+      steps[7].status = 'completed';
+      steps[8].status = 'completed';
+      steps[9].status = 'completed';
+      steps[10].status = 'in_progress';
+    } else if (status === 'RETRIEVING_KNOWLEDGE' || status === 'GENERATING_ANSWER') {
+      steps.forEach((s, i) => {
+        if (i < 9) s.status = 'completed';
+      });
+      steps[9].status = 'in_progress';
+    } else if (status === 'COMPLETED') {
+      steps.forEach(s => s.status = 'completed');
+    } else if (status === 'FAILED') {
+      const idx = steps.findIndex(s => s.status === 'in_progress' || s.status === 'pending');
+      if (idx !== -1) steps[idx].status = 'failed';
+    }
+
+    return steps;
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const questionText = (textToSend || inputText).trim();
     if (!questionText || isProcessing) return;
+
+    // Cancel any existing active subscriptions to prevent leak/conflict
+    if (unsubRef.current) {
+      unsubRef.current();
+      unsubRef.current = null;
+    }
 
     // 1. Add user message to thread
     const userMsgId = 'user-' + Date.now();
@@ -138,8 +232,6 @@ export default function HelpAIAssistantView({
     // 2. Validate API FIRST before entering processing / step animations
     const isConnected = await checkApiConnected();
     if (!isConnected) {
-      // Direct Error: "Error. The API is not connected yet."
-      // AI profile avatar remains IDLE (static), NO process steps started
       setMessages((prev) => [
         ...prev,
         {
@@ -156,26 +248,26 @@ export default function HelpAIAssistantView({
 
     // 3. API is connected -> Enter PROCESSING state (AI Avatar animates!)
     setIsProcessing(true);
-    const initialSteps = buildProcessSteps('text');
     
-    // Set first step in_progress
+    // Set standard loading steps first
+    const initialSteps = buildProcessSteps('text');
     initialSteps[0].status = 'in_progress';
     setProcessSteps(initialSteps);
 
-    // Step animation controller during API call
+    // Initial temporary animation during direct search
     let currentStepIdx = 0;
     const interval = setInterval(() => {
       setProcessSteps((prevSteps) => {
         if (!prevSteps || prevSteps.length === 0) return prevSteps;
         const next = [...prevSteps];
-        if (currentStepIdx < next.length - 2) {
+        if (currentStepIdx < 3) {
           next[currentStepIdx].status = 'completed';
           currentStepIdx++;
           next[currentStepIdx].status = 'in_progress';
         }
         return next;
       });
-    }, 600);
+    }, 450);
 
     try {
       const historyPayload = messages.slice(-6).map((m) => ({
@@ -196,45 +288,154 @@ export default function HelpAIAssistantView({
       const data = await res.json();
 
       if (!res.ok || data.code === 'API_NOT_CONNECTED') {
-        // Handle API disconnection or error
         setProcessSteps((prev) => prev.map(s => ({ ...s, status: s.status === 'in_progress' ? 'failed' : s.status })));
+        
+        let friendlyMessage = 'Terjadi kendala saat memproses pertanyaan.';
+        let errorCategory = 'Kendala Layanan';
+        const errCode = data.error?.code || data.code;
+
+        if (res.status === 401 || errCode === 'GEMINI_AUTHENTICATION_FAILED') {
+          friendlyMessage = 'Asisten AI sedang mengalami kendala otentikasi layanan. Silakan hubungi administrator atau coba beberapa saat lagi.';
+          errorCategory = 'Otentikasi Gagal';
+        } else if (errCode === 'GEMINI_API_KEY_MISSING' || errCode === 'API_NOT_CONNECTED') {
+          friendlyMessage = 'Layanan AI belum dikonfigurasi pada server.';
+          errorCategory = 'Konfigurasi Belum Aktif';
+        } else if (res.status === 429 || errCode === 'GEMINI_RATE_LIMITED') {
+          friendlyMessage = 'Batas kuota Gemini AI telah tercapai. Silakan coba lagi beberapa saat lagi.';
+          errorCategory = 'Batas Kuota';
+        } else if (data.error?.message) {
+          friendlyMessage = data.error.message;
+        }
+
         setMessages((prev) => [
           ...prev,
           {
             id: 'ai-err-' + Date.now(),
             sender: 'ai',
-            text: data.error?.message || 'Error. The API is not connected yet.',
-            category: 'Error API',
+            text: friendlyMessage,
+            category: errorCategory,
             timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-            isError: true
+            isError: true,
+            canRetry: true,
+            failedQuestion: questionText
           }
         ]);
         setIsProcessing(false);
         return;
       }
 
-      // Successful API response from Gemini
-      setProcessSteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+      // If direct match is found (articleFound is true / data.answer is provided without jobId)
+      if (data.answer && !data.jobId) {
+        setProcessSteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setIsProcessing(false);
 
-      const aiAnswer = data.answer || 'Maaf, belum ada jawaban spesifik untuk pertanyaan ini.';
-      const followUps = data.suggestedTopics || [
-        'Panduan instalasi APK',
-        'Keamanan file di Mod Station',
-        'Cara memperbarui aplikasi'
-      ];
+        const aiAnswer = data.answer;
+        const followUps = data.suggestedTopics || [
+          'Panduan instalasi APK',
+          'Keamanan file di Mod Station',
+          'Cara memperbarui aplikasi'
+        ];
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: 'ai-' + Date.now(),
-          sender: 'ai',
-          text: aiAnswer,
-          category: 'Pusat Bantuan Gemini AI',
-          followUps,
-          feedback: null,
-          timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: 'ai-' + Date.now(),
+            sender: 'ai',
+            text: aiAnswer,
+            category: 'Pusat Bantuan Gemini AI',
+            articleSlug: data.articleSlug,
+            articleTitle: data.articleTitle,
+            followUps,
+            feedback: null,
+            timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+        return;
+      }
+
+      // If background generator jobId is returned, start listening to its Firestore updates in real-time
+      if (data.jobId) {
+        console.log(`[Help Center AI] Listening to background generation job: "${data.jobId}"`);
+        
+        const unsub = onSnapshot(doc(db, 'ai_jobs', data.jobId), (docSnap) => {
+          if (docSnap.exists()) {
+            const jobData = docSnap.data();
+            
+            // Build and set dynamic process steps in the UI in real-time
+            const dynamicSteps = buildJobProcessSteps(jobData);
+            setProcessSteps(dynamicSteps);
+
+            if (jobData.status === 'COMPLETED') {
+              unsub();
+              unsubRef.current = null;
+              setIsProcessing(false);
+
+              const aiAnswer = jobData.finalAnswer || 'Artikel bantuan berhasil dibuat, namun gagal memproses jawaban akhir.';
+              const followUps = jobData.suggestedFollowUps || [
+                'Cara menginstal APK di Android',
+                'Bagaimana keamanan aplikasi di Mod Station?'
+              ];
+
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: 'ai-' + Date.now(),
+                  sender: 'ai',
+                  text: aiAnswer,
+                  category: 'Gemini AI Help Center (Auto Generated)',
+                  followUps,
+                  feedback: null,
+                  timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                }
+              ]);
+            } else if (jobData.status === 'FAILED') {
+              unsub();
+              unsubRef.current = null;
+              setIsProcessing(false);
+
+              let friendlyMessage = 'Gagal memproses draf artikel panduan bantuan secara otomatis.';
+              let errorCategory = 'Gagal Pembuatan';
+              const errCode = jobData.errorCode;
+
+              if (errCode === 'GEMINI_AUTHENTICATION_FAILED' || (jobData.error && jobData.error.toLowerCase().includes('unauthenticated'))) {
+                friendlyMessage = 'Asisten AI sedang mengalami kendala otentikasi layanan. Silakan coba lagi nanti.';
+                errorCategory = 'Otentikasi Gagal';
+              } else if (errCode === 'GEMINI_API_KEY_MISSING') {
+                friendlyMessage = 'Layanan AI belum dikonfigurasi pada server.';
+                errorCategory = 'Konfigurasi Belum Aktif';
+              } else if (errCode === 'KNOWLEDGE_ARTICLE_WRITE_FAILED') {
+                friendlyMessage = 'Gagal menyimpan artikel bantuan ke database.';
+                errorCategory = 'Database Error';
+              } else if (jobData.error) {
+                friendlyMessage = jobData.error;
+              }
+
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: 'ai-err-' + Date.now(),
+                  sender: 'ai',
+                  text: friendlyMessage,
+                  category: errorCategory,
+                  timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                  isError: true,
+                  canRetry: true,
+                  failedQuestion: questionText
+                }
+              ]);
+            }
+          }
+        }, (err) => {
+          console.error('Firestore real-time subscription error:', err);
+          unsub();
+          unsubRef.current = null;
+          setIsProcessing(false);
+        });
+
+        // Save subscription reference to unsubRef
+        unsubRef.current = unsub;
+      }
+
     } catch (err: any) {
       clearInterval(interval);
       setProcessSteps((prev) => prev.map((s) => (s.status === 'in_progress' ? { ...s, status: 'failed' } : s)));
@@ -246,13 +447,21 @@ export default function HelpAIAssistantView({
           text: 'Terjadi kendala saat menghubungkan ke server AI Pusat Bantuan.',
           category: 'Gagal Koneksi',
           timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          isError: true
+          isError: true,
+          canRetry: true,
+          failedQuestion: questionText
         }
       ]);
-    } finally {
-      // Stop animation -> return to IDLE
       setIsProcessing(false);
     }
+  };
+
+  const handleRetry = (failedQuestion?: string, errorMsgId?: string) => {
+    if (!failedQuestion) return;
+    if (errorMsgId) {
+      setMessages((prev) => prev.filter((m) => m.id !== errorMsgId));
+    }
+    handleSendMessage(failedQuestion);
   };
 
   const handleFeedback = (msgId: string, type: 'positive' | 'negative') => {
@@ -411,6 +620,24 @@ export default function HelpAIAssistantView({
                       }`}
                     >
                       <p className="whitespace-pre-line">{msg.text}</p>
+
+                      {/* Retry button for error messages */}
+                      {msg.isError && msg.canRetry && msg.failedQuestion && (
+                        <div className="mt-3 pt-2.5 border-t border-rose-500/20 flex items-center justify-between gap-3">
+                          <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                            Pertanyaan tersimpan di riwayat.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRetry(msg.failedQuestion, msg.id)}
+                            disabled={isProcessing}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Coba Lagi</span>
+                          </button>
+                        </div>
+                      )}
 
                       {/* Follow up options */}
                       {msg.followUps && msg.followUps.length > 0 && (

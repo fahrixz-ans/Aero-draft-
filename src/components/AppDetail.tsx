@@ -206,13 +206,27 @@ export default function AppDetail({
       appName: app.name,
       appSlug: app.slug || app.id,
       category: app.category,
-      method: typeof navigator !== 'undefined' && !!navigator.share ? 'native_web_share' : 'clipboard_copy'
+      method: 'clipboard_copy'
     });
 
-    const res = await shareApp(app);
-    if (res.success && res.method === 'clipboard') {
+    const appSlug = app.slug || app.id;
+    const appUrl = `${window.location.origin}${window.location.pathname}#/app/${appSlug}`;
+    
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(appUrl);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = appUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setShareToast(true);
       setTimeout(() => setShareToast(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy link:', err);
     }
   };
 
@@ -407,6 +421,14 @@ export default function AppDetail({
           />
         </div>
       </div>
+
+      {/* Share Toast Notification */}
+      {shareToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 bg-slate-900 text-white rounded-2xl shadow-xl flex items-center gap-3 animate-fade-in-up">
+          <Check className="w-5 h-5 text-emerald-400" />
+          <p className="text-sm font-bold">Link copied</p>
+        </div>
+      )}
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

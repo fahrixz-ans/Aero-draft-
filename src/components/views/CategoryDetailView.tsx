@@ -258,7 +258,7 @@ export default function CategoryDetailView({
   onBack
 }: CategoryDetailViewProps) {
   const [recommendedApps, setRecommendedApps] = useState<AppData[]>([]);
-  const [activeSort, setActiveSort] = useState<'activity' | 'popular' | 'rating'>('activity');
+  const [sortBy, setSortBy] = useState<'newest' | 'popularity' | 'size'>('newest');
 
   // 1. Resolve canonical category name from slug or name prop
   const categoryName = useMemo(() => {
@@ -281,19 +281,31 @@ export default function CategoryDetailView({
     return apps.filter(app => appMatchesCategory(app, categoryName));
   }, [apps, categoryName]);
 
+  // Helper to sort apps
+  const sortApps = (appsToSort: AppData[]) => {
+    return [...appsToSort].sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.updatedAt || b.releaseDate || 0).getTime() - new Date(a.updatedAt || a.releaseDate || 0).getTime();
+      } else if (sortBy === 'popularity') {
+        return (b.downloads || 0) - (a.downloads || 0);
+      } else if (sortBy === 'size') {
+        const sizeA = parseFloat(a.size || '0');
+        const sizeB = parseFloat(b.size || '0');
+        return sizeB - sizeA;
+      }
+      return 0;
+    });
+  };
+
   // 3. Section 1: Berdasarkan Aktivitas Terbaru (Horizontal Carousel)
   const recentActivityApps = useMemo(() => {
-    return [...categoryApps].sort((a, b) => {
-      const timeA = new Date(a.updatedAt || a.releaseDate || 0).getTime();
-      const timeB = new Date(b.updatedAt || b.releaseDate || 0).getTime();
-      return timeB - timeA;
-    });
-  }, [categoryApps]);
+    return sortApps(categoryApps);
+  }, [categoryApps, sortBy]);
 
   // 4. Section 2: Aplikasi Gratis Terpopuler (Vertical List, top 12)
   const generalPopularApps = useMemo(() => {
-    return [...categoryApps].sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
-  }, [categoryApps]);
+    return sortApps(categoryApps);
+  }, [categoryApps, sortBy]);
 
   // 5. Section 3: Disarankan Untuk Anda (Real Recommendation Engine)
   useEffect(() => {
@@ -327,26 +339,18 @@ export default function CategoryDetailView({
   // 6. Section 4: Yang berkaitan dengan {Kategori} (Horizontal Carousel)
   const relatedApps = useMemo(() => {
     if (!categoryName) return [];
-    return getRelatedAppsForCategory(categoryName, apps, categoryApps);
-  }, [categoryName, apps, categoryApps]);
+    return sortApps(getRelatedAppsForCategory(categoryName, apps, categoryApps));
+  }, [categoryName, apps, categoryApps, sortBy]);
 
   // 7. Section 5: Aplikasi {Kategori} Gratis Terpopuler (Vertical List)
   const categorySpecificPopularApps = useMemo(() => {
-    return [...categoryApps].sort((a, b) => {
-      const scoreA = (a.downloads || 0) + ((a.ratingAverage || a.rating || 4) * 50);
-      const scoreB = (b.downloads || 0) + ((b.ratingAverage || b.rating || 4) * 50);
-      return scoreB - scoreA;
-    });
-  }, [categoryApps]);
+    return sortApps(categoryApps);
+  }, [categoryApps, sortBy]);
 
   // 8. Section 6: Fitur {Kategori} (Horizontal Carousel)
   const featuredCategoryApps = useMemo(() => {
-    const explicitlyFeatured = categoryApps.filter(a => a.featured);
-    if (explicitlyFeatured.length >= 3) return explicitlyFeatured;
-    // Or highest rated in this category
-    return [...categoryApps]
-      .sort((a, b) => (b.ratingAverage || b.rating || 0) - (a.ratingAverage || a.rating || 0));
-  }, [categoryApps]);
+    return sortApps(categoryApps);
+  }, [categoryApps, sortBy]);
 
   // Smooth scroll to Section 1 if user clicks "Berdasarkan aktivitas terbaru →"
   const scrollToRecent = () => {
@@ -419,7 +423,7 @@ export default function CategoryDetailView({
           <span>{categoryName}</span>
         </button>
 
-        {hasApps && (
+        <div className="flex items-center gap-3">
           <button
             onClick={scrollToRecent}
             className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer self-start sm:self-auto"
@@ -427,7 +431,20 @@ export default function CategoryDetailView({
             <span>Berdasarkan aktivitas terbaru</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-        )}
+          
+          <div className="flex items-center gap-2 border-l border-slate-200 dark:border-white/10 pl-3">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'newest' | 'popularity' | 'size')}
+              aria-label="Urutkan aplikasi"
+              className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="newest">Newest</option>
+              <option value="popularity">Popularity</option>
+              <option value="size">Size</option>
+            </select>
+          </div>
+        </div>
       </header>
 
       {/* When category has no apps: clean empty state */}

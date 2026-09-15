@@ -61,7 +61,7 @@ function userCanManageSubmission(user: any, submission: any) {
 
 developerRouter.get('/submissions', requireAuth, requirePermission('apps.read'), async (req: any, res) => {
   try {
-    const user = resolveUserSession(req);
+    const user = req.user;
     const isAdmin = ['SUPER_ADMIN', 'ADMIN'].includes(String(user?.role || '').toUpperCase());
 
     const data = isAdmin && req.query.all === 'true'
@@ -77,7 +77,7 @@ developerRouter.get('/submissions', requireAuth, requirePermission('apps.read'),
 
 developerRouter.get('/submissions/:id', requireAuth, requirePermission('apps.read'), async (req: any, res) => {
   try {
-    const user = resolveUserSession(req);
+    const user = req.user;
     const submission = await DeveloperSubmissionRepository.findById(req.params.id);
 
     if (!submission) {
@@ -97,7 +97,7 @@ developerRouter.get('/submissions/:id', requireAuth, requirePermission('apps.rea
 
 developerRouter.post('/submissions', requireAuth, requirePermission('apps.create'), memoryUpload.single('apk') as any, async (req: any, res) => {
   try {
-    const user = resolveUserSession(req);
+    const user = req.user;
     if (!user) return res.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Otentikasi diperlukan.' } });
 
     const name = String(req.body.name || '').trim();
@@ -262,7 +262,7 @@ developerRouter.post('/submissions', requireAuth, requirePermission('apps.create
 
 developerRouter.post('/submissions/:id/update-version', requireAuth, requirePermission('apps.update'), memoryUpload.single('apk') as any, async (req: any, res) => {
   try {
-    const user = resolveUserSession(req);
+    const user = req.user;
     const submission: any = await DeveloperSubmissionRepository.findById(req.params.id);
 
     if (!submission) return res.status(404).json({ success: false, error: { code: 'RESOURCE_NOT_FOUND', message: 'Pengajuan tidak ditemukan.' } });

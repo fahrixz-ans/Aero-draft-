@@ -235,7 +235,7 @@ publicRouter.get('/search', createRateLimiter('SEARCH'), async (req, res) => {
 publicRouter.post('/analytics/event', createRateLimiter('ANALYTICS'), async (req, res) => {
   try {
     const payload = req.body || {};
-    const validation = SecurityService.validateAnalyticsEvent(payload);
+    const validation = await SecurityService.validateAnalyticsEvent(payload);
     if (!validation.valid) {
       SecurityService.recordSecurityEvent({
         type: 'SUSPICIOUS_REQUEST',

@@ -254,7 +254,9 @@ export type ReportType =
   | 'incorrect_screenshot'
   | 'broken_official_link'
   | 'unavailable_app'
-  | 'other';
+  | 'other'
+  | 'dmca_takedown'
+  | 'malware_report';
 
 export type ReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
 

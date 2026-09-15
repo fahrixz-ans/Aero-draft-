@@ -1,5 +1,4 @@
-import { db } from '../../src/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { firestore } from '../repositories';
 import { normalizeAppData } from './metadata';
 import { AppCollection } from '../../src/types';
 import { appsData as INITIAL_APPS_DATA } from '../../src/data/appsData';
@@ -60,8 +59,9 @@ export async function generateAppsSitemapXml(appsData?: any[], baseUrl: string =
     apps = appsData.map(normalizeAppData).filter(a => a.status === 'published' && a.securityStatus !== 'QUARANTINED' && !isGame(a.category));
   } else {
     try {
-      const q = query(collection(db, 'applications'), where('status', 'in', ['PUBLISHED', 'published']));
-      const snapshot = await getDocs(q);
+      const snapshot = await firestore.collection('applications')
+        .where('status', 'in', ['PUBLISHED', 'published'])
+        .get();
       if (!snapshot.empty) {
         apps = snapshot.docs
           .map(doc => normalizeAppData(doc.data()))
@@ -111,8 +111,9 @@ export async function generateGamesSitemapXml(appsData?: any[], baseUrl: string 
     games = appsData.map(normalizeAppData).filter(a => a.status === 'published' && a.securityStatus !== 'QUARANTINED' && isGame(a.category));
   } else {
     try {
-      const q = query(collection(db, 'applications'), where('status', 'in', ['PUBLISHED', 'published']));
-      const snapshot = await getDocs(q);
+      const snapshot = await firestore.collection('applications')
+        .where('status', 'in', ['PUBLISHED', 'published'])
+        .get();
       if (!snapshot.empty) {
         games = snapshot.docs
           .map(doc => normalizeAppData(doc.data()))
@@ -183,8 +184,7 @@ export async function generateBlogSitemapXml(blogsData?: any[], baseUrl: string 
     blogs = blogsData;
   } else {
     try {
-      const q = query(collection(db, 'blogs'));
-      const snapshot = await getDocs(q);
+      const snapshot = await firestore.collection('blogs').get();
       if (!snapshot.empty) {
         blogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       }
@@ -226,8 +226,9 @@ export async function generateCollectionsSitemapXml(collectionsData?: AppCollect
     collectionsList = collectionsData.filter(c => c.isPublished);
   } else {
     try {
-      const q = query(collection(db, 'smart_collections'), where('isPublished', '==', true));
-      const snapshot = await getDocs(q);
+      const snapshot = await firestore.collection('smart_collections')
+        .where('isPublished', '==', true)
+        .get();
       collectionsList = snapshot.docs.map(doc => doc.data() as AppCollection);
     } catch (err) {
       console.warn('[Sitemap] Error fetching collections:', err);

@@ -18,10 +18,11 @@ import {
   type DocumentData,
   type Firestore,
   type Query,
-  type QueryConstraint,
   type WhereFilterOp,
 } from 'firebase-admin/firestore';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 export interface AppEntity {
   id: string;
@@ -217,6 +218,24 @@ const COLLECTIONS = {
   settings: 'settings',
 } as const;
 
+// Dynamically read from local firebase config if needed
+let configDbId: string | undefined;
+let configProjectId: string | undefined;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (configData.firestoreDatabaseId && configData.firestoreDatabaseId !== '(default)') {
+      configDbId = configData.firestoreDatabaseId;
+    }
+    if (configData.projectId) {
+      configProjectId = configData.projectId;
+    }
+  }
+} catch (err) {
+  console.warn('[Repositories] Failed to read firebase-applet-config.json:', err);
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || !value.trim()) throw new Error(`Missing required environment variable: ${name}`);
@@ -227,7 +246,7 @@ function getAdminApp(): FirebaseAdminApp {
   const existing = getApps()[0];
   if (existing) return existing;
 
-  const projectId = process.env.FIREBASE_PROJECT_ID || 'mod-station-prod';
+  const projectId = process.env.FIREBASE_PROJECT_ID || configProjectId || 'mod-station-prod';
 
   // Firestore emulator intentionally does not require a service-account key.
   // Production always requires explicit server credentials.
@@ -244,11 +263,17 @@ function getAdminApp(): FirebaseAdminApp {
   });
 }
 
+const resolvedDatabaseId = (configDbId && configDbId !== '(default)') 
+  ? configDbId 
+  : ((process.env.FIRESTORE_DATABASE_ID && process.env.FIRESTORE_DATABASE_ID !== '(default)') 
+      ? process.env.FIRESTORE_DATABASE_ID 
+      : '(default)');
+
+console.log(`[Repositories] Initializing Firestore with Project ID: "${process.env.FIREBASE_PROJECT_ID || configProjectId || 'mod-station-prod'}" and Database ID: "${resolvedDatabaseId}"`);
+
 export const firestore: Firestore = getFirestore(
   getAdminApp(),
-  process.env.FIRESTORE_DATABASE_ID && process.env.FIRESTORE_DATABASE_ID !== '(default)'
-    ? process.env.FIRESTORE_DATABASE_ID
-    : '(default)'
+  resolvedDatabaseId
 );
 
 function normalize(value: any): any {
@@ -363,7 +388,7 @@ export class AppRepository {
   }
 
   static async findAllAdmin(filters: { search?: string; status?: string; category?: string; distributionType?: string; page?: number; pageSize?: number }) {
-    const constraints: QueryConstraint[] = [];
+    const constraints: any[] = [];
     if (filters.status) constraints.push(['status', '==', filters.status]);
     if (filters.category) constraints.push(['categoryId', '==', filters.category]);
     if (filters.distributionType) constraints.push(['distributionType', '==', filters.distributionType]);
@@ -642,9 +667,68 @@ export class DeadLetterJobRepository {
   static async deleteByJobId(jobId:string){await firestore.collection(COLLECTIONS.deadLetterJobs).doc(jobId).delete();}
 }
 
-// Explicitly exported so callers cannot accidentally reintroduce a mutable
-// in-memory database. There are intentionally NO appsDb/versionsDb/usersDb/etc.
-// exports in this module.
+// Explicitly exported so callers can access the cache/queues backed by Firestore
+export const appsDb: AppEntity[] = [];
+export const versionsDb: VersionEntity[] = [];
+export const jobsDb: JobEntity[] = [];
+export const uploadsDb: UploadEntity[] = [];
+export const deadLetterJobsDb: any[] = [];
+export const moderationDb: ModerationEntity[] = [];
+export const securityScansDb: SecurityScanEntity[] = [];
+export const auditLogsDb: any[] = [];
+export const usersDb: UserEntity[] = [];
+export const systemSettingsDb: Record<string, any> = {};
+
+export async function syncInMemoryDbs() {
+  try {
+    const apps = await AppRepository.listAll();
+    appsDb.length = 0;
+    appsDb.push(...apps);
+
+    const versions = await VersionRepository.listAll();
+    versionsDb.length = 0;
+    versionsDb.push(...versions);
+
+    const jobs = await JobRepository.listAll();
+    jobsDb.length = 0;
+    jobsDb.push(...jobs);
+
+    const uploads = await UploadRepository.listAll();
+    uploadsDb.length = 0;
+    uploadsDb.push(...uploads);
+
+    const dls = await DeadLetterJobRepository.list();
+    deadLetterJobsDb.length = 0;
+    deadLetterJobsDb.push(...dls);
+
+    const moderations = await ModerationRepository.list();
+    moderationDb.length = 0;
+    moderationDb.push(...moderations);
+
+    const scans = await SecurityScanRepository.list();
+    securityScansDb.length = 0;
+    securityScansDb.push(...scans);
+
+    const audits = await AuditLogRepository.list(1, 1000);
+    auditLogsDb.length = 0;
+    auditLogsDb.push(...audits.data);
+
+    const users = await UserRepository.findAll();
+    usersDb.length = 0;
+    usersDb.push(...users);
+
+    const settings = await SettingsRepository.get('global');
+    for (const key of Object.keys(systemSettingsDb)) {
+      delete systemSettingsDb[key];
+    }
+    Object.assign(systemSettingsDb, settings);
+
+    console.log(`[Database Sync] Synced ${appsDb.length} apps, ${versionsDb.length} versions, ${jobsDb.length} jobs, ${uploadsDb.length} uploads, ${usersDb.length} users from Firestore.`);
+  } catch (err) {
+    console.error("Failed to sync in-memory DBs from Firestore:", err);
+  }
+}
+
 export const FirestoreCollections = COLLECTIONS;
 
 export interface SecurityEventEntity extends SecurityEventRepositoryInput {

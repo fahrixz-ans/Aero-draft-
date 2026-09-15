@@ -1,26 +1,6 @@
-import { GoogleGenAI } from '@google/genai';
 import { AppRepository } from '../repositories';
 import { CSAction } from '../../src/types';
-
-let geminiClient: GoogleGenAI | null = null;
-
-function getGeminiClient(): GoogleGenAI | null {
-  if (!geminiClient && process.env.GEMINI_API_KEY) {
-    try {
-      geminiClient = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
-          }
-        }
-      });
-    } catch (err) {
-      console.warn('[Gemini CS] Failed to initialize GoogleGenAI client:', err);
-    }
-  }
-  return geminiClient;
-}
+import { getGeminiClient, GEMINI_MODEL, parseGeminiError, isGeminiConfigured } from '../lib/gemini';
 
 /**
  * Sensitive Data Sanitization & Redaction Layer
@@ -161,7 +141,7 @@ ${sanitizedInput}
 Keluaran JSON:`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: GEMINI_MODEL,
         contents: prompt
       });
 

@@ -58,7 +58,7 @@ export async function sendUserTicketMessage(params: {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2200);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const res = await fetch('/api/customer-service/chat', {
       method: 'POST',
@@ -92,7 +92,7 @@ export async function sendUserTicketMessage(params: {
     }
   } catch (err: any) {
     if (err?.name === 'AbortError') {
-      console.warn('[CS Service] Request timed out at 2.2s deadline');
+      console.warn('[CS Service] Request timed out at 15s deadline');
     } else {
       console.warn('[CS Service] Server chat endpoint error:', err);
     }
