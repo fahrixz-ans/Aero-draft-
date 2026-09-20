@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import AdminSidebar from './AdminSidebar';
-import AdminHeader from './AdminHeader';
+import OwnerConsoleHeader from './OwnerConsoleHeader';
+import FullscreenNavOverlay from './FullscreenNavOverlay';
 import CommandSearchModal from './CommandSearchModal';
 import Breadcrumb, { BreadcrumbItem } from './Breadcrumb';
 import { AppData, AppReport, AdminAuditLog } from '../../../types';
@@ -34,8 +34,7 @@ export default function AdminLayout({
   pageTitle,
   children
 }: AdminLayoutProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Global Keyboard Shortcut ⌘K / Ctrl+K for search modal
@@ -53,73 +52,35 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased">
       
-      {/* Top Main Container with Sidebar + Content */}
-      <div className="flex-1 flex w-full relative">
-        
-        {/* Desktop Sidebar (Fixed Left) */}
-        <div className="hidden lg:block shrink-0 sticky top-0 h-screen z-20">
-          <AdminSidebar
-            activeRoute={activeRoute}
-            onNavigateRoute={onNavigateRoute}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            pendingModerationCount={pendingModerationCount}
-            securityAlertCount={securityAlertCount}
-          />
-        </div>
+      {/* 1. Header (PRD Section 5): Fixed top header with hamburger (=) -> (×) and centered logo */}
+      <OwnerConsoleHeader
+        isMenuOpen={isNavMenuOpen}
+        onToggleMenu={() => setIsNavMenuOpen(!isNavMenuOpen)}
+        onNavigateHome={() => onNavigateRoute('dashboard')}
+      />
 
-        {/* Mobile Sidebar Overlay Drawer */}
-        {mobileDrawerOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden flex">
-            <div 
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-              onClick={() => setMobileDrawerOpen(false)}
-            />
-            <div className="relative w-72 max-w-[80vw] bg-white dark:bg-slate-900 h-full shadow-2xl z-10">
-              <AdminSidebar
-                activeRoute={activeRoute}
-                onNavigateRoute={onNavigateRoute}
-                collapsed={false}
-                onToggleCollapse={() => {}}
-                isMobileDrawer={true}
-                onCloseMobileDrawer={() => setMobileDrawerOpen(false)}
-                pendingModerationCount={pendingModerationCount}
-                securityAlertCount={securityAlertCount}
-              />
-            </div>
-          </div>
-        )}
+      {/* 2. Fullscreen Nav Overlay (PRD Section 6): 100vw x 100dvh matrix layout */}
+      <FullscreenNavOverlay
+        isOpen={isNavMenuOpen}
+        onClose={() => setIsNavMenuOpen(false)}
+        activeRoute={activeRoute}
+        onSelectRoute={(routeId) => onNavigateRoute(routeId)}
+      />
 
-        {/* Right Main Column */}
-        <div className="flex-1 flex flex-col min-w-0">
+      {/* 3. Main Body */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto space-y-6">
           
-          {/* Top Sticky Header */}
-          <AdminHeader
-            user={user}
-            onOpenMobileDrawer={() => setMobileDrawerOpen(true)}
-            onOpenSearch={() => setSearchModalOpen(true)}
-            onNavigateRoute={onNavigateRoute}
-            onSignOut={onSignOut}
-            pendingModerationCount={pendingModerationCount}
-            securityAlertCount={securityAlertCount}
-            pageTitle={pageTitle || activeRoute.replace(/-/g, ' ').toUpperCase()}
-          />
+          {/* Breadcrumb Navigation Bar */}
+          {breadcrumbs.length > 0 && (
+            <Breadcrumb 
+              items={breadcrumbs} 
+              onHomeClick={() => onNavigateRoute('dashboard')}
+            />
+          )}
 
-          {/* Main Dashboard Content Area */}
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto space-y-6">
-            
-            {/* Breadcrumb Navigation Bar */}
-            {breadcrumbs.length > 0 && (
-              <Breadcrumb 
-                items={breadcrumbs} 
-                onHomeClick={() => onNavigateRoute('dashboard')}
-              />
-            )}
-
-            {children}
-          </main>
-        </div>
-
+          {children}
+        </main>
       </div>
 
       {/* Global Command Search Modal */}

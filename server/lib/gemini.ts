@@ -12,13 +12,26 @@ export interface GeminiErrorInfo {
  * Retrieve the Gemini API key strictly from the server environment
  * Follows a clean precedence order:
  * process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENAI_API_KEY
+ * Validates key format to ensure OAuth tokens (ya29...) or placeholders are not passed to GoogleGenAI SDK.
  */
 export function getGeminiApiKey(): string | undefined {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
   if (!key || typeof key !== 'string' || key.trim().length === 0) {
     return undefined;
   }
-  return key.trim();
+  const trimmed = key.trim();
+
+  // OAuth 2 access tokens (e.g. starting with ya29) cannot be passed as Gemini API keys
+  if (trimmed.startsWith('ya29.') || trimmed.startsWith('ya29_')) {
+    return undefined;
+  }
+
+  // Filter out placeholder strings
+  if (/^(your|my|test|sample|dummy|placeholder)/i.test(trimmed) || trimmed === 'undefined' || trimmed === 'null') {
+    return undefined;
+  }
+
+  return trimmed;
 }
 
 /**

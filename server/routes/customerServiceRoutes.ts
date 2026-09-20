@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { firestore } from '../repositories';
 import { generateFamoResponse } from '../services/famoAiService';
+import { isGeminiConfigured } from '../lib/gemini';
 import { CSTicket, CSMessage, CSConversationState } from '../../src/types';
 
 export const customerServiceRouter = Router();
@@ -8,14 +9,14 @@ const CS_COLLECTION = 'cs_tickets';
 
 /**
  * GET /api/customer-service/status
- * Check if ChatGPT API is connected for Customer Service
+ * Check AI status for Customer Service
  */
 customerServiceRouter.get('/status', (req: Request, res: Response) => {
-  const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || (!!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
+  const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || isGeminiConfigured();
   return res.json({
     success: true,
-    connected: isConnected,
-    provider: process.env.OPENAI_API_KEY ? 'ChatGPT API' : 'Gemini CS Engine'
+    connected: true, // Always ready via Gemini AI or rule-based fallback CS
+    provider: isConnected ? (process.env.OPENAI_API_KEY ? 'ChatGPT API' : 'Gemini CS Engine') : 'Mod Station CS Engine'
   });
 });
 
@@ -63,14 +64,7 @@ customerServiceRouter.post('/chat', async (req: any, res: Response) => {
   try {
     const { ticketId, message, attachments = [], category = 'Umum', messageId } = req.body;
 
-    const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || (!!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
-    if (!isConnected) {
-      return res.status(400).json({
-        success: false,
-        code: 'API_NOT_CONNECTED',
-        error: { message: 'Error. No AI API keys (OpenAI or Gemini) are configured yet.' }
-      });
-    }
+    // Note: Famo AI automatically falls back to the built-in rule-based engine when AI API key is not configured or unavailable
 
     if (!message && attachments.length === 0) {
       return res.status(400).json({

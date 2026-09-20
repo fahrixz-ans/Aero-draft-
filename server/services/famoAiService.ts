@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { AppRepository } from '../repositories';
 import { CSAction } from '../../src/types';
+import { isGeminiConfigured } from '../lib/gemini';
 import { generateGeminiCSResponse } from './geminiCsService';
 
 // Lazy OpenAI Client initialization
@@ -226,7 +227,7 @@ Pedoman Kepribadian & Aturan:
   // ---------------------------------------------------------------------------
   // Gemini AI CS Engine Fallback
   // ---------------------------------------------------------------------------
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0) {
+  if (isGeminiConfigured()) {
     try {
       const geminiRes = await generateGeminiCSResponse({
         userMessage,

@@ -921,17 +921,22 @@ export interface UserSubscription {
 
 export interface DeveloperProfile {
   id: string;
-  uid: string;
-  devId: string;
+  uid?: string;
+  devId?: string;
   name: string;
-  email: string;
+  slug?: string;
+  secondaryName?: string;
+  email?: string;
   bio?: string;
   website?: string;
-  verified: boolean;
-  status: 'active' | 'pending' | 'rejected';
+  coverUrl?: string;
+  logoUrl?: string;
+  avatarUrl?: string;
+  verified?: boolean;
+  status?: 'active' | 'pending' | 'rejected';
   appCount?: number;
   totalDownloads?: number;
-  createdAt: string;
+  createdAt?: string;
   approvedAt?: string;
   approvedBy?: string;
 }
@@ -1276,4 +1281,60 @@ export * from './features/smartCollections/types/smartCollections';
 // TAHAP 9.10: ADMIN INTELLIGENCE & OBSERVABILITY LAYER
 // ----------------------------------------------------
 export * from './types/intelligence';
+
+// ----------------------------------------------------
+// TODAY DOCUMENT MODEL
+// ----------------------------------------------------
+export type TodayContentType =
+  | 'featured-story'
+  | 'featured-app'
+  | 'featured-game'
+  | 'editorial'
+  | 'collection';
+
+export type TodayContentSection =
+  | 'featured'
+  | 'today-picks'
+  | 'popular-apps'
+  | 'today-games'
+  | 'new-on-modstation'
+  | 'editorial-story'
+  | 'curated-collection';
+
+export interface TodayContent {
+  id: string;
+  type: TodayContentType;
+  section: TodayContentSection;
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  summary?: string;
+  bodyText?: string;
+  media: {
+    coverImage?: string;
+    cardImage?: string;
+    bannerImage?: string;
+    screenshots?: string[];
+  };
+  cta: {
+    text: string;
+    targetType: 'app' | 'game' | 'category' | 'developer' | 'external-link';
+    targetSlug?: string;
+    url?: string;
+  };
+  appRef?: {
+    appId: string;
+    appSlug: string;
+    appName: string;
+    iconUrl?: string;
+    version?: string;
+    category?: string;
+  };
+  publishedAt: string;
+  order: number;
+  status: 'draft' | 'published' | 'archived';
+  isFeatured?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 

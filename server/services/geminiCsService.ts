@@ -155,7 +155,8 @@ Keluaran JSON:`;
         suggestedState: wantsHumanAgent ? 'REQUESTING_AGENT' : 'AI_CHAT'
       };
     } catch (apiErr) {
-      console.warn('[Gemini CS] Gemini API call error, falling back to rule-based response:', apiErr);
+      const parsed = parseGeminiError(apiErr);
+      console.warn(`[Gemini CS] Gemini API call info (${parsed.code}): ${parsed.message}`);
     }
   }
 

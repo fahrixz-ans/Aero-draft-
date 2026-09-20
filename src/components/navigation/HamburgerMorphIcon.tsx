@@ -1,24 +1,70 @@
 import React from 'react';
-import { Menu, X } from 'lucide-react';
 
 interface HamburgerMorphIconProps {
   isOpen: boolean;
   className?: string;
 }
 
-export default function HamburgerMorphIcon({ isOpen, className = "w-5 h-5" }: HamburgerMorphIconProps) {
+/**
+ * HamburgerMorphIcon
+ * Exact two-line hamburger ("=") that smoothly transforms into a close cross ("×").
+ * Strictly obeys the blueprint specification:
+ * - CLOSED: "=" (2 horizontal lines, consistent thickness, length, and proportional distance)
+ * - OPEN: "×" (45deg cross intersecting precisely at center)
+ * - Respects prefers-reduced-motion
+ */
+export default function HamburgerMorphIcon({
+  isOpen,
+  className = "w-5 h-5"
+}: HamburgerMorphIconProps) {
   return (
-    <div className={`relative ${className} flex items-center justify-center shrink-0`}>
-      <Menu
-        className={`absolute inset-0 w-full h-full transition-all duration-[220ms] cubic-bezier(0.16, 1, 0.3, 1) transform ${
-          isOpen ? 'opacity-0 rotate-90 scale-75' : 'opacity-100 rotate-0 scale-100'
-        }`}
-      />
-      <X
-        className={`absolute inset-0 w-full h-full transition-all duration-[220ms] cubic-bezier(0.16, 1, 0.3, 1) transform ${
-          isOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-75'
-        }`}
-      />
-    </div>
+    <span
+      className={`relative inline-flex items-center justify-center shrink-0 ${className} pointer-events-none select-none`}
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 20 20"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full text-current overflow-visible"
+      >
+        {/* Line 1 (Top line in closed state '=', rotates 45deg in open state '×') */}
+        <line
+          x1="3"
+          y1="10"
+          x2="17"
+          y2="10"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          style={{
+            transformOrigin: '10px 10px',
+            transform: isOpen
+              ? 'translateY(0px) rotate(45deg)'
+              : 'translateY(-3.5px) rotate(0deg)',
+            transition: 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+        />
+
+        {/* Line 2 (Bottom line in closed state '=', rotates -45deg in open state '×') */}
+        <line
+          x1="3"
+          y1="10"
+          x2="17"
+          y2="10"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          style={{
+            transformOrigin: '10px 10px',
+            transform: isOpen
+              ? 'translateY(0px) rotate(-45deg)'
+              : 'translateY(3.5px) rotate(0deg)',
+            transition: 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+        />
+      </svg>
+    </span>
   );
 }
+

@@ -3,8 +3,8 @@ import { db } from '../../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit as firestoreLimit, onSnapshot } from 'firebase/firestore';
 
 export async function logAdminAction(params: {
-  action: AdminAuditAction;
-  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system' | 'notification' | 'banner';
+  action: AdminAuditAction | 'submission_approved' | 'submission_rejected' | 'submission_changes_requested' | 'app_published';
+  entityType: 'application' | 'version' | 'review' | 'report' | 'category' | 'collection' | 'security' | 'system' | 'notification' | 'banner' | 'developer_submission';
   entityId: string;
   entityName?: string;
   metadata?: Record<string, any>;

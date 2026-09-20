@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { generateRobotsTxt } from '../seo/robots';
-import { generateSitemapIndexXml, generateAppsSitemapXml, generateCategoriesSitemapXml, generateCollectionsSitemapXml } from '../seo/sitemap';
+import { 
+  generateSitemapIndexXml, 
+  generateAppsSitemapXml, 
+  generateGamesSitemapXml,
+  generateCategoriesSitemapXml, 
+  generateBlogSitemapXml,
+  generateCollectionsSitemapXml 
+} from '../seo/sitemap';
 import { validateAppSeo, calculateSeoHealthScore } from '../seo/validation';
 import { buildSeoReportObject, generateHumanReadableSeoReportText } from '../seo/reports';
 import { appsDb } from '../repositories';
@@ -26,15 +33,27 @@ seoRouter.get('/sitemap.xml', (req, res) => {
 });
 
 // Sitemap Partition Routes
-seoRouter.get('/sitemaps/apps.xml', async (req, res) => {
+seoRouter.get(['/sitemaps/apps.xml', '/sitemap-apps.xml'], async (req, res) => {
   res.header('Content-Type', 'application/xml');
   const xml = await generateAppsSitemapXml(appsDb);
   res.send(xml);
 });
 
-seoRouter.get('/sitemaps/categories.xml', (req, res) => {
+seoRouter.get(['/sitemaps/games.xml', '/sitemap-games.xml'], async (req, res) => {
+  res.header('Content-Type', 'application/xml');
+  const xml = await generateGamesSitemapXml(appsDb);
+  res.send(xml);
+});
+
+seoRouter.get(['/sitemaps/categories.xml', '/sitemap-categories.xml'], (req, res) => {
   res.header('Content-Type', 'application/xml');
   res.send(generateCategoriesSitemapXml());
+});
+
+seoRouter.get(['/sitemaps/blog.xml', '/sitemap-blog.xml'], async (req, res) => {
+  res.header('Content-Type', 'application/xml');
+  const xml = await generateBlogSitemapXml();
+  res.send(xml);
 });
 
 seoRouter.get('/sitemaps/collections.xml', async (req, res) => {

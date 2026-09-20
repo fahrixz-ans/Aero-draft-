@@ -1,83 +1,61 @@
 import React, { useState } from 'react';
-import DesktopHeader from './navigation/DesktopHeader';
-import MobileHeader from './navigation/MobileHeader';
+import GlobalHeader from './navigation/GlobalHeader';
 import MobileMenuDrawer from './MobileMenuDrawer';
-import { useResponsive } from '../hooks/useResponsive';
 import { UserRole, SubscriptionPlan } from '../types';
 
 interface NavbarProps {
+  apps?: any[];
   currentView: string;
   categoryFilter?: string;
   onNavigate: (view: string, slug?: string) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
-  onSearchFocus: () => void;
+  onSearchFocus?: () => void;
   onToggleSidebar?: () => void;
-  user: any;
+  user?: any;
   userRole?: UserRole;
   subscriptionPlan?: SubscriptionPlan;
-  onSignIn: () => void;
-  onSignOut: () => void;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
   unreadNotificationCount?: number;
   onOpenNotifications?: () => void;
 }
 
+/**
+ * Navbar
+ * Universal top-level navigation container for Mod Station.
+ * Renders the single GlobalHeader across all viewports and views,
+ * paired with the existing animated slide-in drawer.
+ */
 export default function Navbar({
+  apps = [],
   currentView,
-  categoryFilter = '',
   onNavigate,
   darkMode,
   onToggleDarkMode,
-  onSearchFocus,
-  onToggleSidebar,
   user,
   userRole = 'user',
   subscriptionPlan = 'free',
-  onSignIn,
-  onSignOut,
+  onSignIn = () => {},
+  onSignOut = () => {},
   unreadNotificationCount = 0,
   onOpenNotifications
 }: NavbarProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const { isDesktop } = useResponsive(768);
+
+  const isOwnerConsole = currentView === 'admin' || currentView.startsWith('admin-') || currentView === 'owner';
 
   return (
     <>
-      {/* 1. Desktop & Tablet Header (Rendered on desktop viewports) */}
-      {isDesktop && (
-        <DesktopHeader
-          currentView={currentView}
-          categoryFilter={categoryFilter}
-          onNavigate={onNavigate}
-          darkMode={darkMode}
-          onToggleDarkMode={onToggleDarkMode}
-          onSearchFocus={onSearchFocus}
-          onToggleSidebar={onToggleSidebar}
-          user={user}
-          userRole={userRole}
-          subscriptionPlan={subscriptionPlan}
-          onSignIn={onSignIn}
-          onSignOut={onSignOut}
-          unreadNotificationCount={unreadNotificationCount}
-          onOpenNotifications={onOpenNotifications}
-        />
-      )}
+      {/* 1. Global Header: Minimal, centered branding, character morph title, = to × morph */}
+      <GlobalHeader
+        isDrawerOpen={isDrawerOpen}
+        onToggleDrawer={() => setIsDrawerOpen(prev => !prev)}
+        onNavigate={onNavigate}
+        isOwnerConsole={isOwnerConsole}
+      />
 
-      {/* 2. Mobile Header (Rendered on mobile viewports) */}
-      {!isDesktop && (
-        <MobileHeader
-          currentView={currentView}
-          onNavigate={onNavigate}
-          onSearchFocus={onSearchFocus}
-          isDrawerOpen={isDrawerOpen}
-          onOpenDrawer={() => setIsDrawerOpen(prev => !prev)}
-          subscriptionPlan={subscriptionPlan}
-          unreadNotificationCount={unreadNotificationCount}
-          onOpenNotifications={onOpenNotifications}
-        />
-      )}
-
-      {/* 3. Universal Slide-out Navigation Drawer */}
+      {/* 2. Universal Navigation Drawer */}
       <MobileMenuDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -87,11 +65,14 @@ export default function Navbar({
         userRole={userRole}
         subscriptionPlan={subscriptionPlan}
         unreadNotificationCount={unreadNotificationCount}
+        onOpenNotifications={onOpenNotifications}
         darkMode={darkMode}
         onToggleDarkMode={onToggleDarkMode}
         onSignIn={onSignIn}
         onSignOut={onSignOut}
+        apps={apps}
       />
     </>
   );
 }
+

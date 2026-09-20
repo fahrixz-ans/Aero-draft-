@@ -1,6 +1,6 @@
-import { AppData, AeroUser } from '../types';
+import { AppData, AeroUser, TodayContent, TodayContentSection, TodayContentType } from '../types';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy, limit as firestoreLimit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit as firestoreLimit, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { fetchSystemHealth } from './health/systemHealthService';
 import { fetchAdminAuditLogs } from './admin/auditLogService';
 import { fetchAllBlogs } from './blogService';
@@ -779,4 +779,171 @@ export async function buildTodayDashboardData(
     announcements,
     latestBlogs
   };
+}
+
+// ==================================================
+// TODAY CONTENT FIRESTORE SERVICE & FALLBACK ENGINE
+// ==================================================
+
+export function generateFallbackTodayContents(apps: AppData[]): TodayContent[] {
+  if (!apps || apps.length === 0) return [];
+
+  const featuredApp = apps.find(a => a.featured) || apps[0];
+  const popularApps = apps.slice(0, 4);
+  const gameApps = apps.filter(a => a.category?.toLowerCase().includes('game') || a.categories?.some(c => c.toLowerCase().includes('game'))).slice(0, 3);
+  const nowStr = new Date().toISOString();
+
+  const items: TodayContent[] = [
+    {
+      id: 'tc-featured-1',
+      type: 'featured-story',
+      section: 'featured',
+      title: featuredApp.name,
+      subtitle: `Pilihan Utama Hari Ini: ${featuredApp.category}`,
+      badge: 'UNGGULAN HARI INI',
+      summary: featuredApp.description ? featuredApp.description.slice(0, 150) + '...' : 'Aplikasi yang paling banyak diunduh dan paling direkomendasikan hari ini.',
+      bodyText: featuredApp.description || 'Temukan fitur-fitur modifikasi terbaik tanpa iklan dan performa super kencang.',
+      media: {
+        coverImage: featuredApp.bannerUrl || featuredApp.screenshots?.[0] || featuredApp.iconUrl || featuredApp.icon,
+        cardImage: featuredApp.iconUrl || featuredApp.icon,
+        bannerImage: featuredApp.bannerUrl || featuredApp.screenshots?.[0] || featuredApp.iconUrl || featuredApp.icon,
+        screenshots: featuredApp.screenshots || []
+      },
+      cta: {
+        text: 'Dapatkan Sekarang',
+        targetType: featuredApp.category?.toLowerCase().includes('game') ? 'game' : 'app',
+        targetSlug: featuredApp.slug || featuredApp.id
+      },
+      appRef: {
+        appId: featuredApp.id,
+        appSlug: featuredApp.slug || featuredApp.id,
+        appName: featuredApp.name,
+        iconUrl: featuredApp.iconUrl || featuredApp.icon,
+        version: featuredApp.version,
+        category: featuredApp.category
+      },
+      publishedAt: nowStr,
+      order: 1,
+      status: 'published',
+      isFeatured: true
+    }
+  ];
+
+  if (popularApps.length > 0) {
+    popularApps.forEach((app, idx) => {
+      items.push({
+        id: `tc-pick-${app.id}`,
+        type: 'featured-app',
+        section: 'today-picks',
+        title: app.name,
+        subtitle: app.category,
+        badge: 'PILIHAN EDITOR',
+        summary: app.description ? app.description.slice(0, 100) + '...' : 'Aplikasi performa tinggi pilihan komunitas.',
+        media: {
+          cardImage: app.iconUrl || app.icon,
+          coverImage: app.bannerUrl || app.screenshots?.[0] || app.iconUrl || app.icon
+        },
+        cta: {
+          text: 'Lihat Aplikasi',
+          targetType: 'app',
+          targetSlug: app.slug || app.id
+        },
+        appRef: {
+          appId: app.id,
+          appSlug: app.slug || app.id,
+          appName: app.name,
+          iconUrl: app.iconUrl || app.icon,
+          version: app.version,
+          category: app.category
+        },
+        publishedAt: nowStr,
+        order: idx + 2,
+        status: 'published'
+      });
+    });
+  }
+
+  if (gameApps.length > 0) {
+    gameApps.forEach((game, idx) => {
+      items.push({
+        id: `tc-game-${game.id}`,
+        type: 'featured-game',
+        section: 'today-games',
+        title: game.name,
+        subtitle: game.category || 'Game Mod Paling Seru',
+        badge: 'GAME TERBAIK',
+        summary: 'Sajikan grafik memukau dan fitur unlocked premium.',
+        media: {
+          cardImage: game.iconUrl || game.icon,
+          coverImage: game.bannerUrl || game.screenshots?.[0] || game.iconUrl || game.icon
+        },
+        cta: {
+          text: 'Mainkan Game',
+          targetType: 'game',
+          targetSlug: game.slug || game.id
+        },
+        appRef: {
+          appId: game.id,
+          appSlug: game.slug || game.id,
+          appName: game.name,
+          iconUrl: game.iconUrl || game.icon,
+          version: game.version,
+          category: game.category
+        },
+        publishedAt: nowStr,
+        order: idx + 10,
+        status: 'published'
+      });
+    });
+  }
+
+  return items;
+}
+
+
+export async function fetchTodayContentsFromFirestore(apps: AppData[] = []): Promise<TodayContent[]> {
+  try {
+    const q = query(collection(db, 'todayContent'), orderBy('order', 'asc'));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return generateFallbackTodayContents(apps);
+    }
+
+    const results: TodayContent[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      results.push({
+        id: docSnap.id,
+        ...data
+      } as TodayContent);
+    });
+
+    return results.length > 0 ? results : generateFallbackTodayContents(apps);
+  } catch (err) {
+    console.warn('Failed to fetch todayContent collection from Firestore, using fallback:', err);
+    return generateFallbackTodayContents(apps);
+  }
+}
+
+export async function createTodayContent(content: Omit<TodayContent, 'id'>): Promise<string> {
+  const docRef = await addDoc(collection(db, 'todayContent'), {
+    ...content,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  return docRef.id;
+}
+
+export async function updateTodayContent(id: string, updates: Partial<TodayContent>): Promise<void> {
+  const ref = doc(db, 'todayContent', id);
+  await updateDoc(ref, {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+export async function deleteTodayContent(id: string): Promise<void> {
+  const ref = doc(db, 'todayContent', id);
+  await deleteDoc(ref);
 }

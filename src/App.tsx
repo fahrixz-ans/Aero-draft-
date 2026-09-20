@@ -49,8 +49,6 @@ import AppsView from './components/views/AppsView';
 import GamesView from './components/views/GamesView';
 import CategoriesView from './components/views/CategoriesView';
 import ForYouView from './components/views/ForYouView';
-import QrisDonationView from './components/views/QrisDonationView';
-import BankDonationView from './components/views/BankDonationView';
 import BlogMainView from './components/blog/BlogMainView';
 import BlogCategoryView from './components/blog/BlogCategoryView';
 import BlogSearchView from './components/blog/BlogSearchView';
@@ -95,7 +93,7 @@ import {
   Camera, Music, Video, Wrench, MessageSquare, Wallet, 
   ShieldCheck, Info, CheckCircle, Mail, AlertTriangle, Bookmark,
   Flame, TrendingUp, Sparkles, Layers, Compass, Clock, ArrowUpRight,
-  Shield, Check, Search, Bell, History
+  Shield, Check, Search, Bell, History, X, ExternalLink
 } from 'lucide-react';
 
 import { 
@@ -149,7 +147,14 @@ import {
 import { AeroUser as User } from './types';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db, auth } from './lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signOut, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult 
+} from 'firebase/auth';
 import ScrollToTopButton from './components/common/ScrollToTopButton';
 import OfflineBanner from './components/common/OfflineBanner';
 import { useInteractionAnalytics } from './hooks/useInteractionAnalytics';
@@ -208,6 +213,7 @@ export default function App() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationModal, setShowNotificationModal] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Interstitial modal state for free users (Section 32)
   const [interstitialDownload, setInterstitialDownload] = useState<{
@@ -373,6 +379,14 @@ export default function App() {
   // Synchronize Firebase Auth state and real-time Firestore user preferences
   useEffect(() => {
     let unmounted = false;
+
+    // Check redirect auth result if returning from redirect sign-in
+    getRedirectResult(auth).catch((err) => {
+      if (err && err.code !== 'auth/null-user') {
+        console.warn('Firebase getRedirectResult issue:', err);
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -502,15 +516,34 @@ export default function App() {
 
   // Google Sign-In trigger with Firebase
   const handleSignIn = async () => {
+    setAuthError(null);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
-      const provider = new GoogleAuthProvider();
+      // Synchronous trigger preserves the user gesture token to prevent auth/popup-blocked
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      console.error("Sign-In failed:", err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        alert('Login gagal: ' + (err.message || err));
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        return;
       }
+
+      if (err?.code === 'auth/popup-blocked') {
+        console.warn("Popup blocked by browser. Attempting fallback to signInWithRedirect...");
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr: any) {
+          console.warn("Redirect sign-in fallback error:", redirectErr);
+          setAuthError(
+            'Pop-up login diblokir oleh browser. Silakan izinkan pop-up di browser Anda atau buka aplikasi di tab baru untuk melanjutkan login.'
+          );
+          return;
+        }
+      }
+
+      console.warn("Sign-In failed:", err?.message || err);
+      setAuthError('Gagal masuk: ' + (err?.message || 'Silakan coba lagi.'));
     }
   };
 
@@ -579,6 +612,10 @@ export default function App() {
         const slug = hash.replace('#/games/type/', '');
         setSelectedAppSlug(slug);
         setCurrentView('detail');
+      } else if (hash.startsWith('#/dev-prof/')) {
+        const slug = hash.replace('#/dev-prof/', '').split('?')[0].trim();
+        setSelectedDeveloperSlug(slug);
+        setCurrentView('developer-detail');
       } else if (hash.startsWith('#/apps/developer/')) {
         const slug = hash.replace('#/apps/developer/', '');
         setSelectedDeveloperSlug(slug);
@@ -587,27 +624,20 @@ export default function App() {
         const slug = hash.replace('#/developer/', '');
         setSelectedDeveloperSlug(slug);
         setCurrentView('developer-detail');
-      } else if (hash.startsWith('#/detail')) {
-        let slug = '';
-        if (hash.startsWith('#/detail/')) {
-          slug = hash.slice(9);
-        } else {
-          slug = hash.slice(8);
-        }
-        slug = slug.split('?')[0].split('/')[0].trim().toLowerCase();
-        if (slug) {
-          setSelectedCategorySlug(slug);
-          setCurrentView('category-detail');
-        } else {
-          setSelectedCategorySlug(null);
-          setCurrentView('all-categories');
-        }
-      } else if (hash.startsWith('#/apps/category/')) {
-        const slug = hash.replace('#/apps/category/', '');
+      } else if (hash.startsWith('#/category/') && hash !== '#/category' && hash !== '#/category/') {
+        const slug = hash.replace('#/category/', '').split('?')[0].trim();
         setSelectedCategorySlug(slug);
         setCurrentView('category-detail');
-      } else if (hash.startsWith('#/category/') && hash !== '#/category' && hash !== '#/category/') {
-        const slug = hash.replace('#/category/', '');
+      } else if (hash.startsWith('#/categories/') && hash !== '#/categories' && hash !== '#/categories/') {
+        const slug = hash.replace('#/categories/', '').split('?')[0].trim();
+        setSelectedCategorySlug(slug);
+        setCurrentView('category-detail');
+      } else if (hash.startsWith('#/apps/category/')) {
+        const slug = hash.replace('#/apps/category/', '').split('?')[0].trim();
+        setSelectedCategorySlug(slug);
+        setCurrentView('category-detail');
+      } else if (hash.startsWith('#/detail/')) {
+        const slug = hash.replace('#/detail/', '').split('?')[0].trim();
         setSelectedCategorySlug(slug);
         setCurrentView('category-detail');
       } else if (hash.startsWith('#/apps/')) {
@@ -698,24 +728,58 @@ export default function App() {
         setCurrentView('compare');
       } else if (hash === '#/discover' || hash === '#/explore') {
         setCurrentView('discover');
-      } else if (hash === '#/search' || hash === '#/search/') {
-        setSearchQuery('');
-        setCurrentView('search');
-      } else if (hash === '#/search/type' || hash === '#/search/type/') {
-        setCurrentView('search-type');
-      } else if (hash.startsWith('#/search/type/')) {
-        const afterType = hash.replace('#/search/type/', '');
-        if (afterType.endsWith('/expand/Fully') || afterType.endsWith('/expand/fully')) {
-          const query = afterType.replace(/\/expand\/Fully/i, '');
-          setSearchQuery(decodeURIComponent(query));
-          setCurrentView('search-expand-fully');
-        } else if (afterType.endsWith('/expand') || afterType.endsWith('/expand/')) {
-          const query = afterType.replace(/\/expand\/?/i, '');
-          setSearchQuery(decodeURIComponent(query));
-          setCurrentView('search-expand');
+      } else if (hash.startsWith('#/search')) {
+        const pathPart = hash.replace('#/search', '').replace(/^\/+/, '');
+        if (!pathPart) {
+          setSearchQuery('');
+          setSelectedAppSlug(null);
+          setCurrentView('search');
         } else {
-          setSearchQuery(decodeURIComponent(afterType));
-          setCurrentView('search-results');
+          let cleanPath = pathPart;
+          if (cleanPath.startsWith('type/')) {
+            cleanPath = cleanPath.replace(/^type\//, '');
+          }
+          const parts = cleanPath.split('/').map(p => decodeURIComponent(p));
+          const query = parts[0] || '';
+          
+          if (parts.length >= 2 && parts[1] && parts[1] !== 'expand' && parts[1] !== 'Fully' && parts[1] !== 'fully') {
+            setSearchQuery(query);
+            setSelectedAppSlug(parts[1]);
+            setCurrentView('detail');
+          } else {
+            setSearchQuery(query);
+            setSelectedAppSlug(null);
+            setCurrentView('search');
+          }
+        }
+      } else if (hash.startsWith('#/detailapps/')) {
+        const rest = hash.replace('#/detailapps/', '').split('?')[0];
+        const parts = rest.split('/');
+        const slug = parts[0];
+        const subview = parts[1];
+        
+        setSelectedAppSlug(slug);
+        if (subview === 'download') {
+          setCurrentView('app-download');
+        } else if (subview === 'versions') {
+          setCurrentView('app-versions');
+        } else if (subview === 'reviews') {
+          setCurrentView('app-reviews');
+        } else if (subview === 'comments') {
+          setCurrentView('app-comments');
+        } else if (subview === 'screenshots') {
+          setCurrentView('app-screenshots');
+        } else if (subview === 'about') {
+          setCurrentView('app-detail-full');
+        } else {
+          setCurrentView('detail');
+        }
+      } else if (hash.startsWith('#/apps/')) {
+        const rest = hash.replace('#/apps/', '').split('?')[0];
+        const parts = rest.split('/');
+        if (parts[0] !== 'type') {
+          setSelectedAppSlug(parts[0]);
+          setCurrentView('detail');
         }
       } else if (hash === '#/subscription' || hash === '#/premium') {
         setCurrentView('subscription');
@@ -748,16 +812,18 @@ export default function App() {
       } else if (hash === '#/owner' || hash === '#/admin' || hash === '#/admin/dashboard') {
         setAdminInitialTab('dashboard');
         setCurrentView('admin');
+      } else if (hash.startsWith('#/admin/')) {
+        const tab = hash.replace('#/admin/', '').split('?')[0];
+        setAdminInitialTab(tab || 'dashboard');
+        setCurrentView('admin');
       } else if (hash === '#/admin/apps/new') {
         setAdminInitialTab('new-app');
         setCurrentView('admin');
       } else if (hash === '#/admin/moderation' || hash === '#/admin/reports') {
         setAdminInitialTab('reports');
         setCurrentView('admin');
-      } else if (hash === '#/donasi/qris' || hash === '#/donate/qris' || hash === '#/donasi-qris' || hash === '#/donate-qris' || hash === '#/qris') {
-        setCurrentView('donate-qris');
-      } else if (hash === '#/donasi/bank' || hash === '#/donate/bank' || hash === '#/donasi-bank' || hash === '#/donate-bank' || hash === '#/bank') {
-        setCurrentView('donate-bank');
+      } else if (hash === '#/donasi/qris' || hash === '#/donate/qris' || hash === '#/donasi-qris' || hash === '#/donate-qris' || hash === '#/qris' || hash === '#/donasi/bank' || hash === '#/donate/bank' || hash === '#/donasi-bank' || hash === '#/donate-bank' || hash === '#/bank' || hash === '#/donate' || hash === '#/donasi') {
+        setCurrentView('donate');
       } else if (hash === '#/social-media' || hash === '#/follow' || hash === '#/social') {
         setCurrentView('social-media');
       } else if (hash === '#/change-password' || hash === '#/ganti-kata-sandi') {
@@ -865,32 +931,25 @@ export default function App() {
         setSelectedAppSlug(null);
         setFilters(prev => ({ ...prev, category: '' }));
         setCurrentView('games');
-      } else if (view === 'search') {
-        window.location.hash = '/search';
+      } else if (['search', 'search-type', 'search-results', 'search-expand', 'search-expand-fully'].includes(view)) {
+        if (slug) {
+          window.location.hash = `/search/${encodeURIComponent(slug)}`;
+          setSearchQuery(slug);
+        } else if (searchQuery) {
+          window.location.hash = `/search/${encodeURIComponent(searchQuery)}`;
+        } else {
+          window.location.hash = '/search';
+          setSearchQuery('');
+        }
         setSelectedAppSlug(null);
         setCurrentView('search');
-      } else if (view === 'search-type') {
-        window.location.hash = '/search/type/';
-        setSelectedAppSlug(null);
-        setCurrentView('search-type');
-      } else if (view === 'search-results' && slug) {
-        window.location.hash = `/search/type/${encodeURIComponent(slug)}`;
-        setSelectedAppSlug(null);
-        setCurrentView('search-results');
-      } else if (view === 'search-expand' && slug) {
-        window.location.hash = `/search/type/${encodeURIComponent(slug)}/expand/`;
-        setSelectedAppSlug(null);
-        setCurrentView('search-expand');
-      } else if (view === 'search-expand-fully' && slug) {
-        window.location.hash = `/search/type/${encodeURIComponent(slug)}/expand/Fully`;
-        setSelectedAppSlug(null);
-        setCurrentView('search-expand-fully');
-      } else if (view === 'app-detail-type' && slug) {
-        window.location.hash = `/apps/type/${slug}`;
+      } else if (view === 'search-detail' && slug) {
+        const q = searchQuery || slug;
+        window.location.hash = `/search/${encodeURIComponent(q)}/${slug}`;
         setSelectedAppSlug(slug);
         setCurrentView('detail');
-      } else if (view === 'game-detail-type' && slug) {
-        window.location.hash = `/games/type/${slug}`;
+      } else if ((view === 'app-detail-type' || view === 'game-detail-type') && slug) {
+        window.location.hash = `/detailapps/${slug}`;
         setSelectedAppSlug(slug);
         setCurrentView('detail');
       } else if (view === 'all') {
@@ -932,7 +991,12 @@ export default function App() {
         setSelectedAppSlug(null);
         setCurrentView('categories');
       } else if (view === 'detail' && slug) {
-        window.location.hash = `/apps/${slug}`;
+        if (currentView === 'search' || window.location.hash.startsWith('#/search')) {
+          const q = searchQuery || slug;
+          window.location.hash = `/search/${encodeURIComponent(q)}/${slug}`;
+        } else {
+          window.location.hash = `/detailapps/${slug}`;
+        }
         setSelectedAppSlug(slug);
         setCurrentView('detail');
         const matched = apps.find(a => a.slug === slug || a.id === slug);
@@ -940,30 +1004,30 @@ export default function App() {
           trackAppClick(matched, { source: 'navigation' });
         }
       } else if (view === 'app-download' && slug) {
-        window.location.hash = `/apps/${slug}/download`;
+        window.location.hash = `/detailapps/${slug}/download`;
         setSelectedAppSlug(slug);
         setCurrentView('app-download');
       } else if (view === 'app-versions' && slug) {
-        window.location.hash = `/apps/${slug}/versions`;
+        window.location.hash = `/detailapps/${slug}/versions`;
         setSelectedAppSlug(slug);
         setCurrentView('app-versions');
       } else if (view === 'app-reviews' && slug) {
-        window.location.hash = `/apps/${slug}/reviews`;
+        window.location.hash = `/detailapps/${slug}/reviews`;
         setSelectedAppSlug(slug);
         setCurrentView('app-reviews');
       } else if (view === 'app-comments' && slug) {
-        window.location.hash = `/apps/${slug}/comments`;
+        window.location.hash = `/detailapps/${slug}/comments`;
         setSelectedAppSlug(slug);
         setCurrentView('app-comments');
       } else if (view === 'app-screenshots' && slug) {
-        window.location.hash = `/apps/${slug}/screenshots`;
+        window.location.hash = `/detailapps/${slug}/screenshots`;
         setSelectedAppSlug(slug);
         setCurrentView('app-screenshots');
       } else if ((view === 'detailapps' || view === 'app-about' || view === 'about') && slug) {
-        window.location.hash = `/apps/${slug}/about`;
+        window.location.hash = `/detailapps/${slug}/about`;
         setSelectedAppSlug(slug);
         setCurrentView('app-detail-full');
-      } else if (view === 'donate' || view === 'donasi') {
+      } else if (view === 'donate' || view === 'donasi' || view === 'donate-qris' || view === 'qris' || view === 'donate-bank' || view === 'bank') {
         window.location.hash = '/donate';
         setSelectedAppSlug(null);
         setCurrentView('donate');
@@ -1013,20 +1077,12 @@ export default function App() {
         setSelectedAppSlug(null);
         setCurrentView('privacy');
       } else if (view === 'admin' || view === 'owner-console') {
-        window.location.hash = '/admin';
-        setAdminInitialTab('dashboard');
+        window.location.hash = slug ? `/admin/${slug}` : '/admin';
+        setAdminInitialTab(slug || 'dashboard');
         setCurrentView('admin');
       } else if (view === 'developer-dashboard' || view === 'developer-console') {
         window.location.hash = '/developer-dashboard';
         setCurrentView('developer-dashboard');
-      } else if (view === 'donate-qris' || view === 'qris') {
-        window.location.hash = '/donasi/qris';
-        setSelectedAppSlug(null);
-        setCurrentView('donate-qris');
-      } else if (view === 'donate-bank' || view === 'bank') {
-        window.location.hash = '/donasi/bank';
-        setSelectedAppSlug(null);
-        setCurrentView('donate-bank');
       } else if (view === 'blog') {
         window.location.hash = '/blog';
         setCurrentView('blog');
@@ -1071,20 +1127,20 @@ export default function App() {
         window.location.hash = '/auth/registration/verification/';
         setSelectedAppSlug(null);
         setCurrentView('auth-verification');
-      } else if (view === 'developer-detail' && slug) {
-        window.location.hash = `/apps/developer/${slug}`;
+      } else if ((view === 'developer-detail' || view === 'dev-prof') && slug) {
+        window.location.hash = `/dev-prof/${slug}`;
         setSelectedDeveloperSlug(slug);
         setCurrentView('developer-detail');
       } else if ((view === 'category-detail' || view === 'category') && slug) {
-        window.location.hash = `/detail${slug}`;
+        window.location.hash = `/category/${slug}`;
         setSelectedCategorySlug(slug);
         setCurrentView('category-detail');
       } else if (view === 'all-developers' || view === 'developer' || view === 'developers') {
-        window.location.hash = '/developer';
+        window.location.hash = '/developers';
         setSelectedDeveloperSlug(null);
         setCurrentView('all-developers');
       } else if (view === 'all-categories' || view === 'category' || view === 'categories') {
-        window.location.hash = '/category';
+        window.location.hash = '/categories';
         setSelectedCategorySlug(null);
         setCurrentView('all-categories');
       } else {
@@ -1323,10 +1379,6 @@ export default function App() {
     'about',
     'dmca',
     'donate',
-    'donate-qris',
-    'qris',
-    'donate-bank',
-    'bank',
     'privacy',
     'terms',
     'downloads',
@@ -1349,9 +1401,61 @@ export default function App() {
     'blog-detail'
   ].includes(currentView);
 
+  if (currentView === 'admin') {
+    return (
+      <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
+        <OfflineBanner />
+        {isOwnerOrAdmin ? (
+          <AdminPanel onNavigate={navigateTo} user={user} initialTab={adminInitialTab} />
+        ) : (
+          <div className="py-20 text-center space-y-4 max-w-7xl mx-auto px-4 mt-20">
+            <ShieldCheck className="h-12 w-12 text-red-500 mx-auto" />
+            <h2 className="text-xl font-black text-slate-800 dark:text-white">Akses Ditolak</h2>
+            <p className="text-xs text-slate-500">Halaman ini hanya dapat diakses oleh operator administrator berwenang.</p>
+            <button
+              onClick={() => navigateTo('home')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Kembali ke Beranda
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
       <OfflineBanner />
+      
+      {/* Non-blocking dismissable Auth Notification Banner */}
+      {authError && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 sticky top-0 z-50 backdrop-blur-md">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+            <span className="truncate">{authError}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={window.location.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-[11px] font-semibold text-amber-900 dark:text-amber-100 transition-colors"
+            >
+              <span>Buka di Tab Baru</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <button
+              type="button"
+              onClick={() => setAuthError(null)}
+              className="p-1 hover:bg-amber-500/20 rounded-lg text-amber-800 dark:text-amber-200 cursor-pointer"
+              aria-label="Tutup notifikasi login"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Dynamic SEO Meta & JSON-LD Manager */}
       <DynamicSEO 
@@ -1365,9 +1469,10 @@ export default function App() {
         searchQuery={searchQuery}
       />
 
-      {/* Navigation Header bar - Hidden on dedicated internal views */}
-      {!isNoNavbarView && (
+      {/* Global Header Bar - Rendered uniformly across all views except admin */}
+      {currentView !== 'admin' && (
         <Navbar
+          apps={apps}
           currentView={currentView}
           categoryFilter={filters.category}
           onNavigate={navigateTo}
@@ -1385,21 +1490,8 @@ export default function App() {
         />
       )}
 
-      {/* Main Container Layout with Desktop App Store Sidebar */}
-      <div className="flex-1 flex flex-row w-full min-w-0">
-        {!isNoNavbarView && currentView !== 'admin' && (
-          <Sidebar
-            currentView={currentView}
-            onNavigate={navigateTo}
-            userRole={userRole}
-            user={user}
-            unreadNotificationCount={notifications.filter(n => !n.read).length}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
-          />
-        )}
-
-        <div className="flex-1 flex flex-col min-w-0 w-full">
+      {/* Main Content Layout */}
+      <div className="flex-1 flex flex-col min-w-0 w-full">
           {/* Secondary Category & Tab Navigation (Hanya pada halaman katalog APK yang memang membutuhkan filter kategori) */}
           {currentView === 'all' && (
             <SecondaryNav
@@ -1811,21 +1903,30 @@ export default function App() {
               />
             )}
 
-            {/* Search Discovery Page (Dedicated /search) */}
-            {['search', 'search-type', 'search-results', 'search-expand', 'search-expand-fully'].includes(currentView) && (
+            {/* Search Discovery Page (Single Unified /search View) */}
+            {currentView === 'search' && (
               <SearchDiscoveryView
                 apps={apps}
                 view={currentView}
                 searchQuery={searchQuery}
-                onSearchChange={(q) => setSearchQuery(q)}
+                onSearchChange={(q) => {
+                  setSearchQuery(q);
+                  if (q.trim()) {
+                    window.location.hash = `/search/${encodeURIComponent(q.trim())}`;
+                  } else {
+                    window.location.hash = '/search';
+                  }
+                }}
                 onSelectApp={(slug) => {
                   const matchedApp = apps.find(a => a.slug === slug || a.id === slug);
-                  if (matchedApp) {
-                    const isGame = matchedApp.category === 'Games';
-                    navigateTo(isGame ? 'game-detail-type' : 'app-detail-type', matchedApp.slug);
+                  const targetSlug = matchedApp ? matchedApp.slug : slug;
+                  if (searchQuery.trim()) {
+                    window.location.hash = `/search/${encodeURIComponent(searchQuery.trim())}/${targetSlug}`;
                   } else {
-                    navigateTo('detail', slug);
+                    window.location.hash = `/detailapps/${targetSlug}`;
                   }
+                  setSelectedAppSlug(targetSlug);
+                  setCurrentView('detail');
                 }}
                 onDownloadApp={handleDirectDownload}
                 downloadHistory={downloadHistory}
@@ -2461,31 +2562,7 @@ export default function App() {
             )}
 
 
-            {currentView === 'admin' && (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in font-sans">
-                {isOwnerOrAdmin ? (
-                  <AdminPanel onNavigate={navigateTo} user={user} initialTab={adminInitialTab} />
-                ) : (
-                  <div className="py-20 text-center space-y-4">
-                    <ShieldCheck className="h-12 w-12 text-red-500 mx-auto" />
-                    <h2 className="text-xl font-black text-slate-800 dark:text-white">Akses Ditolak</h2>
-                    <p className="text-xs text-slate-500">Halaman ini hanya dapat diakses oleh operator administrator berwenang.</p>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {(currentView === 'donate-qris' || currentView === 'qris') && (
-              <QrisDonationView
-                onBack={() => handleBack('home')}
-              />
-            )}
-
-            {(currentView === 'donate-bank' || currentView === 'bank') && (
-              <BankDonationView
-                onBack={() => handleBack('home')}
-              />
-            )}
 
             {currentView === 'donate' && (
               <DonateView
@@ -2535,7 +2612,6 @@ export default function App() {
           </>
         )}
       </main>
-      </div>
       </div>
 
       {/* Real-time Notification Center Modal */}
