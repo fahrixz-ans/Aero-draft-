@@ -1,23 +1,24 @@
 // ---------------------------------------------------------------------------
-// AUTH.JS GOOGLE OAUTH & RBAC PERMISSION ENFORCEMENT (STAGE 8.8 & 8.9)
+// MOD STATION FIREBASE AUTHENTICATION & RBAC PERMISSION ENFORCEMENT
+// Single source of truth for Firebase ID Token verification & role resolution
 // ---------------------------------------------------------------------------
 
 import { Request, Response, NextFunction } from 'express';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getApps, initializeApp, cert, type App as FirebaseAdminApp } from 'firebase-admin/app';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { ERROR_CODES, sendError } from './errors';
-import { UserRepository } from './repositories';
+import fs from 'fs';
+import path from 'path';
 
 export interface AuthSessionUser {
   id: string;
+  uid: string;
   email: string;
   name: string;
   image?: string;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'EDITOR' | 'MODERATOR' | 'ANALYST' | 'USER';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'EDITOR' | 'MODERATOR' | 'DEVELOPER' | 'USER';
   permissions: string[];
-}
-
-export interface AuthSession {
-  user: AuthSessionUser;
-  expires: string;
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -32,14 +33,15 @@ export const ALL_PERMISSIONS = [
   'versions.read', 'versions.create', 'versions.update', 'versions.publish',
   'categories.read', 'categories.create', 'categories.update',
   'collections.read', 'collections.create', 'collections.update', 'collections.publish',
+  'reviews.read', 'reviews.moderate', 'reviews.delete',
+  'developers.read', 'developers.update',
   'homepage.read', 'homepage.update',
   'moderation.read', 'moderation.approve', 'moderation.reject', 'moderation.review',
-  'security.read', 'security.scan', 'security.retry',
   'analytics.read',
   'audit.read',
   'access.read', 'access.update',
   'settings.read', 'settings.update',
-  'uploads.create', 'uploads.process'
+  'ai.generate', 'ai.moderate'
 ];
 
 export function getRolePermissions(role: string): string[] {
@@ -48,10 +50,12 @@ export function getRolePermissions(role: string): string[] {
       return [...ALL_PERMISSIONS];
     case 'ADMIN':
       return ALL_PERMISSIONS.filter(p => !p.startsWith('access.update'));
-    case 'MODERATOR':
-      return ['moderation.read', 'moderation.approve', 'moderation.reject', 'moderation.review', 'apps.read', 'security.read'];
     case 'EDITOR':
-      return ['apps.read', 'apps.create', 'apps.update', 'categories.read', 'collections.read', 'homepage.read'];
+      return ['apps.read', 'apps.create', 'apps.update', 'categories.read', 'collections.read', 'homepage.read', 'ai.generate'];
+    case 'MODERATOR':
+      return ['moderation.read', 'moderation.approve', 'moderation.reject', 'moderation.review', 'reviews.read', 'reviews.moderate', 'apps.read'];
+    case 'DEVELOPER':
+      return ['apps.read', 'apps.create', 'apps.update', 'versions.read', 'versions.create', 'analytics.read'];
     case 'ANALYST':
       return ['analytics.read', 'audit.read', 'apps.read'];
     default:
@@ -59,164 +63,157 @@ export function getRolePermissions(role: string): string[] {
   }
 }
 
-// In-memory active session store (for fast verification of Auth.js token)
-export const activeSessions = new Map<string, AuthSession>();
+// Helper to resolve admin app for Auth
+let configProjectId: string | undefined;
+let configDbId: string | undefined;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (configData.projectId) configProjectId = configData.projectId;
+    if (configData.firestoreDatabaseId && configData.firestoreDatabaseId !== '(default)') {
+      configDbId = configData.firestoreDatabaseId;
+    }
+  }
+} catch (e) {
+  console.warn('[Auth] Error reading firebase-applet-config.json:', e);
+}
 
-// Seed default superadmin session for administrative automation & preview testing
-const defaultSuperAdminSession: AuthSession = {
-  user: {
-    id: 'usr_superadmin',
-    email: 'fantrastore.id@gmail.com',
-    name: 'Super Admin',
-    image: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-    role: 'SUPER_ADMIN',
-    permissions: [...ALL_PERMISSIONS]
-  },
-  expires: new Date(Date.now() + 30 * 86400000).toISOString()
-};
-activeSessions.set('aero_admin_token_master', defaultSuperAdminSession);
-activeSessions.set('sess_default_admin', defaultSuperAdminSession);
+function getAdminApp(): FirebaseAdminApp {
+  const existing = getApps()[0];
+  if (existing) return existing;
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || configProjectId || 'mod-station-prod';
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return initializeApp({ projectId });
+  }
+
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')?.trim();
+
+  if (clientEmail && privateKey) {
+    try {
+      return initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey }),
+        projectId,
+      });
+    } catch (err) {
+      console.warn('[Auth] Failed to init Firebase Admin with credentials, falling back to default:', err);
+    }
+  }
+
+  return initializeApp({ projectId });
+}
+
+const db = getFirestore(getAdminApp(), configDbId || '(default)');
+const auth = getAdminAuth(getAdminApp());
 
 /**
- * Resolves or creates a user profile in Firestore.
+ * Resolves user from verified Firebase ID Token and Firestore profile.
  */
-export async function resolveOrCreateFirestoreUser(email: string, name: string, image?: string): Promise<AuthSessionUser> {
-  const normalizedEmail = email.toLowerCase().trim();
-  const userId = `usr_${Buffer.from(normalizedEmail).toString('hex').slice(0, 10)}`;
+export async function resolveUserSession(req: Request): Promise<AuthSessionUser | null> {
+  // If already resolved on this request cycle
+  if ((req as any).user) {
+    return (req as any).user;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const idToken = authHeader.substring(7).trim();
+  if (!idToken) return null;
 
   try {
-    const existingUser = await UserRepository.findById(userId);
-    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
-    const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
-    const permissions = getRolePermissions(role);
+    const decodedToken = await auth.verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+    const email = (decodedToken.email || '').toLowerCase().trim();
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email);
 
-    if (existingUser) {
-      // Update last login
-      await UserRepository.update(userId, {
-        lastLogin: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+    // Read user record from Firestore
+    let role: AuthSessionUser['role'] = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
+    let name = decodedToken.name || email.split('@')[0] || 'Mod Station User';
+    let image = decodedToken.picture || '';
 
-      return {
-        id: userId,
-        email: normalizedEmail,
-        name: existingUser.name || name,
-        image: existingUser.image || image,
-        role: (existingUser.role || role) as any,
-        permissions: getRolePermissions(existingUser.role || role)
-      };
-    } else {
-      // Create profile
-      const newUser = {
-        id: userId,
-        email: normalizedEmail,
-        name: name || normalizedEmail.split('@')[0],
-        image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || normalizedEmail)}&background=0D8ABC&color=fff`,
-        role: role,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+    try {
+      const userRef = db.collection('users').doc(uid);
+      const userDoc = await userRef.get();
 
-      await UserRepository.create(newUser);
-      return {
-        id: userId,
-        email: normalizedEmail,
-        name: newUser.name,
-        image: newUser.image,
-        role: newUser.role as any,
-        permissions
-      };
+      if (userDoc.exists) {
+        const userData = userDoc.data() || {};
+        if (isSuperAdmin) {
+          role = 'SUPER_ADMIN';
+        } else if (userData.role) {
+          role = userData.role as any;
+        }
+        if (userData.displayName || userData.name) name = userData.displayName || userData.name;
+        if (userData.photoURL || userData.image) image = userData.photoURL || userData.image;
+
+        // Update last login timestamp
+        userRef.update({
+          lastLogin: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        }).catch(() => undefined);
+      } else {
+        // First login: provision profile in Firestore
+        await userRef.set({
+          id: uid,
+          uid,
+          email,
+          name,
+          displayName: name,
+          image,
+          photoURL: image,
+          role: isSuperAdmin ? 'SUPER_ADMIN' : 'USER',
+          status: 'ACTIVE',
+          createdAt: Timestamp.now(),
+          lastLogin: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        }, { merge: true });
+      }
+    } catch (dbErr) {
+      console.warn('[Auth] Firestore profile read warning:', (dbErr as any)?.message || dbErr);
     }
-  } catch (error) {
-    console.error("UserRepository user resolution error:", error);
-    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(normalizedEmail);
-    const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
-    return {
-      id: userId,
-      email: normalizedEmail,
+
+    const sessionUser: AuthSessionUser = {
+      id: uid,
+      uid,
+      email,
       name,
       image,
       role,
       permissions: getRolePermissions(role)
     };
+
+    (req as any).user = sessionUser;
+    return sessionUser;
+  } catch (err: any) {
+    console.warn('[Auth] Token verification failed:', err?.message || err);
+    return null;
   }
 }
 
-export function resolveUserSession(req: Request): AuthSessionUser | null {
-  // If already resolved by express global middleware
-  if ((req as any).user) {
-    return (req as any).user;
-  }
-
-  // Check Authorization header
-  const authHeader = req.headers.authorization;
-  let token = '';
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7).trim();
-  } else if (req.headers['x-session-token']) {
-    token = String(req.headers['x-session-token']).trim();
-  } else if ((req as any).cookies && (req as any).cookies['next-auth.session-token']) {
-    token = (req as any).cookies['next-auth.session-token'];
-  }
-
-  if (token && activeSessions.has(token)) {
-    const session = activeSessions.get(token)!;
-    if (new Date(session.expires) > new Date()) {
-      return session.user;
-    } else {
-      activeSessions.delete(token);
-    }
-  }
-
-  // Parse raw cookie header if token not found
-  if (!token && req.headers.cookie) {
-    const match = req.headers.cookie.match(/next-auth\.session-token=([^;]+)/);
-    if (match && match[1]) {
-      token = decodeURIComponent(match[1].trim());
-      if (activeSessions.has(token)) {
-        const session = activeSessions.get(token)!;
-        if (new Date(session.expires) > new Date()) {
-          return session.user;
-        } else {
-          activeSessions.delete(token);
-        }
-      }
-    }
-  }
-
-  // Check if caller provides user email header for direct Google OAuth identity pass
-  const callerEmail = req.headers['x-user-email'] as string;
-  if (callerEmail) {
-    const normalized = callerEmail.toLowerCase().trim();
-    const isSuper = SUPER_ADMIN_EMAILS.includes(normalized);
-    return {
-      id: `usr_${Buffer.from(normalized).toString('hex').slice(0, 10)}`,
-      email: normalized,
-      name: normalized.split('@')[0],
-      role: isSuper ? 'SUPER_ADMIN' : 'USER',
-      permissions: isSuper ? [...ALL_PERMISSIONS] : ['apps.read']
-    };
-  }
-
-  return null;
-}
-
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const user = resolveUserSession(req);
+/**
+ * Middleware: Requires valid Firebase Authentication.
+ */
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const user = await resolveUserSession(req);
   if (!user) {
-    return sendError(res, ERROR_CODES.AUTH_REQUIRED, 'Otentikasi diperlukan untuk mengakses sumber daya ini.', 401);
+    return sendError(res, ERROR_CODES.AUTH_REQUIRED, 'Otentikasi Firebase diperlukan untuk mengakses sumber daya ini.', 401);
   }
   (req as any).user = user;
   next();
 }
 
+/**
+ * Middleware: Requires a specific RBAC permission.
+ */
 export function requirePermission(permission: string) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const user = resolveUserSession(req);
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = await resolveUserSession(req);
     if (!user) {
-      return sendError(res, ERROR_CODES.AUTH_REQUIRED, 'Otentikasi diperlukan untuk mengakses sumber daya ini.', 401);
+      return sendError(res, ERROR_CODES.AUTH_REQUIRED, 'Otentikasi Firebase diperlukan untuk mengakses sumber daya ini.', 401);
     }
 
     const hasPerm = user.role === 'SUPER_ADMIN' || user.permissions.includes(permission);
@@ -229,5 +226,27 @@ export function requirePermission(permission: string) {
 
     (req as any).user = user;
     next();
+  };
+}
+
+/**
+ * Middleware: Requires one of the specified roles.
+ */
+export function requireRole(...roles: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = await resolveUserSession(req);
+    if (!user) {
+      return sendError(res, ERROR_CODES.AUTH_REQUIRED, 'Otentikasi Firebase diperlukan untuk mengakses sumber daya ini.', 401);
+    }
+
+    if (user.role === 'SUPER_ADMIN' || roles.includes(user.role)) {
+      (req as any).user = user;
+      return next();
+    }
+
+    return sendError(res, ERROR_CODES.FORBIDDEN, `Akses ditolak: Peran '${user.role}' tidak memiliki akses ke endpoint ini.`, 403, {
+      allowedRoles: roles,
+      userRole: user.role
+    });
   };
 }

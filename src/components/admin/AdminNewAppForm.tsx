@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
-  Upload, Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, 
+  Smartphone, ShieldCheck, AlertTriangle, CheckCircle2, 
   X, FileText, Layers, Hash, Code, Save, RefreshCw, 
-  Sparkles, Check, AlertCircle, Eye, HelpCircle, HardDrive
+  Sparkles, Check, AlertCircle, Eye, HelpCircle, Link as LinkIcon, Image as ImageIcon, Trash2
 } from 'lucide-react';
 import BackButton from '../navigation/BackButton';
 import { AppData, AppStatus, PublishMode } from '../../types';
 import { db } from '../../lib/firebase';
-import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { CATEGORIES } from '../../data/appsData';
+import { validateAppUrl } from '../../services/validationService';
 import { logAdminAction } from '../../services/admin/auditLogService';
 
 interface AdminNewAppFormProps {
@@ -16,89 +17,39 @@ interface AdminNewAppFormProps {
   onSuccess: (newApp: AppData) => void;
 }
 
-interface ExtractedApkMeta {
-  packageName: string;
-  appName: string;
-  versionName: string;
-  versionCode: number;
-  minSdk: number;
-  targetSdk: number;
-  fileSize: string;
-  fileSizeBytes: number;
-  sha256: string;
-  sha1: string;
-  permissions: string[];
-  architectures: string[];
-  downloadUrl: string;
-}
-
-const DANGEROUS_PERMISSIONS = [
-  'android.permission.SYSTEM_ALERT_WINDOW',
-  'android.permission.REQUEST_INSTALL_PACKAGES',
-  'android.permission.BIND_ACCESSIBILITY_SERVICE',
-  'android.permission.RECORD_AUDIO',
-  'android.permission.CAMERA',
-  'android.permission.READ_SMS',
-  'android.permission.RECEIVE_SMS',
-  'android.permission.READ_CONTACTS',
-  'android.permission.ACCESS_FINE_LOCATION',
-  'android.permission.WRITE_EXTERNAL_STORAGE'
-];
-
 export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormProps) {
-  const [apkFile, setApkFile] = useState<File | null>(null);
-  const [analyzing, setAnalyzing] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [extractedMeta, setExtractedMeta] = useState<ExtractedApkMeta | null>(null);
-
   // Form Fields
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
     developer: '',
     category: CATEGORIES[0] || 'Utilitas',
-    description: '',
-    icon: '/uploads/default-app-icon.png',
-    screenshots: '',
     version: '1.0.0',
-    versionCode: 1,
     size: '25.0 MB',
-    androidVersion: 'Android 8.0+',
-    minSdk: 26,
-    targetSdk: 34,
-    whatsNew: 'Rilis perdana aplikasi di AeroAPK.',
-    officialDownloadUrl: '',
-    alternativeDownloadUrl: '',
+    apkDownloadUrl: '',
+    officialPageUrl: '',
+    iconUrl: '',
+    screenshots: ['', '', '', '', ''], // 5 screenshot slots (1 required, 4 optional)
+    description: '',
     status: 'published' as AppStatus,
-    publishMode: 'direct_apk' as PublishMode,
     featured: false,
-    popular: false,
-    permissions: [] as string[]
+    popular: false
   });
 
-  // Security Validation Checks
-  const [securityAck, setSecurityAck] = useState<boolean>(false);
+  // URL Validation states
+  const [urlValidationStatus, setUrlValidationStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid' | 'unverified'>('idle');
+  const [urlValidationMsg, setUrlValidationMsg] = useState('');
+
+  // Icon preview state
+  const [iconLoadError, setIconLoadError] = useState(false);
+  const [iconLoading, setIconLoading] = useState(false);
+
+  // Screenshot image load error states
+  const [screenshotLoadErrors, setScreenshotLoadErrors] = useState<boolean[]>([false, false, false, false, false]);
+
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Helper to compute SHA-256 in browser from File ArrayBuffer
-  const computeSha256 = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  // Helper to compute simple SHA-1
-  const computeSha1 = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
 
   // Generate slug from title
   const handleNameChange = (name: string) => {
@@ -110,138 +61,78 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
     setFormData(prev => ({ ...prev, name, slug }));
   };
 
-  // Process and extract APK File
-  const handleApkSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Load Demo Data requested by prompt
+  const loadDemoData = () => {
+    setFormData({
+      name: 'Demo Messenger',
+      slug: 'demo-messenger',
+      developer: 'Example Studio',
+      category: 'Komunikasi',
+      version: '1.0.0',
+      size: '24.5 MB',
+      apkDownloadUrl: 'https://example.com/downloads/demo-messenger.apk',
+      officialPageUrl: 'https://example.com/apps/demo-messenger',
+      iconUrl: 'https://example.com/images/demo-messenger.png',
+      screenshots: [
+        'https://example.com/images/screen-1.jpg',
+        'https://example.com/images/screen-2.jpg',
+        '',
+        '',
+        ''
+      ],
+      description: 'Deskripsi aplikasi demo.',
+      status: 'draft',
+      featured: false,
+      popular: false
+    });
+    setUrlValidationStatus('valid');
+    setUrlValidationMsg('URL Demo terverifikasi.');
+  };
 
-    if (!file.name.toLowerCase().endsWith('.apk')) {
-      alert('Berkas harus berformat .apk');
+  // Validate APK URL using validationService
+  const handleValidateApkUrl = async () => {
+    const url = formData.apkDownloadUrl.trim();
+    if (!url) {
+      setUrlValidationStatus('invalid');
+      setUrlValidationMsg('URL Download APK wajib diisi.');
       return;
     }
 
-    setApkFile(file);
-    setAnalyzing(true);
-    setUploadProgress(20);
+    setUrlValidationStatus('checking');
+    setUrlValidationMsg('Memeriksa URL...');
 
-    try {
-      // 1. Calculate Real SHA-256 & SHA-1
-      const sha256 = await computeSha256(file);
-      setUploadProgress(50);
-      const sha1 = await computeSha1(file);
-      setUploadProgress(70);
-
-      // 2. Format size in MB
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-
-      // 3. Extract heuristic package name and version from filename
-      let pkgName = 'com.' + file.name.toLowerCase().replace(/[^a-z0-9]/g, '.').replace(/\.apk$/, '').slice(0, 30);
-      if (!pkgName.includes('.')) pkgName = 'com.aero.' + pkgName;
-
-      // Extract sample permissions for APK analysis
-      const extractedPermissions = [
-        'android.permission.INTERNET',
-        'android.permission.ACCESS_NETWORK_STATE',
-        'android.permission.VIBRATE',
-        'android.permission.WAKE_LOCK'
-      ];
-
-      // If large size or specific name, simulate typical permissions
-      if (file.name.toLowerCase().includes('cam') || file.name.toLowerCase().includes('photo')) {
-        extractedPermissions.push('android.permission.CAMERA');
-      }
-      if (file.name.toLowerCase().includes('chat') || file.name.toLowerCase().includes('social')) {
-        extractedPermissions.push('android.permission.RECORD_AUDIO');
-      }
-
-      const derivedName = file.name.replace(/\.apk$/i, '').replace(/[-_]/g, ' ');
-
-      const meta: ExtractedApkMeta = {
-        packageName: pkgName,
-        appName: derivedName.charAt(0).toUpperCase() + derivedName.slice(1),
-        versionName: '1.0.0',
-        versionCode: 1,
-        minSdk: 26,
-        targetSdk: 34,
-        fileSize: sizeMB,
-        fileSizeBytes: file.size,
-        sha256: sha256,
-        sha1: sha1,
-        permissions: extractedPermissions,
-        architectures: ['arm64-v8a', 'armeabi-v7a'],
-        downloadUrl: `/uploads/${file.name}`
-      };
-
-      setExtractedMeta(meta);
-
-      // Populate form defaults
-      setFormData(prev => ({
-        ...prev,
-        name: prev.name || meta.appName,
-        slug: prev.slug || meta.appName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'),
-        version: meta.versionName,
-        versionCode: meta.versionCode,
-        size: meta.fileSize,
-        minSdk: meta.minSdk,
-        targetSdk: meta.targetSdk,
-        androidVersion: `Android 8.0+ (API ${meta.minSdk})`,
-        permissions: meta.permissions,
-        officialDownloadUrl: meta.downloadUrl
-      }));
-
-      setUploadProgress(100);
-    } catch (err) {
-      console.error('APK extraction failed:', err);
-      alert('Gagal mengekstrak metadata berkas APK.');
-    } finally {
-      setAnalyzing(false);
-    }
+    const res = await validateAppUrl(url, 'apk');
+    setUrlValidationStatus(res.status);
+    setUrlValidationMsg(res.message);
   };
 
-  // Perform rigorous security validation before allowing Firestore save
+  const handleScreenshotChange = (index: number, val: string) => {
+    const updated = [...formData.screenshots];
+    updated[index] = val;
+    setFormData(prev => ({ ...prev, screenshots: updated }));
+    const errs = [...screenshotLoadErrors];
+    errs[index] = false;
+    setScreenshotLoadErrors(errs);
+  };
+
   const validateForm = (): boolean => {
     const errors: string[] = [];
 
     if (!formData.name.trim()) errors.push('Nama aplikasi wajib diisi.');
     if (!formData.slug.trim()) errors.push('Slug URL aplikasi wajib diisi.');
     if (!formData.developer.trim()) errors.push('Nama pengembang (developer) wajib diisi.');
-    if (!formData.description.trim() || formData.description.length < 20) {
-      errors.push('Deskripsi aplikasi wajib diisi minimal 20 karakter.');
-    }
-    if (!formData.officialDownloadUrl.trim()) {
-      errors.push('Tautan unduh resmi / berkas APK wajib disediakan.');
-    }
-
-    // Security validations
-    if (extractedMeta) {
-      // 1. Package Name Format
-      const pkgRegex = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
-      if (!pkgRegex.test(extractedMeta.packageName)) {
-        errors.push(`Format Package Name (${extractedMeta.packageName}) tidak valid.`);
-      }
-
-      // 2. SHA-256 format check (64 hex characters)
-      if (!/^[a-fA-F0-9]{64}$/.test(extractedMeta.sha256)) {
-        errors.push('Format SHA-256 checksum tidak valid (wajib 64 karakter hex).');
-      }
-
-      // 3. Min SDK threshold check
-      if (extractedMeta.minSdk < 14) {
-        errors.push('Min SDK terlalu rendah (< API 14 Android 4.0).');
-      }
-
-      // 4. Sensitive permission check
-      const detectedDangerous = extractedMeta.permissions.filter(p => DANGEROUS_PERMISSIONS.includes(p));
-      if (detectedDangerous.length > 0 && !securityAck) {
-        errors.push(`Aplikasi meminta izin tingkat tinggi [${detectedDangerous.join(', ')}]. Wajib centang konfirmasi verifikasi keamanan.`);
-      }
+    if (!formData.apkDownloadUrl.trim()) errors.push('URL Download APK Resmi wajib diisi.');
+    if (!formData.iconUrl.trim()) errors.push('URL Ikon Aplikasi wajib diisi.');
+    if (!formData.screenshots[0]?.trim()) errors.push('URL Screenshot 1 (utama) wajib diisi.');
+    if (!formData.description.trim() || formData.description.length < 10) {
+      errors.push('Deskripsi lengkap aplikasi wajib diisi minimal 10 karakter.');
     }
 
     setValidationErrors(errors);
     return errors.length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, targetStatus?: AppStatus) => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -249,13 +140,10 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
     try {
       const appId = formData.slug || `app_${Date.now()}`;
       const now = new Date().toISOString();
+      const finalStatus = targetStatus || formData.status;
 
-      const screenshotsList = formData.screenshots
-        ? formData.screenshots.split(',').map(s => s.trim()).filter(Boolean)
-        : [
-            'https://images.unsplash.com/photo-1616469829941-c7200edec809?w=600&auto=format&fit=crop&q=80',
-            'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=600&auto=format&fit=crop&q=80'
-          ];
+      // Filter out empty screenshot URLs
+      const cleanedScreenshots = formData.screenshots.filter(s => s && s.trim().length > 0);
 
       const newAppPayload: AppData = {
         id: appId,
@@ -265,69 +153,37 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
         developerName: formData.developer.trim(),
         category: formData.category,
         description: formData.description.trim(),
-        icon: formData.icon.trim() || '/uploads/default-app-icon.png',
-        screenshots: screenshotsList,
+        icon: formData.iconUrl.trim(),
+        iconUrl: formData.iconUrl.trim(),
+        screenshots: cleanedScreenshots,
         version: formData.version.trim(),
         versionName: formData.version.trim(),
-        versionCode: Number(formData.versionCode) || 1,
-        size: formData.size,
-        androidVersion: formData.androidVersion,
-        minSdk: formData.minSdk,
-        targetSdk: formData.targetSdk,
+        versionCode: 1,
+        size: formData.size.trim() || '25.0 MB',
+        androidVersion: 'Android 8.0+',
+        minSdk: 26,
+        targetSdk: 34,
         rating: 4.8,
-        downloads: 100,
+        downloads: 120,
         releaseDate: now,
         updatedAt: now,
-        sourceType: formData.sourceType,
-        downloadUrl: formData.sourceType === 'apk' ? (formData.apkFileUrl.trim() || formData.officialDownloadUrl.trim()) : '',
-        officialDownloadUrl: formData.officialDownloadUrl.trim(),
-        officialUrl: formData.officialDownloadUrl.trim(),
-        apkFileUrl: formData.apkFileUrl.trim(),
-        alternativeDownloadUrl: formData.alternativeDownloadUrl.trim() || undefined,
+        sourceType: 'apk',
+        downloadUrl: formData.apkDownloadUrl.trim(),
+        officialDownloadUrl: formData.apkDownloadUrl.trim(),
+        officialUrl: formData.officialPageUrl.trim() || formData.apkDownloadUrl.trim(),
+        apkFileUrl: formData.apkDownloadUrl.trim(),
         featured: formData.featured,
         popular: formData.popular,
-        whatsNew: formData.whatsNew.trim(),
-        permissions: formData.permissions.length > 0 ? formData.permissions : ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
-        status: formData.status,
-        publishMode: formData.publishMode,
+        status: finalStatus,
+        publishMode: 'immediate' as PublishMode,
         verifiedSource: true,
-        healthStatus: 'healthy',
-        signingCertificate: {
-          sha256: extractedMeta?.sha256 || '9E:B7:44:A2:80:5F:6C:C1:21:47:89:FE:41:A5:A2:8F:D0:1B:02:14:1A:87:69:FE:40:9F:77:8E:41:00:2A:90',
-          sha1: extractedMeta?.sha1 || '3A:82:11:44:A2:80:5F:6C:C1:21:47:89:FE:41:A5:A2:8F:D0:1B:02',
-          issuer: `CN=${formData.developer || 'Aero Developer'}, O=${formData.developer || 'Aero'}, C=ID`,
-          subject: `CN=${formData.developer || 'Aero Developer'}, O=${formData.developer || 'Aero'}, C=ID`
-        }
+        healthStatus: 'healthy'
       };
 
-      // 1. Write to Firestore 'applications' collection
+      // Save to Firestore 'applications' collection
       await setDoc(doc(db, 'applications', appId), newAppPayload);
 
-      // 2. Also register initial version record in subcollection
-      try {
-        const versionId = `v_${formData.version.replace(/\./g, '_')}`;
-        await setDoc(doc(db, 'applications', appId, 'appVersions', versionId), {
-          id: versionId,
-          appId: appId,
-          versionName: formData.version,
-          versionCode: formData.versionCode,
-          apkFileUrl: formData.officialDownloadUrl,
-          fileSize: extractedMeta?.fileSizeBytes || 25000000,
-          minSdk: formData.minSdk,
-          targetSdk: formData.targetSdk,
-          sha256: extractedMeta?.sha256 || '',
-          permissions: formData.permissions,
-          changelog: formData.whatsNew,
-          status: formData.status,
-          securityStatus: 'passed',
-          createdAt: now,
-          updatedAt: now
-        });
-      } catch (e) {
-        console.warn('Subcollection version register warning:', e);
-      }
-
-      // 3. Log to 'admin_audit_logs' collection (Requirement 3)
+      // Log admin audit action
       await logAdminAction({
         action: 'app_created',
         entityType: 'application',
@@ -337,63 +193,69 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
           slug: newAppPayload.slug,
           version: newAppPayload.version,
           category: newAppPayload.category,
-          sha256: extractedMeta?.sha256 || 'manual_entry',
-          status: newAppPayload.status
+          status: newAppPayload.status,
+          apkDownloadUrl: newAppPayload.downloadUrl
         }
       });
 
       setSubmitSuccess(true);
       setTimeout(() => {
         onSuccess(newAppPayload);
-      }, 800);
+      }, 700);
 
     } catch (err) {
       console.error('Error saving application to Firestore:', err);
-      setValidationErrors(['Terjadi kendala saat menyimpan ke database Firestore. Silakan coba kembali.']);
+      setValidationErrors(['Terjadi kendala saat menyimpan ke database Firestore. Silakan periksa koneksi Anda.']);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const detectedDangerous = (formData.permissions || []).filter(p => DANGEROUS_PERMISSIONS.includes(p));
-
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-16">
+    <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-16 text-slate-100">
       
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <BackButton onBack={onBack} label="Kembali ke Katalog" showText={true} />
 
-        <div className="text-right">
-          <span className="px-3 py-1 bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-full text-xs font-extrabold">
-            Akses Khusus Operator Administrator
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadDemoData}
+            className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Muat Data Demo</span>
+          </button>
+          <span className="px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-extrabold">
+            Owner Console
           </span>
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-purple-600/10 border border-blue-500/20 dark:border-blue-500/30 rounded-3xl p-6 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-blue-600/15 via-indigo-600/15 to-purple-600/15 border border-blue-500/30 rounded-3xl p-6 relative overflow-hidden backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-md">
+          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-600/30">
             <Smartphone className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Tambah Aplikasi Baru & Ekstraksi APK
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              Tambah Aplikasi Baru
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              Ekstrak metadata biner APK secara otomatis dan jalankan validasi keamanan sebelum penerbitan ke Firestore.
+            <p className="text-xs text-slate-400 font-medium mt-0.5">
+              Daftarkan aplikasi melalui tautan resmi, tanpa unggah file.
             </p>
           </div>
         </div>
       </div>
 
       {validationErrors.length > 0 && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl space-y-1.5 animate-fade-in">
-          <div className="flex items-center gap-2 text-xs font-bold text-red-600 dark:text-red-400">
+        <div className="p-4 bg-red-500/10 border border-red-500/25 rounded-2xl space-y-1.5 animate-fade-in backdrop-blur-md">
+          <div className="flex items-center gap-2 text-xs font-bold text-red-400">
             <AlertCircle className="h-4 w-4" />
-            <span>Validasi Keamanan & Isian Formulir Belum Terpenuhi:</span>
+            <span>Formulir Belum Lengkap atau Tidak Valid:</span>
           </div>
-          <ul className="text-xs text-red-600/90 dark:text-red-400/90 list-disc list-inside space-y-0.5 pl-1 font-medium">
+          <ul className="text-xs text-red-300 list-disc list-inside space-y-0.5 pl-1 font-medium">
             {validationErrors.map((err, idx) => (
               <li key={idx}>{err}</li>
             ))}
@@ -402,205 +264,175 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
       )}
 
       {submitSuccess && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl text-xs font-bold flex items-center gap-2 animate-fade-in">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-2xl text-xs font-bold flex items-center gap-2 animate-fade-in backdrop-blur-md">
           <CheckCircle2 className="h-4 w-4" />
           <span>Aplikasi berhasil divalidasi dan disimpan ke Firestore! Mengalihkan...</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={(e) => handleSubmit(e)} className="space-y-6">
         
-        {/* SECTION 1: APK Upload & Auto Extraction */}
-        <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Upload className="h-4 w-4 text-blue-500" />
-              <span>1. Unggah Berkas APK untuk Ekstraksi Otomatis</span>
-            </h3>
-            {extractedMeta && (
-              <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold flex items-center gap-1">
-                <Check className="h-3.5 w-3.5" />
-                <span>Terekstraksi</span>
-              </span>
-            )}
-          </div>
-
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-blue-500/50 dark:hover:border-blue-500/50 rounded-2xl p-8 text-center cursor-pointer transition-all bg-slate-50/50 dark:bg-white/[0.01]"
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".apk"
-              onChange={handleApkSelect}
-              className="hidden"
-            />
-            <div className="w-12 h-12 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <HardDrive className="h-6 w-6" />
+        {/* SECTION 1: Tautan APK */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 text-base font-black text-white">
+            <div className="p-2 bg-blue-600/20 text-blue-400 rounded-xl">
+              <LinkIcon className="h-4 w-4" />
             </div>
-            <p className="text-xs font-bold text-slate-800 dark:text-white">
-              {apkFile ? apkFile.name : 'Klik atau seret berkas .APK ke area ini'}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Sistem akan menghitung hash SHA-256, ukuran berkas, package name, dan mendeteksi izin sensitif.
-            </p>
+            <span>1. Tautan APK</span>
           </div>
 
-          {analyzing && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Memproses biner APK & Menghitung SHA-256...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-600 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300">
+              URL Download APK Resmi <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <LinkIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <input
+                  type="url"
+                  value={formData.apkDownloadUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, apkDownloadUrl: e.target.value }))}
+                  placeholder="https://domain-resmi.com/aplikasi.apk"
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                  required
                 />
               </div>
+              <button
+                type="button"
+                onClick={handleValidateApkUrl}
+                disabled={urlValidationStatus === 'checking'}
+                className="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md shadow-blue-600/20"
+              >
+                {urlValidationStatus === 'checking' ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                <span>Validasi URL</span>
+              </button>
             </div>
-          )}
+            <p className="text-[11px] text-slate-400 font-medium">
+              Gunakan tautan unduhan langsung berakhiran .apk jika tersedia.
+            </p>
 
-          {extractedMeta && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 text-xs">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Package Name</span>
-                <p className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate">{extractedMeta.packageName}</p>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">SHA-256 Checksum</span>
-                <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate" title={extractedMeta.sha256}>
-                  {extractedMeta.sha256}
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Target SDK / Min SDK</span>
-                <p className="font-bold text-slate-800 dark:text-slate-200">
-                  Android 14 (API {extractedMeta.targetSdk}) / API {extractedMeta.minSdk}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 2: Security & Permissions Inspection */}
-        <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl p-6 space-y-4 shadow-sm">
-          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            <span>2. Audit Izin & Evaluasi Keamanan APK</span>
-          </h3>
-
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {(formData.permissions || []).map((perm, idx) => {
-                const isDangerous = DANGEROUS_PERMISSIONS.includes(perm);
-                return (
-                  <span
-                    key={idx}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold font-mono ${
-                      isDangerous
-                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
-                        : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {isDangerous && <AlertTriangle className="h-3 w-3" />}
-                    <span>{perm.replace('android.permission.', '')}</span>
-                  </span>
-                );
-              })}
-            </div>
-
-            {detectedDangerous.length > 0 && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span>Peringatan: {detectedDangerous.length} Izin Berisiko Tinggi Terdeteksi!</span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  Aplikasi ini meminta izin akses ke perangkat keras atau sistem sensitif. Pastikan file APK berasal dari sumber terpercaya sebelum mempublikasikannya.
-                </p>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-white cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={securityAck}
-                    onChange={(e) => setSecurityAck(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>Saya telah memverifikasi integritas APK dan menyetujui izin di atas.</span>
-                </label>
+            {urlValidationStatus !== 'idle' && (
+              <div className={`flex items-center gap-2 text-xs font-bold mt-2 px-3 py-2 rounded-lg ${
+                urlValidationStatus === 'valid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                urlValidationStatus === 'invalid' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+              }`}>
+                {urlValidationStatus === 'valid' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                {urlValidationStatus === 'invalid' && <AlertCircle className="h-3.5 w-3.5" />}
+                {urlValidationStatus === 'checking' && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                <span>
+                  {urlValidationStatus === 'valid' ? 'Siap untuk melanjutkan' :
+                   urlValidationStatus === 'invalid' ? 'URL tidak valid atau format salah' :
+                   urlValidationStatus === 'checking' ? 'Memeriksa URL...' : 'URL belum diperiksa'}
+                </span>
               </div>
             )}
           </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-300">
+              URL Halaman Resmi Aplikasi (opsional)
+            </label>
+            <input
+              type="url"
+              value={formData.officialPageUrl}
+              onChange={(e) => setFormData(prev => ({ ...prev, officialPageUrl: e.target.value }))}
+              placeholder="https://domain-resmi.com/aplikasi"
+              className="w-full px-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+            />
+          </div>
+
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-2.5 text-xs text-amber-300">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+            <span>Hanya daftarkan tautan yang resmi dan tepercaya.</span>
+          </div>
         </div>
 
-        {/* SECTION 3: App Catalog Metadata */}
-        <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-3xl p-6 space-y-5 shadow-sm">
-          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <FileText className="h-4 w-4 text-purple-500" />
-            <span>3. Informasi Katalog & Rincian Rilis</span>
-          </h3>
+        {/* SECTION 2: Identitas Aplikasi */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 text-base font-black text-white">
+            <div className="p-2 bg-purple-600/20 text-purple-400 rounded-xl">
+              <FileText className="h-4 w-4" />
+            </div>
+            <span>2. Identitas Aplikasi</span>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-slate-300">
                 Nama Aplikasi <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="Contoh: WhatsApp Messenger"
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-                required
-              />
+              <div className="relative">
+                <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="Contoh: WhatsApp Messenger"
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Slug URL (ID Unik) <span className="text-red-500">*</span>
+              <label className="text-xs font-bold text-slate-300">
+                Slug URL (ID unik) <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                value={formData.slug}
-                onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
-                placeholder="whatsapp-messenger"
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-                required
-              />
+              <div className="relative">
+                <Hash className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
+                  placeholder="whatsapp-messenger"
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-slate-300">
                 Pengembang / Developer <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                value={formData.developer}
-                onChange={(e) => setFormData(prev => ({ ...prev, developer: e.target.value }))}
-                placeholder="Contoh: Meta Platforms, Inc."
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-                required
-              />
+              <div className="relative">
+                <Smartphone className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={formData.developer}
+                  onChange={(e) => setFormData(prev => ({ ...prev, developer: e.target.value }))}
+                  placeholder="Nama perusahaan resmi"
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Kategori Aplikasi <span className="text-red-500">*</span>
+              <label className="text-xs font-bold text-slate-300">
+                Kategori Aplikasi
               </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-              >
-                {CATEGORIES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <Layers className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white outline-none appearance-none cursor-pointer"
+                >
+                  {CATEGORIES.map(c => (
+                    <option key={c} value={c} className="bg-slate-900 text-white">{c}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-slate-300">
                 Versi Rilis
               </label>
               <input
@@ -608,119 +440,257 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
                 value={formData.version}
                 onChange={(e) => setFormData(prev => ({ ...prev, version: e.target.value }))}
                 placeholder="1.0.0"
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                className="w-full px-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/40"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Ukuran Berkas
+              <label className="text-xs font-bold text-slate-300">
+                Ukuran Berkas (opsional)
               </label>
               <input
                 type="text"
                 value={formData.size}
                 onChange={(e) => setFormData(prev => ({ ...prev, size: e.target.value }))}
-                placeholder="25.4 MB"
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                placeholder="25.0 MB"
+                className="w-full px-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/40"
               />
             </div>
           </div>
+        </div>
+
+        {/* SECTION 3: Gambar & Preview berbasis URL */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 text-base font-black text-white">
+            <div className="p-2 bg-emerald-600/20 text-emerald-400 rounded-xl">
+              <ImageIcon className="h-4 w-4" />
+            </div>
+            <span>3. Gambar & Preview berbasis URL</span>
+          </div>
+
+          {/* Icon URL Input */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-slate-300">
+              URL Ikon Aplikasi <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <LinkIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+              <input
+                type="url"
+                value={formData.iconUrl}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, iconUrl: e.target.value }));
+                  setIconLoadError(false);
+                }}
+                placeholder="https://domain.com/icon.png"
+                className="w-full pl-10 pr-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                required
+              />
+            </div>
+
+            {/* Dedicated Icon Preview Container Below Input */}
+            <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl flex items-center gap-4">
+              <div className="w-20 h-20 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center shrink-0 shadow-lg relative">
+                {formData.iconUrl && !iconLoadError ? (
+                  <img 
+                    src={formData.iconUrl} 
+                    alt="Icon preview" 
+                    className="w-full h-full object-contain p-1"
+                    onError={() => setIconLoadError(true)}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-600 gap-1">
+                    <ImageIcon className="h-6 w-6" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-white">Pratinjau Ikon Aplikasi</p>
+                {formData.iconUrl ? (
+                  iconLoadError ? (
+                    <p className="text-[11px] text-red-400 font-medium flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      <span>Gagal memuat gambar dari URL. Periksa kembali tautan gambar Anda.</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-emerald-400 font-medium truncate mt-1">
+                      Menampilkan gambar dari: {formData.iconUrl}
+                    </p>
+                  )
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Masukkan URL gambar ikon di atas untuk melihat pratinjau langsung secara real-time.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Screenshots URL Inputs (1 required, 4 optional) */}
+          <div className="space-y-4 pt-2">
+            <label className="text-xs font-bold text-slate-300">
+              URL Screenshot / Preview <span className="text-red-500">*</span>
+            </label>
+
+            {formData.screenshots.map((scrUrl, idx) => (
+              <div key={idx} className="p-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <LinkIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                    <input
+                      type="url"
+                      value={scrUrl}
+                      onChange={(e) => handleScreenshotChange(idx, e.target.value)}
+                      placeholder={`URL Screenshot #${idx + 1} ${idx === 0 ? '(Wajib)' : '(Opsional)'}`}
+                      className="w-full pl-10 pr-3.5 py-3 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-mono text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+                      required={idx === 0}
+                    />
+                  </div>
+
+                  {idx > 0 && scrUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleScreenshotChange(idx, '')}
+                      className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all cursor-pointer shrink-0"
+                      title="Hapus screenshot"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dedicated Screenshot Preview Container Below Input */}
+                <div className="w-full h-40 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center relative shadow-inner">
+                  {scrUrl && !screenshotLoadErrors[idx] ? (
+                    <img 
+                      src={scrUrl} 
+                      alt={`Screenshot ${idx + 1}`} 
+                      className="w-full h-full object-cover"
+                      onError={() => {
+                        const errs = [...screenshotLoadErrors];
+                        errs[idx] = true;
+                        setScreenshotLoadErrors(errs);
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-500 gap-1.5 p-4 text-center">
+                      {scrUrl && screenshotLoadErrors[idx] ? (
+                        <>
+                          <AlertCircle className="h-5 w-5 text-red-400" />
+                          <span className="text-[11px] font-medium text-red-400">Gagal memuat gambar screenshot #{idx + 1}. Periksa tautan URL.</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-6 w-6 text-slate-600" />
+                          <span className="text-[11px] text-slate-500 font-medium">Pratinjau Screenshot #{idx + 1} (Belum diisi)</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-lg text-[10px] font-bold text-white shadow">
+                    Slot #{idx + 1} {idx === 0 && '*'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 4: Deskripsi & Publikasi */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-5 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 text-base font-black text-white">
+            <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl">
+              <FileText className="h-4 w-4" />
+            </div>
+            <span>4. Deskripsi & Publikasi</span>
+          </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            <label className="text-xs font-bold text-slate-300">
               Deskripsi Lengkap Aplikasi <span className="text-red-500">*</span>
             </label>
             <textarea
-              rows={4}
+              rows={5}
+              maxLength={2000}
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Jelaskan fitur utama, keunggulan, dan panduan penggunaan aplikasi..."
-              className="w-full p-3.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="Jelaskan secara singkat tentang aplikasi ini, fitur utama, dan kelebihannya..."
+              className="w-full p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-medium text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40 resize-none"
               required
             />
+            <div className="text-right text-[10px] font-mono text-slate-500">
+              {formData.description.length}/2000
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              Tautan Unduh Resmi (Official URL / APK Path) <span className="text-red-500">*</span>
+            <label className="text-xs font-bold text-slate-300">
+              Status Publikasi
             </label>
-            <input
-              type="text"
-              value={formData.officialDownloadUrl}
-              onChange={(e) => setFormData(prev => ({ ...prev, officialDownloadUrl: e.target.value }))}
-              placeholder="/uploads/my-app.apk atau https://..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none"
-              required
-            />
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
+              className="w-full px-3.5 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-bold text-white outline-none cursor-pointer"
+            >
+              <option value="draft" className="bg-slate-900">Draft (Simpan sebagai draf)</option>
+              <option value="published" className="bg-slate-900">Published (Terbit langsung)</option>
+            </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                URL Icon Aplikasi
-              </label>
-              <input
-                type="text"
-                value={formData.icon}
-                onChange={(e) => setFormData(prev => ({ ...prev, icon: e.target.value }))}
-                placeholder="/uploads/icon.png"
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Status Publikasi
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
-              >
-                <option value="published">Terbit Langsung (Published)</option>
-                <option value="draft">Simpan sebagai Draf (Draft)</option>
-                <option value="archived">Arsipkan (Archived)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 pt-2">
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+          <div className="flex flex-wrap items-center gap-6 pt-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.featured}
                 onChange={(e) => setFormData(prev => ({ ...prev, featured: e.target.checked }))}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-blue-500 h-4 w-4"
               />
-              <span>Tampilkan di Pilihan Redaksi (Featured)</span>
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                <span>Tampilkan sebagai Pilihan Redaksi</span>
+              </span>
             </label>
 
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.popular}
                 onChange={(e) => setFormData(prev => ({ ...prev, popular: e.target.checked }))}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-blue-500 h-4 w-4"
               />
-              <span>Tandai sebagai Aplikasi Populer</span>
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+                <span>Tandai sebagai Populer</span>
+              </span>
             </label>
           </div>
         </div>
 
-        {/* Submit Action Bar */}
+        {/* Bottom Action Bar */}
         <div className="flex items-center justify-end gap-3 pt-4">
           <button
             type="button"
             onClick={onBack}
-            className="px-6 py-3 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+            className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl text-xs font-bold transition-all cursor-pointer"
           >
             Batal
           </button>
 
           <button
-            type="submit"
+            type="button"
+            onClick={(e) => handleSubmit(e, 'draft')}
             disabled={submitting}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-extrabold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Simpan sebagai Draft</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, 'published')}
+            disabled={submitting}
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-extrabold shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {submitting ? (
               <>
@@ -729,8 +699,8 @@ export default function AdminNewAppForm({ onBack, onSuccess }: AdminNewAppFormPr
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
-                <span>Simpan & Terbitkan ke Firestore</span>
+                <Check className="h-4 w-4" />
+                <span>Validasi & Simpan Aplikasi</span>
               </>
             )}
           </button>

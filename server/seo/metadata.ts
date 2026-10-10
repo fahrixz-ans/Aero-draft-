@@ -11,7 +11,7 @@ export interface PageSeoMetadata {
   robots: string;
 }
 
-const BASE_URL = process.env.AUTH_URL || 'https://aeroapk.com';
+const BASE_URL = process.env.VITE_SITE_URL || process.env.AUTH_URL || 'https://fantra.modstation.vercel.app';
 
 export function normalizeAppData(app: any): AppData {
   return {

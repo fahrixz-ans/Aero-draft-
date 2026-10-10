@@ -40,7 +40,7 @@ import { sendError, ERROR_CODES } from './server/errors';
 const app = express();
 app.set('trust proxy', true);
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 validateProductionConfig();

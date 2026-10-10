@@ -7,6 +7,7 @@ import {
   RankMovement 
 } from './types';
 import { getLocalMetricsCache } from '../analytics/analyticsService';
+import { getStoredAeroEvents } from './eventService';
 
 // In-memory cache for computed trending results to avoid heavy recomputation
 const trendingCache = new Map<string, { timestamp: number; results: TrendingAppResult[] }>();
@@ -174,3 +175,56 @@ export function getTrendingRankings(
   trendingCache.set(cacheKey, { timestamp: Date.now(), results });
   return results;
 }
+
+/**
+   * Clears the trending results cache to force recalculation
+   */
+export function clearTrendingCache(): void {
+  trendingCache.clear();
+}
+
+/**
+ * Recalculates trending rankings in real-time based on latest download timestamps and events from Firestore
+ */
+export async function recalculateTrending(
+  apps: AppData[],
+  window: TrendingWindow = '7d',
+  limitCount: number = 10,
+  weights: TrendingWeights = DEFAULT_TRENDING_WEIGHTS
+): Promise<TrendingAppResult[]> {
+  clearTrendingCache();
+  try {
+    const events = await getStoredAeroEvents({ max: 500 });
+    const downloadEventsByApp: Record<string, number> = {};
+    const latestDownloadTimestampByApp: Record<string, number> = {};
+
+    events.forEach(ev => {
+      if (ev.appId) {
+        if (ev.eventType === 'download' || ev.eventType === 'official_website_click') {
+          downloadEventsByApp[ev.appId] = (downloadEventsByApp[ev.appId] || 0) + 1;
+          const ts = ev.timestamp?.toMillis ? ev.timestamp.toMillis() : (ev.timestamp?.seconds ? ev.timestamp.seconds * 1000 : new Date(ev.timestamp || Date.now()).getTime());
+          if (!latestDownloadTimestampByApp[ev.appId] || ts > latestDownloadTimestampByApp[ev.appId]) {
+            latestDownloadTimestampByApp[ev.appId] = ts;
+          }
+        }
+      }
+    });
+
+    const enhancedApps = apps.map(app => {
+      const latestTs = latestDownloadTimestampByApp[app.id];
+      const firestoreDownloads = downloadEventsByApp[app.id] || 0;
+      return {
+        ...app,
+        downloads: (app.downloads || 0) + firestoreDownloads,
+        updatedAt: latestTs ? new Date(Math.max(new Date(app.updatedAt || 0).getTime(), latestTs)).toISOString() : app.updatedAt
+      };
+    });
+
+    return getTrendingRankings(enhancedApps, window, limitCount, weights);
+  } catch (err) {
+    console.error('Failed to recalculate trending from Firestore:', err);
+    clearTrendingCache();
+    return getTrendingRankings(apps, window, limitCount, weights);
+  }
+}
+

@@ -5,23 +5,18 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: #f8fafc;
+    color: #0f172a;
   }
 }
 
 @theme {
-  --color-brand-light-bg: #fbfbfd;
-  --color-brand-light-sec: #f5f5f7;
-  --color-brand-light-primary: #1d1d1f;
-  --color-brand-light-secondary: #86868b;
-  --color-brand-light-border: #d2d2d7;
-  --color-brand-light-accent: #0071e3;
-
-  --color-brand-dark-bg: #000000;
-  --color-brand-dark-sec: #161617;
-  --color-brand-dark-primary: #f5f5f7;
-  --color-brand-dark-secondary: #a1a1a6;
-  --color-brand-dark-border: #424245;
-  --color-brand-dark-accent: #2997ff;
+  --color-brand-light-bg: #ffffff;
+  --color-brand-light-sec: #f8fafc;
+  --color-brand-light-primary: #0f172a;
+  --color-brand-light-secondary: #64748b;
+  --color-brand-light-border: #e2e8f0;
+  --color-brand-light-accent: #2563eb;
 
   --radius-modal: 18px;
   --radius-badge: 6px;
@@ -32,58 +27,34 @@
 
 @utility bg-brand-bg {
   background-color: var(--color-brand-light-bg);
-  .dark & {
-    background-color: var(--color-brand-dark-bg);
-  }
 }
 
 @utility bg-brand-sec {
   background-color: var(--color-brand-light-sec);
-  .dark & {
-    background-color: var(--color-brand-dark-sec);
-  }
 }
 
 @utility text-brand-primary {
   color: var(--color-brand-light-primary);
-  .dark & {
-    color: var(--color-brand-dark-primary);
-  }
 }
 
 @utility text-brand-secondary {
   color: var(--color-brand-light-secondary);
-  .dark & {
-    color: var(--color-brand-dark-secondary);
-  }
 }
 
 @utility border-brand-border {
   border-color: var(--color-brand-light-border);
-  .dark & {
-    border-color: var(--color-brand-dark-border);
-  }
 }
 
 @utility bg-brand-accent {
   background-color: var(--color-brand-light-accent);
-  .dark & {
-    background-color: var(--color-brand-dark-accent);
-  }
 }
 
 @utility text-brand-accent {
   color: var(--color-brand-light-accent);
-  .dark & {
-    color: var(--color-brand-dark-accent);
-  }
 }
 
 @utility border-brand-accent {
   border-color: var(--color-brand-light-accent);
-  .dark & {
-    border-color: var(--color-brand-dark-accent);
-  }
 }
 
 /* ==========================================================================
@@ -96,10 +67,10 @@
   will-change: transform;
 }
 .btn-press-feedback:active {
-  transform: scale(0.90);
+  transform: scale(0.95);
 }
 
-/* 2. Notification Bell Ring (scale 1 -> 1.1 -> 1 + subtle shake 220ms) */
+/* 2. Notification Bell Ring */
 @keyframes icon-bell-ring {
   0% { transform: scale(1) rotate(0deg); }
   25% { transform: scale(1.1) rotate(-8deg); }
@@ -120,7 +91,7 @@
   transform: rotate(180deg);
 }
 
-/* 4. Icon X Close Pop (scale 0.85 -> 1 + rotate 8deg -> 0deg 180ms) */
+/* 4. Icon X Close Pop */
 @keyframes icon-close-pop {
   0% { transform: scale(0.85) rotate(8deg); }
   100% { transform: scale(1) rotate(0deg); }
@@ -136,7 +107,7 @@
   transform: scale(0.85) rotate(8deg);
 }
 
-/* 5. Icon Arrow Left Push (translateX(0) -> -4px -> 0 180ms) */
+/* 5. Icon Arrow Left Push */
 @keyframes icon-arrow-left-push {
   0% { transform: translateX(0); }
   50% { transform: translateX(-4px); }
@@ -146,7 +117,7 @@
   animation: icon-arrow-left-push 180ms ease-out forwards;
 }
 
-/* 6. Icon Arrow Right Push (translateX(0) -> 4px -> 0 180ms) */
+/* 6. Icon Arrow Right Push */
 @keyframes icon-arrow-right-push {
   0% { transform: translateX(0); }
   50% { transform: translateX(4px); }
@@ -156,7 +127,7 @@
   animation: icon-arrow-right-push 180ms ease-out forwards;
 }
 
-/* 7. Icon Refresh Spin 360deg (600ms smooth cubic-bezier) */
+/* 7. Icon Refresh Spin 360deg */
 @keyframes icon-spin-once {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -179,4 +150,3 @@
     transform: none !important;
   }
 }
-

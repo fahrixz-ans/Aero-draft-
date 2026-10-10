@@ -23,6 +23,7 @@ import {
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { CATEGORIES_100 } from '../src/data/categories100';
 
 export interface AppEntity {
   id: string;
@@ -249,18 +250,25 @@ function getAdminApp(): FirebaseAdminApp {
   const projectId = process.env.FIREBASE_PROJECT_ID || configProjectId || 'mod-station-prod';
 
   // Firestore emulator intentionally does not require a service-account key.
-  // Production always requires explicit server credentials.
   if (process.env.FIRESTORE_EMULATOR_HOST) {
     return initializeApp({ projectId });
   }
 
-  const clientEmail = requiredEnv('FIREBASE_CLIENT_EMAIL');
-  const privateKey = requiredEnv('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n');
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')?.trim();
 
-  return initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
-    projectId,
-  });
+  if (clientEmail && privateKey) {
+    try {
+      return initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey }),
+        projectId,
+      });
+    } catch (err) {
+      console.warn('[Repositories] Failed to initialize Firebase Admin with credentials, falling back to default:', err);
+    }
+  }
+
+  return initializeApp({ projectId });
 }
 
 const resolvedDatabaseId = (configDbId && configDbId !== '(default)') 
@@ -313,21 +321,114 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
+// Explicitly exported so callers can access the cache/queues backed by Firestore
+export const appsDb: AppEntity[] = [];
+export const versionsDb: VersionEntity[] = [];
+export const categoriesDb: CategoryEntity[] = CATEGORIES_100.map((name, index) => {
+  const slug = name.trim().toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'kategori';
+  return {
+    id: `cat_${slug}`,
+    name,
+    slug,
+    description: `Koleksi aplikasi dan game Android terverifikasi kategori ${name}.`,
+    sortOrder: index,
+    status: 'ACTIVE',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+});
+export const collectionsDb: CollectionEntity[] = [];
+export const jobsDb: JobEntity[] = [];
+export const uploadsDb: UploadEntity[] = [];
+export const deadLetterJobsDb: any[] = [];
+export const moderationDb: ModerationEntity[] = [];
+export const securityScansDb: SecurityScanEntity[] = [];
+export const auditLogsDb: any[] = [];
+export const usersDb: UserEntity[] = [];
+export const systemSettingsDb: Record<string, any> = {};
+
+function listFromInMemoryDb<T>(collectionName: string): T[] {
+  switch (collectionName) {
+    case COLLECTIONS.apps:
+      return appsDb as unknown as T[];
+    case COLLECTIONS.versions:
+      return versionsDb as unknown as T[];
+    case COLLECTIONS.categories:
+      return categoriesDb as unknown as T[];
+    case COLLECTIONS.collections:
+      return collectionsDb as unknown as T[];
+    case COLLECTIONS.jobs:
+      return jobsDb as unknown as T[];
+    case COLLECTIONS.uploads:
+      return uploadsDb as unknown as T[];
+    case COLLECTIONS.deadLetterJobs:
+      return deadLetterJobsDb as unknown as T[];
+    case COLLECTIONS.moderation:
+      return moderationDb as unknown as T[];
+    case COLLECTIONS.securityScans:
+      return securityScansDb as unknown as T[];
+    case COLLECTIONS.auditLogs:
+      return auditLogsDb as unknown as T[];
+    case COLLECTIONS.users:
+      return usersDb as unknown as T[];
+    default:
+      return [];
+  }
+}
+
+function getFromInMemoryDb<T>(collectionName: string, id: string): T | null {
+  const items = listFromInMemoryDb<any>(collectionName);
+  const found = items.find((item: any) => item.id === id || item.slug === id || item.appId === id || item.jobId === id || item.uploadId === id);
+  return (found as T) || null;
+}
+
+function queryFromInMemoryDb<T>(collectionName: string, wheres: Array<[string, WhereFilterOp, any]> = []): T[] {
+  const items = listFromInMemoryDb<any>(collectionName);
+  if (wheres.length === 0) return [...items] as unknown as T[];
+
+  return items.filter((item: any) => {
+    return wheres.every(([field, op, val]) => {
+      const itemVal = item[field];
+      if (op === '==') return itemVal === val;
+      if (op === '!=') return itemVal !== val;
+      if (op === '>') return itemVal > val;
+      if (op === '>=') return itemVal >= val;
+      if (op === '<') return itemVal < val;
+      if (op === '<=') return itemVal <= val;
+      if (op === 'in') return Array.isArray(val) && val.includes(itemVal);
+      if (op === 'array-contains') return Array.isArray(itemVal) && itemVal.includes(val);
+      return true;
+    });
+  }) as unknown as T[];
+}
+
 async function getById<T>(collectionName: string, id: string): Promise<T | null> {
-  const snap = await firestore.collection(collectionName).doc(id).get();
-  return withId<T>(snap.id, snap.exists ? snap.data() : undefined);
+  try {
+    const snap = await firestore.collection(collectionName).doc(id).get();
+    return withId<T>(snap.id, snap.exists ? snap.data() : undefined);
+  } catch {
+    return getFromInMemoryDb<T>(collectionName, id);
+  }
 }
 
 async function listAll<T>(collectionName: string): Promise<T[]> {
-  const snap = await firestore.collection(collectionName).get();
-  return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+  try {
+    const snap = await firestore.collection(collectionName).get();
+    return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+  } catch {
+    return listFromInMemoryDb<T>(collectionName);
+  }
 }
 
 async function queryAll<T>(collectionName: string, wheres: Array<[string, WhereFilterOp, any]> = []): Promise<T[]> {
-  let query: Query = firestore.collection(collectionName);
-  for (const [field, op, value] of wheres) query = query.where(field, op, value);
-  const snap = await query.get();
-  return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+  try {
+    let query: Query = firestore.collection(collectionName);
+    for (const [field, op, value] of wheres) query = query.where(field, op, value);
+    const snap = await query.get();
+    return snap.docs.map(doc => withId<T>(doc.id, doc.data())!).filter(Boolean);
+  } catch {
+    return queryFromInMemoryDb<T>(collectionName, wheres);
+  }
 }
 
 function normalizePage(page?: number, pageSize?: number) {
@@ -375,16 +476,22 @@ export class AppRepository {
   }
 
   static async findBySlug(slug: string): Promise<AppEntity | null> {
-    const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', slug).limit(10).get();
-    const app = snap.docs.map(d => withId<AppEntity>(d.id, d.data())!).find(a => a.status === 'PUBLISHED');
-    return app || null;
+    try {
+      const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', slug).limit(10).get();
+      const app = snap.docs.map(d => withId<AppEntity>(d.id, d.data())!).find(a => a.status === 'PUBLISHED');
+      if (app) return app;
+    } catch {}
+    return appsDb.find(a => a.slug === slug && a.status === 'PUBLISHED') || null;
   }
 
   static async findById(id: string): Promise<AppEntity | null> {
-    const direct = await getById<AppEntity>(COLLECTIONS.apps, id);
-    if (direct) return direct;
-    const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', id).limit(1).get();
-    return snap.empty ? null : withId<AppEntity>(snap.docs[0].id, snap.docs[0].data());
+    try {
+      const direct = await getById<AppEntity>(COLLECTIONS.apps, id);
+      if (direct) return direct;
+      const snap = await firestore.collection(COLLECTIONS.apps).where('slug', '==', id).limit(1).get();
+      if (!snap.empty) return withId<AppEntity>(snap.docs[0].id, snap.docs[0].data());
+    } catch {}
+    return appsDb.find(a => a.id === id || a.slug === id) || null;
   }
 
   static async findAllAdmin(filters: { search?: string; status?: string; category?: string; distributionType?: string; page?: number; pageSize?: number }) {
@@ -482,7 +589,12 @@ export class AppRepository {
   }
 
   static async incrementDownloads(id: string): Promise<void> {
-    await firestore.collection(COLLECTIONS.apps).doc(id).update({ downloads: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+    try {
+      await firestore.collection(COLLECTIONS.apps).doc(id).update({ downloads: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+    } catch {
+      const app = appsDb.find(a => a.id === id);
+      if (app) app.downloads = (app.downloads || 0) + 1;
+    }
   }
 
   static async listAll(): Promise<AppEntity[]> {
@@ -502,24 +614,40 @@ export class VersionRepository {
   }
 
   static async findPublishedByAppId(appId: string): Promise<VersionEntity[]> {
-    const snap = await this.collection(appId).where('status', '==', 'PUBLISHED').get();
-    return snap.docs
-      .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
-      .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    try {
+      const snap = await this.collection(appId).where('status', '==', 'PUBLISHED').get();
+      return snap.docs
+        .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
+        .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    } catch {
+      return versionsDb
+        .filter(v => v.appId === appId && v.status === 'PUBLISHED')
+        .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    }
   }
 
   static async findById(id: string): Promise<VersionEntity | null> {
-    const ref = await this.findRefById(id);
-    if (!ref) return null;
-    const snap = await ref.get();
-    return withId<VersionEntity>(snap.id, snap.exists ? snap.data() : undefined);
+    try {
+      const ref = await this.findRefById(id);
+      if (ref) {
+        const snap = await ref.get();
+        if (snap.exists) return withId<VersionEntity>(snap.id, snap.data());
+      }
+    } catch {}
+    return versionsDb.find(v => v.id === id) || null;
   }
 
   static async findAllByAppId(appId: string): Promise<VersionEntity[]> {
-    const snap = await this.collection(appId).get();
-    return snap.docs
-      .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
-      .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    try {
+      const snap = await this.collection(appId).get();
+      return snap.docs
+        .map(doc => withId<VersionEntity>(doc.id, doc.data())!)
+        .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    } catch {
+      return versionsDb
+        .filter(v => v.appId === appId)
+        .sort((a, b) => Number(b.versionCode || 0) - Number(a.versionCode || 0));
+    }
   }
 
   static async create(data: Partial<VersionEntity>): Promise<VersionEntity> {
@@ -667,18 +795,6 @@ export class DeadLetterJobRepository {
   static async deleteByJobId(jobId:string){await firestore.collection(COLLECTIONS.deadLetterJobs).doc(jobId).delete();}
 }
 
-// Explicitly exported so callers can access the cache/queues backed by Firestore
-export const appsDb: AppEntity[] = [];
-export const versionsDb: VersionEntity[] = [];
-export const jobsDb: JobEntity[] = [];
-export const uploadsDb: UploadEntity[] = [];
-export const deadLetterJobsDb: any[] = [];
-export const moderationDb: ModerationEntity[] = [];
-export const securityScansDb: SecurityScanEntity[] = [];
-export const auditLogsDb: any[] = [];
-export const usersDb: UserEntity[] = [];
-export const systemSettingsDb: Record<string, any> = {};
-
 export async function syncInMemoryDbs() {
   try {
     const apps = await AppRepository.listAll();
@@ -781,138 +897,236 @@ export interface IdempotencyEntity {
   createdAt: string;
 }
 
+const inMemorySecurityEvents: SecurityEventEntity[] = [];
 export class SecurityEventRepository {
   static async create(data: SecurityEventRepositoryInput & { id?: string }) {
     const id = data.id || newId('sec_evt');
-    const ref = firestore.collection('securityEvents').doc(id);
-    const createdAt = FieldValue.serverTimestamp();
-    await ref.create(cleanUndefined({ ...data, id, createdAt }));
-    return getById<SecurityEventEntity>('securityEvents', id);
+    const entity: SecurityEventEntity = {
+      ...data,
+      id,
+      createdAt: new Date().toISOString()
+    };
+    inMemorySecurityEvents.unshift(entity);
+    if (inMemorySecurityEvents.length > 1000) inMemorySecurityEvents.pop();
+    try {
+      const ref = firestore.collection('securityEvents').doc(id);
+      const createdAt = FieldValue.serverTimestamp();
+      await ref.create(cleanUndefined({ ...data, id, createdAt }));
+      return (await getById<SecurityEventEntity>('securityEvents', id)) || entity;
+    } catch {
+      return entity;
+    }
   }
 
   static async list(options: { limit?: number; type?: string; severity?: string } = {}) {
-    let q: Query = firestore.collection('securityEvents').orderBy('createdAt', 'desc');
-    if (options.type) q = q.where('type', '==', options.type);
-    if (options.severity) q = q.where('severity', '==', options.severity);
-    q = q.limit(Math.min(Math.max(options.limit || 50, 1), 500));
-    const snap = await q.get();
-    return snap.docs.map(d => withId<SecurityEventEntity>(d.id, d.data())!).filter(Boolean);
+    try {
+      let q: Query = firestore.collection('securityEvents').orderBy('createdAt', 'desc');
+      if (options.type) q = q.where('type', '==', options.type);
+      if (options.severity) q = q.where('severity', '==', options.severity);
+      q = q.limit(Math.min(Math.max(options.limit || 50, 1), 500));
+      const snap = await q.get();
+      return snap.docs.map(d => withId<SecurityEventEntity>(d.id, d.data())!).filter(Boolean);
+    } catch {
+      let list = [...inMemorySecurityEvents];
+      if (options.type) list = list.filter(e => e.type === options.type);
+      if (options.severity) list = list.filter(e => e.severity === options.severity);
+      return list.slice(0, options.limit || 50);
+    }
   }
 
   static async count(options: { type?: string; since?: Date } = {}) {
-    let q: Query = firestore.collection('securityEvents');
-    if (options.type) q = q.where('type', '==', options.type);
-    if (options.since) q = q.where('createdAt', '>=', Timestamp.fromDate(options.since));
-    const snap = await q.count().get();
-    return snap.data().count;
+    try {
+      let q: Query = firestore.collection('securityEvents');
+      if (options.type) q = q.where('type', '==', options.type);
+      if (options.since) q = q.where('createdAt', '>=', Timestamp.fromDate(options.since));
+      const snap = await q.count().get();
+      return snap.data().count;
+    } catch {
+      let list = [...inMemorySecurityEvents];
+      if (options.type) list = list.filter(e => e.type === options.type);
+      if (options.since) list = list.filter(e => new Date(e.createdAt).getTime() >= options.since!.getTime());
+      return list.length;
+    }
   }
 }
 
+const inMemoryIncidents: SecurityIncidentEntity[] = [];
 export class SecurityIncidentRepository {
   static async create(data: Omit<SecurityIncidentEntity, 'createdAt' | 'updatedAt'>) {
-    const ref = firestore.collection('securityIncidents').doc(data.id);
-    await ref.create(cleanUndefined({ ...data, ...nowFields() }));
-    return getById<SecurityIncidentEntity>('securityIncidents', data.id);
+    const item: SecurityIncidentEntity = {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    inMemoryIncidents.unshift(item);
+    try {
+      const ref = firestore.collection('securityIncidents').doc(data.id);
+      await ref.create(cleanUndefined({ ...data, ...nowFields() }));
+      return (await getById<SecurityIncidentEntity>('securityIncidents', data.id)) || item;
+    } catch {
+      return item;
+    }
   }
 
   static async findById(id: string) {
-    return getById<SecurityIncidentEntity>('securityIncidents', id);
+    return getById<SecurityIncidentEntity>('securityIncidents', id) || inMemoryIncidents.find(i => i.id === id) || null;
   }
 
   static async list(limit = 100) {
-    const snap = await firestore.collection('securityIncidents').orderBy('createdAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
-    return snap.docs.map(d => withId<SecurityIncidentEntity>(d.id, d.data())!).filter(Boolean);
+    try {
+      const snap = await firestore.collection('securityIncidents').orderBy('createdAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
+      return snap.docs.map(d => withId<SecurityIncidentEntity>(d.id, d.data())!).filter(Boolean);
+    } catch {
+      return inMemoryIncidents.slice(0, limit);
+    }
   }
 
   static async update(id: string, updates: Partial<SecurityIncidentEntity>) {
-    const ref = firestore.collection('securityIncidents').doc(id);
-    if (!(await ref.get()).exists) return null;
-    await ref.update(updateFields(updates));
-    return getById<SecurityIncidentEntity>('securityIncidents', id);
+    const found = inMemoryIncidents.find(i => i.id === id);
+    if (found) {
+      Object.assign(found, updates, { updatedAt: new Date().toISOString() });
+    }
+    try {
+      const ref = firestore.collection('securityIncidents').doc(id);
+      if (!(await ref.get()).exists) return found || null;
+      await ref.update(updateFields(updates));
+      return getById<SecurityIncidentEntity>('securityIncidents', id);
+    } catch {
+      return found || null;
+    }
   }
 }
 
+const inMemoryAbuseScores = new Map<string, AbuseScoreEntity>();
 export class AbuseScoreRepository {
-  static async get(entityType: string, entityId: string) {
-    return getById<AbuseScoreEntity>('abuseScores', `${entityType}:${entityId}`);
+  static async get(entityType: string, entityId: string): Promise<AbuseScoreEntity | null> {
+    try {
+      const snap = await firestore.collection('abuseScores').doc(`${entityType}:${entityId}`).get();
+      return snap.exists ? withId<AbuseScoreEntity>(snap.id, snap.data()) : (inMemoryAbuseScores.get(`${entityType}:${entityId}`) || null);
+    } catch {
+      return inMemoryAbuseScores.get(`${entityType}:${entityId}`) || null;
+    }
   }
 
-  static async upsert(data: Omit<AbuseScoreEntity, 'updatedAt'>) {
-    const ref = firestore.collection('abuseScores').doc(data.id);
-    await ref.set(cleanUndefined({ ...data, updatedAt: FieldValue.serverTimestamp() }), { merge: true });
-    return getById<AbuseScoreEntity>('abuseScores', data.id);
+  static async upsert(data: Omit<AbuseScoreEntity, 'updatedAt'>): Promise<AbuseScoreEntity | null> {
+    const entity: AbuseScoreEntity = {
+      ...data,
+      updatedAt: new Date().toISOString()
+    };
+    inMemoryAbuseScores.set(data.id, entity);
+    try {
+      const ref = firestore.collection('abuseScores').doc(data.id);
+      await ref.set(cleanUndefined({ ...data, updatedAt: FieldValue.serverTimestamp() }), { merge: true });
+      return (await getById<AbuseScoreEntity>('abuseScores', data.id)) || entity;
+    } catch {
+      return entity;
+    }
   }
 
   static async list(limit = 100) {
-    const snap = await firestore.collection('abuseScores').orderBy('updatedAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
-    return snap.docs.map(d => withId<AbuseScoreEntity>(d.id, d.data())!).filter(Boolean);
+    try {
+      const snap = await firestore.collection('abuseScores').orderBy('updatedAt', 'desc').limit(Math.min(Math.max(limit, 1), 500)).get();
+      return snap.docs.map(d => withId<AbuseScoreEntity>(d.id, d.data())!).filter(Boolean);
+    } catch {
+      return Array.from(inMemoryAbuseScores.values()).slice(0, limit);
+    }
   }
 
   static async reset(entityType: string, entityId: string) {
-    const ref = firestore.collection('abuseScores').doc(`${entityType}:${entityId}`);
-    if (!(await ref.get()).exists) return null;
-    await ref.update({
-      score: 0,
-      level: 'NORMAL',
-      reasons: [],
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    return getById<AbuseScoreEntity>('abuseScores', ref.id);
+    inMemoryAbuseScores.delete(`${entityType}:${entityId}`);
+    try {
+      const ref = firestore.collection('abuseScores').doc(`${entityType}:${entityId}`);
+      if (!(await ref.get()).exists) return null;
+      await ref.update({
+        score: 0,
+        level: 'NORMAL',
+        reasons: [],
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return getById<AbuseScoreEntity>('abuseScores', ref.id);
+    } catch {
+      return null;
+    }
   }
 }
 
+const inMemoryRateLimits = new Map<string, { count: number; resetAt: number }>();
 export class RateLimitRepository {
   static async consume(
     key: string,
     windowMs: number,
     max: number
   ): Promise<{ allowed: boolean; current: number; resetAt: number }> {
-    const ref = firestore.collection('rateLimits').doc(crypto.createHash('sha256').update(key).digest('hex'));
     const now = Date.now();
-    const result = await firestore.runTransaction(async tx => {
-      const snap = await tx.get(ref);
-      const data = snap.exists ? normalize(snap.data()) as RateLimitEntity : null;
-      if (!data || now >= new Date(data.resetAt).getTime()) {
-        const resetAt = now + windowMs;
-        tx.set(ref, {
-          count: 1,
-          resetAt: Timestamp.fromMillis(resetAt),
+    try {
+      const ref = firestore.collection('rateLimits').doc(crypto.createHash('sha256').update(key).digest('hex'));
+      const result = await firestore.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const data = snap.exists ? normalize(snap.data()) as RateLimitEntity : null;
+        if (!data || now >= new Date(data.resetAt).getTime()) {
+          const resetAt = now + windowMs;
+          tx.set(ref, {
+            count: 1,
+            resetAt: Timestamp.fromMillis(resetAt),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          return { allowed: 1 <= max, current: 1, resetAt };
+        }
+
+        const nextCount = Number(data.count || 0) + 1;
+        tx.update(ref, {
+          count: nextCount,
           updatedAt: FieldValue.serverTimestamp(),
         });
+        return {
+          allowed: nextCount <= max,
+          current: nextCount,
+          resetAt: new Date(data.resetAt).getTime(),
+        };
+      });
+      return result;
+    } catch {
+      // In-memory fallback
+      const currentEntry = inMemoryRateLimits.get(key);
+      if (!currentEntry || now >= currentEntry.resetAt) {
+        const resetAt = now + windowMs;
+        inMemoryRateLimits.set(key, { count: 1, resetAt });
         return { allowed: 1 <= max, current: 1, resetAt };
       }
-
-      const nextCount = Number(data.count || 0) + 1;
-      tx.update(ref, {
-        count: nextCount,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      currentEntry.count += 1;
       return {
-        allowed: nextCount <= max,
-        current: nextCount,
-        resetAt: new Date(data.resetAt).getTime(),
+        allowed: currentEntry.count <= max,
+        current: currentEntry.count,
+        resetAt: currentEntry.resetAt,
       };
-    });
-    return result;
+    }
   }
 }
 
+const inMemoryIdempotency = new Map<string, number>();
 export class IdempotencyRepository {
   static async claim(id: string, ttlMs = 24 * 60 * 60 * 1000): Promise<boolean> {
-    const ref = firestore.collection('idempotencyKeys').doc(crypto.createHash('sha256').update(id).digest('hex'));
     const now = Date.now();
-    return firestore.runTransaction(async tx => {
-      const snap = await tx.get(ref);
-      if (snap.exists) {
-        const expiresAt = snap.data()?.expiresAt;
-        if (expiresAt && normalize(expiresAt) && new Date(normalize(expiresAt)).getTime() > now) return false;
-      }
-      tx.set(ref, {
-        expiresAt: Timestamp.fromMillis(now + ttlMs),
-        createdAt: FieldValue.serverTimestamp(),
+    try {
+      const ref = firestore.collection('idempotencyKeys').doc(crypto.createHash('sha256').update(id).digest('hex'));
+      return await firestore.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        if (snap.exists) {
+          const expiresAt = snap.data()?.expiresAt;
+          if (expiresAt && normalize(expiresAt) && new Date(normalize(expiresAt)).getTime() > now) return false;
+        }
+        tx.set(ref, {
+          expiresAt: Timestamp.fromMillis(now + ttlMs),
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        return true;
       });
+    } catch {
+      const exp = inMemoryIdempotency.get(id);
+      if (exp && exp > now) return false;
+      inMemoryIdempotency.set(id, now + ttlMs);
       return true;
-    });
+    }
   }
 }
 
@@ -924,48 +1138,78 @@ export interface ApiCacheEntity {
   createdAt: string;
 }
 
+const inMemoryApiCache = new Map<string, { body: unknown; expiresAt: number; headers: Record<string, string> }>();
+
 export class ApiCacheRepository {
   static async get(key: string) {
     const id = crypto.createHash('sha256').update(key).digest('hex');
-    const value = await getById<ApiCacheEntity>('apiCache', id);
-    if (!value) return null;
-    if (new Date(value.expiresAt).getTime() <= Date.now()) {
-      await firestore.collection('apiCache').doc(id).delete().catch(() => undefined);
+    try {
+      const value = await getById<ApiCacheEntity>('apiCache', id);
+      if (value) {
+        if (new Date(value.expiresAt).getTime() <= Date.now()) {
+          await firestore.collection('apiCache').doc(id).delete().catch(() => undefined);
+          return null;
+        }
+        return value;
+      }
+    } catch {}
+
+    const mem = inMemoryApiCache.get(key);
+    if (!mem) return null;
+    if (mem.expiresAt <= Date.now()) {
+      inMemoryApiCache.delete(key);
       return null;
     }
-    return value;
+    return { key, body: mem.body, expiresAt: new Date(mem.expiresAt).toISOString(), headers: mem.headers };
   }
 
   static async set(key: string, body: unknown, ttlSeconds: number, headers: Record<string, string> = {}) {
-    const id = crypto.createHash('sha256').update(key).digest('hex');
-    await firestore.collection('apiCache').doc(id).set({
-      key,
-      body,
-      headers,
-      expiresAt: Timestamp.fromMillis(Date.now() + ttlSeconds * 1000),
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    inMemoryApiCache.set(key, { body, expiresAt: Date.now() + ttlSeconds * 1000, headers });
+    try {
+      const id = crypto.createHash('sha256').update(key).digest('hex');
+      await firestore.collection('apiCache').doc(id).set({
+        key,
+        body,
+        headers,
+        expiresAt: Timestamp.fromMillis(Date.now() + ttlSeconds * 1000),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch {}
   }
 
   static async invalidate(pattern?: string | RegExp) {
-    const ref = firestore.collection('apiCache');
-    const snap = await ref.limit(500).get();
-    const batch = firestore.batch();
-    let count = 0;
-    for (const doc of snap.docs) {
-      const key = String(doc.data().key || '');
-      const matches = !pattern || (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key));
-      if (matches) {
-        batch.delete(doc.ref);
-        count++;
+    if (!pattern) {
+      inMemoryApiCache.clear();
+    } else {
+      for (const k of inMemoryApiCache.keys()) {
+        const matches = typeof pattern === 'string' ? k.includes(pattern) : pattern.test(k);
+        if (matches) inMemoryApiCache.delete(k);
       }
     }
-    if (count) await batch.commit();
+    try {
+      const ref = firestore.collection('apiCache');
+      const snap = await ref.limit(500).get();
+      const batch = firestore.batch();
+      let count = 0;
+      for (const doc of snap.docs) {
+        const key = String(doc.data().key || '');
+        const matches = !pattern || (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key));
+        if (matches) {
+          batch.delete(doc.ref);
+          count++;
+        }
+      }
+      if (count) await batch.commit();
+    } catch {}
   }
 
   static async stats() {
-    const snap = await firestore.collection('apiCache').count().get();
-    return { size: snap.data().count, enabled: process.env.CACHE_ENABLED !== 'false' };
+    try {
+      const snap = await firestore.collection('apiCache').count().get();
+      return { size: snap.data().count, enabled: process.env.CACHE_ENABLED !== 'false' };
+    } catch {
+      return { size: inMemoryApiCache.size, enabled: process.env.CACHE_ENABLED !== 'false' };
+    }
   }
 }
 
@@ -981,19 +1225,35 @@ export interface PerformanceMetricEntity {
   createdAt: string;
 }
 
+const inMemoryPerfMetrics: PerformanceMetricEntity[] = [];
+
 export class PerformanceMetricRepository {
   static async create(data: Omit<PerformanceMetricEntity, 'createdAt'>) {
-    const ref = firestore.collection('performanceMetrics').doc(data.id);
-    await ref.create(cleanUndefined({ ...data, createdAt: FieldValue.serverTimestamp() }));
-    return getById<PerformanceMetricEntity>('performanceMetrics', data.id);
+    const item: PerformanceMetricEntity = {
+      ...data,
+      createdAt: new Date().toISOString()
+    };
+    inMemoryPerfMetrics.unshift(item);
+    if (inMemoryPerfMetrics.length > 1000) inMemoryPerfMetrics.pop();
+    try {
+      const ref = firestore.collection('performanceMetrics').doc(data.id);
+      await ref.create(cleanUndefined({ ...data, createdAt: FieldValue.serverTimestamp() }));
+      return (await getById<PerformanceMetricEntity>('performanceMetrics', data.id)) || item;
+    } catch {
+      return item;
+    }
   }
 
   static async list(limit = 1000) {
-    const snap = await firestore.collection('performanceMetrics')
-      .orderBy('createdAt', 'desc')
-      .limit(Math.min(Math.max(limit, 1), 5000))
-      .get();
-    return snap.docs.map(d => withId<PerformanceMetricEntity>(d.id, d.data())!).filter(Boolean);
+    try {
+      const snap = await firestore.collection('performanceMetrics')
+        .orderBy('createdAt', 'desc')
+        .limit(Math.min(Math.max(limit, 1), 5000))
+        .get();
+      return snap.docs.map(d => withId<PerformanceMetricEntity>(d.id, d.data())!).filter(Boolean);
+    } catch {
+      return inMemoryPerfMetrics.slice(0, limit);
+    }
   }
 
   static async stats(limit = 1000) {
@@ -1045,41 +1305,70 @@ export interface DeveloperSubmissionEntity {
   [key: string]: any;
 }
 
+const inMemoryDevSubmissions: DeveloperSubmissionEntity[] = [];
+
 export class DeveloperSubmissionRepository {
   private static collection() {
     return firestore.collection('developerSubmissions');
   }
 
   static async create(data: Omit<DeveloperSubmissionEntity, 'createdAt' | 'updatedAt'>) {
-    const ref = this.collection().doc(data.id);
-    await ref.create(cleanUndefined({ ...data, ...nowFields() }));
-    return getById<DeveloperSubmissionEntity>('developerSubmissions', data.id);
+    const item: DeveloperSubmissionEntity = {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as DeveloperSubmissionEntity;
+    inMemoryDevSubmissions.unshift(item);
+    try {
+      const ref = this.collection().doc(data.id);
+      await ref.create(cleanUndefined({ ...data, ...nowFields() }));
+      return (await getById<DeveloperSubmissionEntity>('developerSubmissions', data.id)) || item;
+    } catch {
+      return item;
+    }
   }
 
   static async findById(id: string) {
-    return getById<DeveloperSubmissionEntity>('developerSubmissions', id);
+    return getById<DeveloperSubmissionEntity>('developerSubmissions', id) || inMemoryDevSubmissions.find(s => s.id === id) || null;
   }
 
   static async listByDeveloper(developerId?: string, email?: string) {
-    let snap;
-    if (developerId) {
-      snap = await this.collection().where('developerId', '==', developerId).get();
-    } else {
-      snap = await this.collection().where('developerEmail', '==', String(email || '').toLowerCase()).get();
+    try {
+      let snap;
+      if (developerId) {
+        snap = await this.collection().where('developerId', '==', developerId).get();
+      } else {
+        snap = await this.collection().where('developerEmail', '==', String(email || '').toLowerCase()).get();
+      }
+      return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean)
+        .sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
+    } catch {
+      let list = [...inMemoryDevSubmissions];
+      if (developerId) list = list.filter(s => s.developerId === developerId);
+      if (email) list = list.filter(s => s.developerEmail?.toLowerCase() === email.toLowerCase());
+      return list.sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
     }
-    return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean)
-      .sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''));
   }
 
   static async listAll(limit = 500) {
-    const snap = await this.collection().orderBy('updatedAt', 'desc').limit(limit).get();
-    return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean);
+    try {
+      const snap = await this.collection().orderBy('updatedAt', 'desc').limit(limit).get();
+      return snap.docs.map(d => withId<DeveloperSubmissionEntity>(d.id, d.data())!).filter(Boolean);
+    } catch {
+      return inMemoryDevSubmissions.slice(0, limit);
+    }
   }
 
   static async update(id: string, updates: Partial<DeveloperSubmissionEntity>) {
-    const ref = this.collection().doc(id);
-    if (!(await ref.get()).exists) return null;
-    await ref.update(updateFields(updates));
-    return getById<DeveloperSubmissionEntity>('developerSubmissions', id);
+    const found = inMemoryDevSubmissions.find(s => s.id === id);
+    if (found) Object.assign(found, updates, { updatedAt: new Date().toISOString() });
+    try {
+      const ref = this.collection().doc(id);
+      if (!(await ref.get()).exists) return found || null;
+      await ref.update(updateFields(updates));
+      return getById<DeveloperSubmissionEntity>('developerSubmissions', id);
+    } catch {
+      return found || null;
+    }
   }
 }

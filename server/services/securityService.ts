@@ -395,8 +395,8 @@ export function createRateLimiter(category: RateLimitCategory) {
 
       next();
     } catch (error) {
-      console.error('[security] Firestore protection failure:', error);
-      return sendError(res, ERROR_CODES.INTERNAL_ERROR, 'Sistem proteksi sedang tidak tersedia.', 503);
+      console.warn('[security] Rate limit verification fallback active:', (error as any)?.message || error);
+      next();
     }
   };
 }

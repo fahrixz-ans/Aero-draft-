@@ -93,7 +93,7 @@ import {
   Camera, Music, Video, Wrench, MessageSquare, Wallet, 
   ShieldCheck, Info, CheckCircle, Mail, AlertTriangle, Bookmark,
   Flame, TrendingUp, Sparkles, Layers, Compass, Clock, ArrowUpRight,
-  Shield, Check, Search, Bell, History, X, ExternalLink
+  Shield, Check, Search, Bell, History, X, ExternalLink, RefreshCw
 } from 'lucide-react';
 
 import { 
@@ -101,7 +101,9 @@ import {
   getNewAndRisingApps, 
   getPersonalizedRecommendations, 
   getSmartCollections,
-  TrendingWindow 
+  TrendingWindow,
+  clearTrendingCache,
+  recalculateTrending
 } from './services';
 
 import {
@@ -565,7 +567,7 @@ export default function App() {
       await removeBookmark(user, appId);
       setBookmarks(prev => prev.filter(id => id !== appId));
     } else {
-      const app = apps.find(a => a.id === appId);
+      const app = apps.find(a => a && a.id === appId);
       if (app) {
         await saveBookmark(user, app);
         setBookmarks(prev => [...prev, appId]);
@@ -580,7 +582,7 @@ export default function App() {
       await unfollowApp(user, appId);
       setFollowedApps(prev => prev.filter(id => id !== appId));
     } else {
-      const app = apps.find(a => a.id === appId);
+      const app = apps.find(a => a && a.id === appId);
       if (app) {
         await followApp(user, app);
         setFollowedApps(prev => [...prev, appId]);
@@ -646,7 +648,7 @@ export default function App() {
         const slug = segments[0];
         const subview = segments[1];
 
-        const appExists = apps.some(a => a.slug === slug || a.id === slug);
+        const appExists = apps.some(a => a && (a.slug === slug || a.id === slug));
         if (appExists) {
           setSelectedAppSlug(slug);
           if (subview === 'download') {
@@ -999,7 +1001,7 @@ export default function App() {
         }
         setSelectedAppSlug(slug);
         setCurrentView('detail');
-        const matched = apps.find(a => a.slug === slug || a.id === slug);
+        const matched = apps.find(a => a && (a.slug === slug || a.id === slug));
         if (matched) {
           trackAppClick(matched, { source: 'navigation' });
         }
@@ -1177,8 +1179,8 @@ export default function App() {
   };
 
   // Active app for details view
-  const selectedAppObj = apps.find(a => a.slug === selectedAppSlug || a.id === selectedAppSlug) || null;
-  const activeApp = selectedAppObj || apps[0];
+  const selectedAppObj = apps.find(a => a && (a.slug === selectedAppSlug || a.id === selectedAppSlug)) || null;
+  const activeApp = selectedAppObj || (apps.length > 0 ? apps[0] : null);
 
   // Handle Final Proceed Download (after interstitial or directly for premium)
   const proceedFinalDownload = async (app: AppData, downloadType: 'apk' | 'official_link' = 'apk') => {
@@ -1315,8 +1317,8 @@ export default function App() {
     }
     if (sortBy === 'trending') {
       const trendList = getTrendingRankings(apps, trendingWindow);
-      const scoreA = trendList.find(t => t.app.id === a.id)?.score || 0;
-      const scoreB = trendList.find(t => t.app.id === b.id)?.score || 0;
+      const scoreA = trendList.find(t => t.app && t.app.id === a.id)?.score || 0;
+      const scoreB = trendList.find(t => t.app && t.app.id === b.id)?.score || 0;
       return scoreB - scoreA;
     }
     return 0;
@@ -1353,15 +1355,21 @@ export default function App() {
     loadRecommendationShelves();
   }, [apps, user?.uid]);
 
+  const [trendingRefreshKey, setTrendingRefreshKey] = useState(0);
+  const [isTrendingRefreshing, setIsTrendingRefreshing] = useState(false);
+
   // Intelligence calculations
   const homeTrending = getTrendingRankings(apps, trendingWindow).slice(0, 4);
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  trendingRefreshKey;
   const homePersonalized = getPersonalizedRecommendations(apps, 4);
   const homeNewAndRising = getNewAndRisingApps(apps, 4);
   const smartCollections = getSmartCollections(apps);
   const activeSmartCollection = smartCollections.find(c => c.id === activeCollectionId) || smartCollections[0];
 
-  const getRelatedApps = (currentApp: AppData) => {
-    return apps.filter(a => a.category === currentApp.category && a.id !== currentApp.id);
+  const getRelatedApps = (currentApp?: AppData | null) => {
+    if (!currentApp) return [];
+    return apps.filter(a => a && a.category === currentApp.category && a.id !== currentApp.id);
   };
 
   const isNoNavbarView = [
@@ -1591,6 +1599,31 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          disabled={isTrendingRefreshing}
+                          onClick={async () => {
+                            setIsTrendingRefreshing(true);
+                            try {
+                              await recalculateTrending(apps, trendingWindow, 10);
+                            } catch (err) {
+                              console.error('Error recalculating trending:', err);
+                            }
+                            setTimeout(() => {
+                              setTrendingRefreshKey(k => k + 1);
+                              setIsTrendingRefreshing(false);
+                            }, 400);
+                          }}
+                          title="Perbarui Peringkat Tren (Recalculate Time-Decay Rankings)"
+                          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold border shadow-xs cursor-pointer ${
+                            isTrendingRefreshing
+                              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-500/40 animate-pulse cursor-not-allowed'
+                              : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                          }`}
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${isTrendingRefreshing ? 'animate-spin text-blue-600 dark:text-blue-400' : ''}`} />
+                          <span className="inline font-medium">{isTrendingRefreshing ? 'Menghitung...' : 'Refresh'}</span>
+                        </button>
+
                         <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold">
                           {(['24h', '7d', '30d'] as TrendingWindow[]).map((w) => (
                             <button
@@ -1619,7 +1652,7 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                      {homeTrending.map((item) => (
+                      {homeTrending.filter(item => item.app).map((item) => (
                         <div key={item.app.id} className="relative group flex flex-col space-y-1.5">
                           <AppCard
                             app={item.app}
@@ -1718,7 +1751,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                        {homeNewAndRising.map((nr) => (
+                        {homeNewAndRising.filter(nr => nr.app).map((nr) => (
                           <div key={nr.app.id} className="flex flex-col space-y-1.5">
                             <AppCard
                               app={nr.app}
@@ -2018,7 +2051,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-                  {getTrendingRankings(apps, '7d').map((item) => (
+                  {getTrendingRankings(apps, '7d').filter(item => item.app).map((item) => (
                     <div key={item.app.id} className="relative group flex flex-col space-y-1.5">
                       <AppCard
                         app={item.app}
@@ -2058,7 +2091,23 @@ export default function App() {
                   searchQuery={searchQuery}
                   onSearchChange={(q) => {
                     setSearchQuery(q);
-                    if (q.trim()) recordSearchHistory(q.trim());
+                    if (q.trim()) {
+                      recordSearchHistory(q.trim());
+                      setSearchHistory((prev) => [
+                        q.trim(),
+                        ...prev.filter((p) => (typeof p === 'string' ? p : (p as any)?.query).toLowerCase() !== q.trim().toLowerCase())
+                      ].slice(0, 15));
+                    }
+                  }}
+                  searchHistory={searchHistory}
+                  onClearSearchHistory={() => {
+                    clearSearchHistory();
+                    setSearchHistory([]);
+                  }}
+                  onRemoveHistoryItem={(queryToRemove) => {
+                    setSearchHistory((prev) =>
+                      prev.filter((item) => (typeof item === 'string' ? item : (item as any)?.query) !== queryToRemove)
+                    );
                   }}
                   filters={filters}
                   onFiltersChange={setFilters}
@@ -2229,70 +2278,133 @@ export default function App() {
 
             {currentView === 'app-download' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppDownloadView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                />
+                {activeApp ? (
+                  <AppDownloadView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-versions' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppVersionsView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                  onSelectVersion={() => navigateTo('app-download', activeApp.slug)}
-                />
+                {activeApp ? (
+                  <AppVersionsView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                    onSelectVersion={() => navigateTo('app-download', activeApp.slug)}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-rating-all' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppReviewsView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                  currentUser={user}
-                  onSignIn={handleSignIn}
-                />
+                {activeApp ? (
+                  <AppReviewsView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                    currentUser={user}
+                    onSignIn={handleSignIn}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-write-review' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <WriteReviewView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                  currentUser={user}
-                  onSignIn={handleSignIn}
-                />
+                {activeApp ? (
+                  <WriteReviewView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                    currentUser={user}
+                    onSignIn={handleSignIn}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-detail-full' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppDetailFullView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                />
+                {activeApp ? (
+                  <AppDetailFullView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-comments' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppCommentsView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                  currentUser={user}
-                />
+                {activeApp ? (
+                  <AppCommentsView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                    currentUser={user}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
             {currentView === 'app-screenshots' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-                <AppScreenshotsView
-                  app={activeApp}
-                  onBack={() => handleBack('detail', activeApp.slug)}
-                />
+                {activeApp ? (
+                  <AppScreenshotsView
+                    app={activeApp}
+                    onBack={() => handleBack('detail', activeApp.slug)}
+                  />
+                ) : (
+                  <EmptyState
+                    title="Aplikasi Tidak Ditemukan"
+                    description="Aplikasi yang diminta tidak ditemukan atau belum dimuat."
+                    actionLabel="Kembali ke Beranda"
+                    onAction={() => navigateTo('home')}
+                  />
+                )}
               </div>
             )}
 
@@ -2446,28 +2558,39 @@ export default function App() {
 
             {currentView === 'detail' && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 animate-fade-in">
-                <AppDetail
-                  app={activeApp}
-                  relatedApps={getRelatedApps(activeApp)}
-                  allApps={apps}
-                  onNavigate={navigateTo}
-                  onBack={() => handleBack('apps')}
-                  onSelectRelated={(s) => navigateTo('detail', s)}
-                  onDownloadRelated={handleDirectDownload}
-                  isBookmarked={bookmarks.includes(activeApp.id)}
-                  onToggleBookmark={() => handleToggleBookmark(activeApp.id)}
-                  isFollowed={followedApps.includes(activeApp.id)}
-                  onToggleFollow={() => handleToggleFollow(activeApp.id)}
-                  currentUser={user}
-                  onSignIn={handleSignIn}
-                  downloadHistory={downloadHistory}
-                />
+                {activeApp ? (
+                  <AppDetail
+                    app={activeApp}
+                    relatedApps={getRelatedApps(activeApp)}
+                    allApps={apps}
+                    onNavigate={navigateTo}
+                    onBack={() => handleBack('apps')}
+                    onSelectRelated={(s) => navigateTo('detail', s)}
+                    onDownloadRelated={handleDirectDownload}
+                    isBookmarked={bookmarks.includes(activeApp.id)}
+                    onToggleBookmark={() => handleToggleBookmark(activeApp.id)}
+                    isFollowed={followedApps.includes(activeApp.id)}
+                    onToggleFollow={() => handleToggleFollow(activeApp.id)}
+                    currentUser={user}
+                    onSignIn={handleSignIn}
+                    downloadHistory={downloadHistory}
+                  />
+                ) : (
+                  <div className="py-20 text-center space-y-4">
+                    <EmptyState
+                      title="Aplikasi Tidak Ditemukan"
+                      description="Aplikasi yang kamu cari tidak tersedia atau belum dimuat."
+                      actionLabel="Kembali ke Beranda"
+                      onAction={() => navigateTo('home')}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
             {currentView === 'bookmarks' && (
               <SavedAppsView
-                savedApps={apps.filter(app => bookmarks.includes(app.id))}
+                savedApps={apps.filter(app => app && app.id && bookmarks.includes(app.id))}
                 onSelectApp={(s) => navigateTo('detail', s)}
                 onDownloadApp={handleDirectDownload}
                 onRemoveBookmark={(appId) => handleToggleBookmark(appId)}
@@ -2479,7 +2602,7 @@ export default function App() {
             {(currentView === 'profile' || currentView === 'account') && (
               <ProfileView
                 user={user}
-                savedApps={apps.filter(app => bookmarks.includes(app.id))}
+                savedApps={apps.filter(app => app && app.id && bookmarks.includes(app.id))}
                 downloadHistory={downloadHistory}
                 onSelectApp={(s) => navigateTo('detail', s)}
                 onDownloadApp={handleDirectDownload}

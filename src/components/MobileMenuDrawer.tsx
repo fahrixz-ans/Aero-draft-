@@ -524,16 +524,7 @@ export default function MobileMenuDrawer({
                       </button>
                     )}
 
-                    {/* Dark/Light Mode Button */}
-                    <button
-                      type="button"
-                      onClick={onToggleDarkMode}
-                      id="menu-theme-toggle"
-                      className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
-                      aria-label={darkMode ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap'}
-                    >
-                      {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-                    </button>
+
 
                     {/* Auth Status / Sign In */}
                     {user ? (

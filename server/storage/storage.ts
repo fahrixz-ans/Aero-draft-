@@ -38,7 +38,10 @@ export class LocalStorageProvider implements APKStorage {
   }
 
   async getMetadata(objectKey: string): Promise<StorageObjectMetadata | null> {
-    const filePath = path.join(process.cwd(), 'uploads', objectKey.replace(/\//g, path.sep));
+    let filePath = path.join(process.cwd(), 'uploads', objectKey.replace(/\//g, path.sep));
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(process.cwd(), 'uploads', 'r2_storage', objectKey.replace(/\//g, path.sep));
+    }
     if (!fs.existsSync(filePath)) return null;
     const stats = fs.statSync(filePath);
     return {

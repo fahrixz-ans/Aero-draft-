@@ -12,10 +12,13 @@ service cloud.firestore {
     }
 
     // Checking if user has admin privileges.
-    // Bootstrapped using the user's registered runtime email or an admins collection document.
+    // Bootstrapped using the user's registered runtime email or an admins/adminUsers collection document.
     function isAdmin() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) ||
+        request.auth.token.email in ['fantrastore.id@gmail.com', 'fahriandriansptr@gmail.com', 'fahriandriansaputra123@gmail.com', 'admin@aeroapk.com']
+      );
     }
 
     // Users & private data

@@ -182,7 +182,7 @@ export function generateCategoriesSitemapXml(categoriesList?: string[], baseUrl:
 
   const urlsXml = categories.map(cat => {
     const slug = encodeURIComponent(cat.toLowerCase().replace(/\s+/g, '-'));
-    const loc = `${host}/category/${slug}`;
+    const loc = `${host}/categories/${slug}`;
     return `  <url>
     <loc>${loc}</loc>
     <lastmod>${todayStr}</lastmod>

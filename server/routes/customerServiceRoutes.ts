@@ -1,467 +1,121 @@
 import { Router, Request, Response } from 'express';
-import { firestore } from '../repositories';
-import { generateFamoResponse } from '../services/famoAiService';
-import { isGeminiConfigured } from '../lib/gemini';
-import { CSTicket, CSMessage, CSConversationState } from '../../src/types';
+import { sendSuccess, sendError, ERROR_CODES } from '../errors';
 
 export const customerServiceRouter = Router();
-const CS_COLLECTION = 'cs_tickets';
 
-/**
- * GET /api/customer-service/status
- * Check AI status for Customer Service
- */
-customerServiceRouter.get('/status', (req: Request, res: Response) => {
-  const isConnected = (!!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0) || isGeminiConfigured();
-  return res.json({
-    success: true,
-    connected: true, // Always ready via Gemini AI or rule-based fallback CS
-    provider: isConnected ? (process.env.OPENAI_API_KEY ? 'ChatGPT API' : 'Gemini CS Engine') : 'Mod Station CS Engine'
-  });
-});
-
-// Helper to generate ticket code
-function generateTicketCode(): string {
-  const randomNum = Math.floor(10000 + Math.random() * 90000);
-  return `#CS-${randomNum}`;
+// In-memory support tickets store
+interface ServerTicket {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  category: string;
+  message: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  createdAt: string;
+  updatedAt: string;
+  replies?: Array<{
+    id: string;
+    sender: 'user' | 'agent' | 'system';
+    senderName: string;
+    message: string;
+    createdAt: string;
+  }>;
 }
 
-/**
- * Calculate actual real queue position for a ticket
- */
-async function calculateRealQueuePosition(ticketId: string, createdAt: string): Promise<{ position: number; estimatedMinutes: number }> {
-  try {
-    const snap = await firestore.collection(CS_COLLECTION)
-      .where('state', '==', 'WAITING_QUEUE')
-      .get();
-    
-    // Sort by requestedAgentAt or createdAt
-    const queueTickets: Array<{ id: string; time: number }> = [];
-    snap.forEach(d => {
-      const data = d.data() as CSTicket;
-      const timeVal = new Date(data.requestedAgentAt || data.createdAt || 0).getTime();
-      queueTickets.push({ id: d.id, time: timeVal });
-    });
+const ticketsStore: ServerTicket[] = [];
 
-    queueTickets.sort((a, b) => a.time - b.time);
-    
-    const index = queueTickets.findIndex(t => t.id === ticketId);
-    const position = index >= 0 ? index + 1 : 1;
-    const estimatedMinutes = Math.max(1, position * 2);
+// GET /api/customer-service/tickets or /api/tickets
+customerServiceRouter.get('/tickets', (req: Request, res: Response) => {
+  const userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+  const email = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
 
-    return { position, estimatedMinutes };
-  } catch (err) {
-    console.warn('[CS Queue Calculation Error]', err);
-    return { position: 1, estimatedMinutes: 2 };
+  if (!userId && !email) {
+    return sendSuccess(res, { tickets: ticketsStore.slice(0, 50) });
   }
-}
 
-/**
- * POST /api/customer-service/chat
- * Main intelligent chat endpoint for Famo AI & Human Agent routing
- */
-customerServiceRouter.post('/chat', async (req: any, res: Response) => {
-  try {
-    const { ticketId, message, attachments = [], category = 'Umum', messageId } = req.body;
+  const filtered = ticketsStore.filter(
+    (t) =>
+      (userId && t.userId === userId) ||
+      (email && t.userEmail.toLowerCase() === email)
+  );
 
-    // Note: Famo AI automatically falls back to the built-in rule-based engine when AI API key is not configured or unavailable
-
-    if (!message && attachments.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'Pesan tidak boleh kosong.' }
-      });
-    }
-
-    // Identify user strictly from Auth.js session if available or payload
-    const sessionUser = req.user || req.session?.user;
-    const userId = sessionUser?.id || sessionUser?.email || req.body.userId || 'guest-session';
-    const userName = sessionUser?.name || req.body.userName || 'Pengguna';
-    const userEmail = sessionUser?.email || req.body.userEmail || 'pengguna@modstation.id';
-    const userAvatar = sessionUser?.image || req.body.userAvatar || '';
-
-    const now = new Date().toISOString();
-    let currentTicketId = ticketId;
-    let targetTicket: CSTicket | null = null;
-
-    if (currentTicketId) {
-      const docRef = firestore.collection(CS_COLLECTION).doc(currentTicketId);
-      const snap = await docRef.get();
-      if (snap.exists) {
-        targetTicket = snap.data() as CSTicket;
-      }
-    }
-
-    // 1. Construct user message with client-provided messageId or generate unique one
-    const userMessage: CSMessage = {
-      id: messageId || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      ticketId: currentTicketId || '',
-      senderId: userId,
-      senderType: 'user',
-      senderName: userName,
-      message: message || '',
-      attachments,
-      createdAt: now,
-      status: 'sent'
-    };
-
-    // If existing ticket is currently in agent chat, do NOT trigger Famo AI
-    const isInAgentChat = targetTicket?.state === 'IN_AGENT_CHAT' || targetTicket?.state === 'AGENT_ASSIGNED';
-
-    let famoReplyMessage: CSMessage | null = null;
-
-    if (!isInAgentChat && message) {
-      // Generate response from Famo AI with context
-      const conversationHistory = (targetTicket?.messages || []).map(m => ({
-        senderType: m.senderType,
-        message: m.message
-      }));
-
-      const famoResult = await generateFamoResponse({
-        userMessage: message,
-        conversationHistory,
-        userName,
-        userEmail
-      });
-
-      famoReplyMessage = {
-        id: `msg-famo-${Date.now() + 50}-${Math.random().toString(36).substring(2, 7)}`,
-        ticketId: currentTicketId || '',
-        senderId: 'famo-ai-cs',
-        senderType: 'ai',
-        senderName: 'Famo (Customer Service AI)',
-        message: famoResult.message,
-        actions: famoResult.actions,
-        createdAt: new Date(Date.now() + 800).toISOString()
-      };
-    }
-
-    if (targetTicket) {
-      userMessage.ticketId = targetTicket.id;
-      // Deduplicate by message ID in case it already exists in the array
-      const existingWithoutUserMsg = (targetTicket.messages || []).filter(m => m.id !== userMessage.id);
-      const updatedMessages = [...existingWithoutUserMsg, userMessage];
-      if (famoReplyMessage) {
-        famoReplyMessage.ticketId = targetTicket.id;
-        updatedMessages.push(famoReplyMessage);
-      }
-
-      targetTicket = {
-        ...targetTicket,
-        lastMessage: message || (attachments.length > 0 ? 'Lampiran dikirim' : ''),
-        updatedAt: now,
-        unreadByAdmin: true,
-        messages: updatedMessages
-      };
-
-      const docRef = firestore.collection(CS_COLLECTION).doc(targetTicket.id);
-      await docRef.set(targetTicket, { merge: true });
-
-      return res.json({
-        success: true,
-        ticket: targetTicket,
-        famoReply: famoReplyMessage
-      });
-    } else {
-      // Create new conversation ticket
-      const newDocId = `ticket-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      userMessage.ticketId = newDocId;
-
-      const messagesList = [userMessage];
-      if (famoReplyMessage) {
-        famoReplyMessage.ticketId = newDocId;
-        messagesList.push(famoReplyMessage);
-      }
-
-      const newTicket: CSTicket = {
-        id: newDocId,
-        ticketCode: generateTicketCode(),
-        userId,
-        userName,
-        userEmail,
-        userAvatar,
-        category,
-        subject: message && message.length > 50 ? `${message.substring(0, 47)}...` : message || 'Laporan Kendala Pengguna',
-        status: 'open',
-        state: 'AI_CHAT',
-        lastMessage: message || 'Lampiran dikirim',
-        unreadByAdmin: true,
-        unreadByUser: false,
-        messages: messagesList,
-        createdAt: now,
-        updatedAt: now
-      };
-
-      const docRef = firestore.collection(CS_COLLECTION).doc(newDocId);
-      await docRef.set(newTicket);
-
-      return res.json({
-        success: true,
-        ticket: newTicket,
-        famoReply: famoReplyMessage
-      });
-    }
-  } catch (err: any) {
-    console.error('[Customer Service Chat Error]', err);
-    return res.status(500).json({
-      success: false,
-      error: { message: 'Maaf kak, Famo sedang mengalami kendala saat memproses pesan. Silakan coba lagi.' }
-    });
-  }
+  return sendSuccess(res, { tickets: filtered });
 });
 
-/**
- * POST /api/customer-service/request-agent
- * Transition conversation into WAITING_QUEUE and calculate real queue position
- */
-customerServiceRouter.post('/request-agent', async (req: any, res: Response) => {
+// POST /api/customer-service/tickets
+customerServiceRouter.post('/tickets', (req: Request, res: Response) => {
   try {
-    const { ticketId, category } = req.body;
-    if (!ticketId) {
-      return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
+    const { userId, userName, userEmail, subject, category, message, priority } = req.body || {};
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return sendError(res, ERROR_CODES.VALIDATION_ERROR, 'Pesan tiket tidak boleh kosong.', 400);
     }
 
-    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
-    }
-
-    const now = new Date().toISOString();
-    const ticketData = snap.data() as CSTicket;
-
-    // Calculate queue position
-    const { position, estimatedMinutes } = await calculateRealQueuePosition(ticketId, now);
-
-    const queueMessage: CSMessage = {
-      id: `msg-sys-${Date.now()}`,
-      ticketId,
-      senderId: 'system',
-      senderType: 'system',
-      senderName: 'Sistem Mod Station',
-      message: `Aku bantu masukkan kakak ke antrean CS.\nKamu berada di urutan ${position} dan perkiraan menunggu sekitar ${estimatedMinutes} menit. Mohon tetap bersiap.`,
-      createdAt: now
-    };
-
-    const updatedTicket: CSTicket = {
-      ...ticketData,
-      category: category || ticketData.category || 'Umum',
-      state: 'WAITING_QUEUE',
+    const newTicket: ServerTicket = {
+      id: 'tkt_' + Math.random().toString(36).substring(2, 9),
+      userId: typeof userId === 'string' ? userId : 'guest',
+      userName: typeof userName === 'string' && userName ? userName : 'Pengguna ModStation',
+      userEmail: typeof userEmail === 'string' && userEmail ? userEmail : '',
+      subject: typeof subject === 'string' && subject ? subject : 'Permintaan Bantuan',
+      category: typeof category === 'string' && category ? category : 'general',
+      message: message.trim(),
       status: 'open',
-      requestedAgentAt: now,
-      queuePosition: position,
-      estimatedWaitMinutes: estimatedMinutes,
-      updatedAt: now,
-      messages: [...(ticketData.messages || []), queueMessage]
+      priority: typeof priority === 'string' ? (priority as any) : 'medium',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      replies: [
+        {
+          id: 'rep_init',
+          sender: 'system',
+          senderName: 'Sistem Mod Station',
+          message: 'Tiket Anda telah terdaftar dalam antrean prioritas tim support.',
+          createdAt: new Date().toISOString(),
+        }
+      ],
     };
 
-    await docRef.set(updatedTicket, { merge: true });
-
-    return res.json({
-      success: true,
-      ticket: updatedTicket,
-      queuePosition: position,
-      estimatedWaitMinutes: estimatedMinutes
-    });
-  } catch (err) {
-    console.error('[CS Request Agent Error]', err);
-    return res.status(500).json({ success: false, error: { message: 'Gagal memproses antrean agen.' } });
+    ticketsStore.unshift(newTicket);
+    return sendSuccess(res, { ticket: newTicket }, 201);
+  } catch (err: any) {
+    return sendError(res, ERROR_CODES.INTERNAL_ERROR, err.message || 'Gagal membuat tiket.', 500);
   }
 });
 
-/**
- * POST /api/customer-service/cancel-agent
- * Cancel human agent queue request and return to AI_CHAT
- */
-customerServiceRouter.post('/cancel-agent', async (req: any, res: Response) => {
-  try {
-    const { ticketId } = req.body;
-    if (!ticketId) {
-      return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
-    }
-
-    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
-    }
-
-    const now = new Date().toISOString();
-    const ticketData = snap.data() as CSTicket;
-
-    const cancelMessage: CSMessage = {
-      id: `msg-sys-${Date.now()}`,
-      ticketId,
-      senderId: 'system',
-      senderType: 'system',
-      senderName: 'Sistem Mod Station',
-      message: 'Permintaan antrean CS telah dibatalkan. Famo AI siap membantu pertanyaan kakak kembali.',
-      createdAt: now
-    };
-
-    const updatedTicket: CSTicket = {
-      ...ticketData,
-      state: 'AI_CHAT',
-      queuePosition: undefined,
-      estimatedWaitMinutes: undefined,
-      updatedAt: now,
-      messages: [...(ticketData.messages || []), cancelMessage]
-    };
-
-    await docRef.set(updatedTicket, { merge: true });
-
-    return res.json({
-      success: true,
-      ticket: updatedTicket
-    });
-  } catch (err) {
-    console.error('[CS Cancel Agent Error]', err);
-    return res.status(500).json({ success: false, error: { message: 'Gagal membatalkan antrean.' } });
+// GET /api/customer-service/tickets/:id
+customerServiceRouter.get('/tickets/:id', (req: Request, res: Response) => {
+  const ticket = ticketsStore.find((t) => t.id === req.params.id);
+  if (!ticket) {
+    return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Tiket tidak ditemukan.', 404);
   }
+  return sendSuccess(res, { ticket });
 });
 
-/**
- * POST /api/customer-service/claim-ticket
- * Agent claims conversation (Atomic operation to prevent double assignment)
- */
-customerServiceRouter.post('/claim-ticket', async (req: any, res: Response) => {
-  try {
-    const { ticketId } = req.body;
-    const sessionUser = req.user || req.session?.user;
-    const agentId = sessionUser?.id || sessionUser?.email || 'agent_staff';
-    const agentName = sessionUser?.name || 'Customer Service Mod Station';
-    const agentEmail = sessionUser?.email || 'cs@modstation.id';
-
-    if (!ticketId) {
-      return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
-    }
-
-    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
-    }
-
-    const ticketData = snap.data() as CSTicket;
-
-    // Check if already claimed by someone else
-    if (ticketData.assignedAgentId && ticketData.assignedAgentId !== agentId && ticketData.state === 'IN_AGENT_CHAT') {
-      return res.status(409).json({
-        success: false,
-        error: { message: `Tiket ini sudah diambil oleh ${ticketData.assignedAgentName || 'agen lain'}.` }
-      });
-    }
-
-    const now = new Date().toISOString();
-    const joinMessage: CSMessage = {
-      id: `msg-agent-join-${Date.now()}`,
-      ticketId,
-      senderId: agentId,
-      senderType: 'system',
-      senderName: 'Sistem Mod Station',
-      message: `${agentName} telah bergabung ke percakapan.`,
-      createdAt: now
-    };
-
-    const updatedTicket: CSTicket = {
-      ...ticketData,
-      state: 'IN_AGENT_CHAT',
-      status: 'in_progress',
-      assignedAgentId: agentId,
-      assignedAgentName: agentName,
-      assignedAgentEmail: agentEmail,
-      agentJoinedAt: now,
-      updatedAt: now,
-      messages: [...(ticketData.messages || []), joinMessage]
-    };
-
-    await docRef.set(updatedTicket, { merge: true });
-
-    return res.json({
-      success: true,
-      ticket: updatedTicket
-    });
-  } catch (err) {
-    console.error('[CS Claim Ticket Error]', err);
-    return res.status(500).json({ success: false, error: { message: 'Gagal mengambil tiket.' } });
+// POST /api/customer-service/tickets/:id/reply
+customerServiceRouter.post('/tickets/:id/reply', (req: Request, res: Response) => {
+  const ticket = ticketsStore.find((t) => t.id === req.params.id);
+  if (!ticket) {
+    return sendError(res, ERROR_CODES.RESOURCE_NOT_FOUND, 'Tiket tidak ditemukan.', 404);
   }
-});
 
-/**
- * POST /api/customer-service/end-chat
- * End active agent chat session and save conversation into report history
- */
-customerServiceRouter.post('/end-chat', async (req: any, res: Response) => {
-  try {
-    const { ticketId } = req.body;
-    if (!ticketId) {
-      return res.status(400).json({ success: false, error: { message: 'ticketId required' } });
-    }
-
-    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
-    }
-
-    const now = new Date().toISOString();
-    const ticketData = snap.data() as CSTicket;
-
-    const endMessage: CSMessage = {
-      id: `msg-end-${Date.now()}`,
-      ticketId,
-      senderId: 'system',
-      senderType: 'system',
-      senderName: 'Sistem Mod Station',
-      message: 'Sesi chat dengan Customer Service telah selesai. Percakapan ini telah diarsipkan ke Riwayat Laporan.',
-      createdAt: now
-    };
-
-    const updatedTicket: CSTicket = {
-      ...ticketData,
-      state: 'ENDED',
-      status: 'resolved',
-      endedAt: now,
-      updatedAt: now,
-      messages: [...(ticketData.messages || []), endMessage]
-    };
-
-    await docRef.set(updatedTicket, { merge: true });
-
-    return res.json({
-      success: true,
-      ticket: updatedTicket
-    });
-  } catch (err) {
-    console.error('[CS End Chat Error]', err);
-    return res.status(500).json({ success: false, error: { message: 'Gagal mengakhiri chat.' } });
+  const { message, senderName, sender } = req.body || {};
+  if (!message || typeof message !== 'string') {
+    return sendError(res, ERROR_CODES.VALIDATION_ERROR, 'Pesan balasan wajib diisi.', 400);
   }
-});
 
-/**
- * GET /api/customer-service/queue-status/:ticketId
- * Real-time queue poll endpoint
- */
-customerServiceRouter.get('/queue-status/:ticketId', async (req: Request, res: Response) => {
-  try {
-    const { ticketId } = req.params;
-    const docRef = firestore.collection(CS_COLLECTION).doc(ticketId);
-    const snap = await docRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ success: false, error: { message: 'Tiket tidak ditemukan.' } });
-    }
+  const reply = {
+    id: 'rep_' + Math.random().toString(36).substring(2, 9),
+    sender: sender === 'agent' ? 'agent' : 'user',
+    senderName: senderName || 'Pengguna',
+    message: message.trim(),
+    createdAt: new Date().toISOString(),
+  };
 
-    const ticketData = snap.data() as CSTicket;
-    const { position, estimatedMinutes } = await calculateRealQueuePosition(ticketId, ticketData.requestedAgentAt || ticketData.createdAt);
+  if (!ticket.replies) ticket.replies = [];
+  ticket.replies.push(reply as any);
+  ticket.updatedAt = new Date().toISOString();
 
-    return res.json({
-      success: true,
-      state: ticketData.state,
-      position,
-      estimatedMinutes,
-      assignedAgentName: ticketData.assignedAgentName
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { message: 'Error checking queue status' } });
-  }
+  return sendSuccess(res, { ticket, reply });
 });

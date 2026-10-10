@@ -1,12 +1,12 @@
 {
-  "projectId": "mod-station-proj",
-  "appId": "1:923200092364:web:b0973eeff5798bfa1e2a69",
-  "apiKey": "AIzaSyCpwBjKOncW9tiQqmrca3dWrBEsbXQ35Yc",
-  "authDomain": "mod-station-proj.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-aerodraft-284b5f6b-9aa3-4147-8067-f44fbbd5204c",
-  "storageBucket": "mod-station-proj.firebasestorage.app",
-  "messagingSenderId": "923200092364",
+  "projectId": "fantra-6f7f5",
+  "appId": "1:988675780680:web:fdbebd304fadefa690687d",
+  "apiKey": "AIzaSyA1p7ZdxQpZbSzMaVzm5zfuv0M1lz5oTdY",
+  "authDomain": "fantra-6f7f5.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-aerodraft-f1731fa7-ee4f-4a23-979e-41f539ba6de6",
+  "storageBucket": "fantra-6f7f5.firebasestorage.app",
+  "messagingSenderId": "988675780680",
   "measurementId": "",
-  "oAuthClientId": "923200092364-0m1d84o59lsm0c906m4f98jinnpbt4o4.apps.googleusercontent.com",
+  "oAuthClientId": "988675780680-53ri00bie6rg03b2n4s964jt1p5cs0sh.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
