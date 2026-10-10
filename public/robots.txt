@@ -30,4 +30,4 @@ Disallow: /search/
 Disallow: /search?*
 
 # Sitemaps
-Sitemap: https://fantra.modstation.vercel.app/sitemap.xml
+Sitemap: https://fantra-modstation.vercel.app/sitemap.xml
