@@ -183,22 +183,6 @@ export default function Sidebar({
               );
             })}
 
-            {/* Developer Portal shortcut if developer */}
-            {isDeveloper && (
-              <button
-                onClick={() => onNavigate('developer-dashboard')}
-                id="sidebar-nav-developer"
-                title={collapsed ? t('nav.developerConsole', 'Developer Console') : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition-all group cursor-pointer ${
-                  currentView === 'developer-dashboard'
-                    ? 'bg-slate-100 dark:bg-white/10 text-blue-600 dark:text-blue-400 font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5'
-                } ${collapsed ? 'justify-center px-2' : ''}`}
-              >
-                <Code2 className="w-4.5 h-4.5 shrink-0 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white" />
-                {!collapsed && <span className="truncate">{t('nav.developerConsole', 'Developer Console')}</span>}
-              </button>
-            )}
 
             {/* Admin Management Section */}
             {isOwnerOrAdmin && (

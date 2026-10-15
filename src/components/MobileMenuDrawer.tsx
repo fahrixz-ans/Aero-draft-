@@ -155,45 +155,30 @@ export default function MobileMenuDrawer({
       user.email === 'admin@aeroapk.com'
     ));
 
-  const isDeveloper = userRole === 'developer' || isOwnerOrAdmin;
+  const effectiveRole: 'owner' | 'user' = isOwnerOrAdmin ? 'owner' : 'user';
 
-  const effectiveRole: 'owner' | 'developer' | 'user' = isOwnerOrAdmin 
-    ? 'owner' 
-    : (isDeveloper ? 'developer' : 'user');
-
-  // Mode State: 'user' | 'developer' | 'owner'
-  const [currentMode, setCurrentMode] = useState<'user' | 'developer' | 'owner'>(() => {
+  // Mode State: 'user' | 'owner'
+  const [currentMode, setCurrentMode] = useState<'user' | 'owner'>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('modstation_nav_mode');
       if (saved === 'owner' && isOwnerOrAdmin) return 'owner';
-      if (saved === 'developer' && isDeveloper) return 'developer';
       if (saved === 'user') return 'user';
     }
-    return isOwnerOrAdmin ? 'owner' : (isDeveloper ? 'developer' : 'user');
+    return isOwnerOrAdmin ? 'owner' : 'user';
   });
 
   // Keep mode in sync if permissions change
   useEffect(() => {
-    if (effectiveRole === 'user' && currentMode !== 'user') {
+    if (!isOwnerOrAdmin && currentMode !== 'user') {
       setCurrentMode('user');
-    } else if (effectiveRole === 'developer' && currentMode === 'owner') {
-      setCurrentMode('developer');
     }
-  }, [effectiveRole, currentMode]);
+  }, [isOwnerOrAdmin, currentMode]);
 
-  // Cycle Mode
+  // Toggle Mode between User and Owner Console
   const handleSwitchMode = () => {
-    if (effectiveRole === 'owner') {
-      // OWNER CYCLE: USER -> DEVELOPER -> OWNER -> USER
+    if (isOwnerOrAdmin) {
       setCurrentMode(prev => {
-        const next = prev === 'user' ? 'developer' : (prev === 'developer' ? 'owner' : 'user');
-        if (typeof window !== 'undefined') sessionStorage.setItem('modstation_nav_mode', next);
-        return next;
-      });
-    } else if (effectiveRole === 'developer') {
-      // DEVELOPER CYCLE: USER -> DEVELOPER -> USER
-      setCurrentMode(prev => {
-        const next = prev === 'user' ? 'developer' : 'user';
+        const next = prev === 'user' ? 'owner' : 'user';
         if (typeof window !== 'undefined') sessionStorage.setItem('modstation_nav_mode', next);
         return next;
       });
@@ -378,7 +363,6 @@ export default function MobileMenuDrawer({
 
   const AKUN_ITEMS = [
     { id: 'profile', label: 'Profil', view: 'account', icon: User },
-    { id: 'premium', label: 'Premium', view: 'subscription', icon: Crown },
     { id: 'notifications', label: 'Notifikasi', view: 'notifications', icon: Bell },
     { id: 'settings', label: 'Pengaturan', view: 'settings', icon: Settings }
   ];
@@ -510,8 +494,8 @@ export default function MobileMenuDrawer({
                   {/* Controls: Mode Tag, Dark/Light Toggle, Auth Button */}
                   <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                     
-                    {/* Switch / Mode Indicator (Only for DEVELOPER and OWNER) */}
-                    {(effectiveRole === 'developer' || effectiveRole === 'owner') && (
+                    {/* Switch / Mode Indicator (Only for OWNER / ADMIN) */}
+                    {isOwnerOrAdmin && (
                       <button
                         type="button"
                         onClick={handleSwitchMode}
@@ -520,7 +504,7 @@ export default function MobileMenuDrawer({
                         aria-label="Ganti mode workspace"
                       >
                         <Repeat className="w-3.5 h-3.5" />
-                        <span>Mode: {currentMode === 'owner' ? 'Owner' : (currentMode === 'developer' ? 'Developer' : 'Pengguna')}</span>
+                        <span>Mode: {currentMode === 'owner' ? 'Owner Console' : 'Pengguna'}</span>
                       </button>
                     )}
 
@@ -620,24 +604,7 @@ export default function MobileMenuDrawer({
                   </div>
                 )}
 
-                {/* 3. WORKSPACE ACCORDING TO ROLE & MODE */}
-                
-                {/* DEVELOPER WORKSPACE (When Mode = DEVELOPER) */}
-                {currentMode === 'developer' && (
-                  <div className="space-y-3 pt-4 border-t border-slate-200/80 dark:border-white/10">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                        DEVELOPER WORKSPACE
-                      </p>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold">
-                        Dev Console
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                      {DEVELOPER_WORKSPACE_ITEMS.map(renderNavButton)}
-                    </div>
-                  </div>
-                )}
+                {/* 3. OWNER WORKSPACE (When Mode = OWNER) */}
 
                 {/* OWNER WORKSPACE (When Mode = OWNER) */}
                 {currentMode === 'owner' && (

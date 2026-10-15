@@ -422,15 +422,7 @@ export default function ProfileView({
             <span>{t('profile.editProfile', 'Edit Profil')}</span>
           </button>
 
-          {isDeveloper && (
-            <button
-              type="button"
-              onClick={() => onNavigate('developer-dashboard')}
-              className="px-4 py-2 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-blue-600 dark:text-blue-400 font-bold text-xs rounded-xl border border-blue-500/20 transition-colors cursor-pointer"
-            >
-              Developer Console &gt;
-            </button>
-          )}
+
 
           {isAdmin && (
             <button

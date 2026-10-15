@@ -74,12 +74,18 @@ export default function AppDetailFullView({ app, onBack }: AppDetailFullViewProp
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <img
-          src={app.iconUrl || app.icon}
-          alt={app.name}
-          className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-white/10 shadow-xs"
-          referrerPolicy="no-referrer"
-        />
+        <div className="w-10 h-10 aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xs shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+          <img
+            src={app.iconUrl || app.icon}
+            alt={app.name}
+            className="w-full h-full aspect-square object-cover app-icon-1-1"
+            style={{ aspectRatio: '1 / 1' }}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%232563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="m9 12 2 2 4-4"/></svg>';
+            }}
+          />
+        </div>
         <h1 className="text-xl font-black text-slate-900 dark:text-white leading-tight">
           {app.name}
         </h1>

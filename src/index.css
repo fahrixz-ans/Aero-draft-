@@ -29,6 +29,16 @@
   background-color: var(--color-brand-light-bg);
 }
 
+@utility app-icon-1-1 {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.app-icon-1-1 {
+  aspect-ratio: 1 / 1 !important;
+  object-fit: cover !important;
+}
+
 @utility bg-brand-sec {
   background-color: var(--color-brand-light-sec);
 }

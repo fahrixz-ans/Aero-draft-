@@ -90,12 +90,18 @@ export default function AppDownloadView({
       <div className="bg-white dark:bg-[#131924] rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-sm">
         {/* App Mini Header */}
         <div className="flex items-center gap-4 pb-6 border-b border-slate-100 dark:border-white/5">
-          <img
-            src={app.icon}
-            alt={app.name}
-            referrerPolicy="no-referrer"
-            className="w-16 h-16 rounded-2xl object-cover shadow-sm"
-          />
+          <div className="w-16 h-16 aspect-square rounded-2xl overflow-hidden shadow-sm shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+            <img
+              src={app.iconUrl || app.icon}
+              alt={app.name}
+              referrerPolicy="no-referrer"
+              className="w-full h-full aspect-square object-cover app-icon-1-1"
+              style={{ aspectRatio: '1 / 1' }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%232563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="m9 12 2 2 4-4"/></svg>';
+              }}
+            />
+          </div>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white line-clamp-1">
               {app.name} APK

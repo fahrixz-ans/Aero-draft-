@@ -72,14 +72,38 @@ export default function AppDetailHeader({
 
   return (
     <div className="space-y-6 pb-6 border-b border-slate-200/80 dark:border-white/10" id="app-detail-header-block">
-      {/* Detail Main Info: App Squircle Icon | App Name, Developer, Category, GET pill */}
+      {/* Gambar Sampul (Cover / Banner Image) with responsive non-distorted aspect ratio */}
+      {(app.bannerUrl || (app as any).coverUrl) && (
+        <div className="w-full aspect-[21/9] sm:aspect-[3/1] max-h-56 sm:max-h-72 rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-white/10 shadow-xs">
+          <img
+            src={app.bannerUrl || (app as any).coverUrl}
+            alt={`Sampul ${app.name}`}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
+      {/* Detail Main Info: App Squircle Icon (Strict 1:1 Ratio) | App Name, Developer, Category, GET pill */}
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
-        <img
-          src={app.iconUrl || app.icon}
-          alt={app.name}
-          className="w-28 h-28 sm:w-32 sm:h-32 rounded-[24px] border border-black/5 dark:border-white/10 shadow-sm object-cover shrink-0 select-none bg-slate-100 dark:bg-slate-800"
-          referrerPolicy="no-referrer"
-        />
+        <div
+          className="w-28 h-28 sm:w-32 sm:h-32 aspect-square shrink-0 rounded-[24px] overflow-hidden border border-black/5 dark:border-white/10 shadow-sm bg-slate-100 dark:bg-slate-800 flex items-center justify-center select-none"
+          style={{ aspectRatio: '1 / 1' }}
+        >
+          <img
+            src={app.iconUrl || app.icon || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80'}
+            alt={app.name}
+            className="w-full h-full aspect-square object-cover app-icon-1-1"
+            style={{ aspectRatio: '1 / 1' }}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="%232563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="m9 12 2 2 4-4"/></svg>';
+            }}
+          />
+        </div>
 
         <div className="flex-1 min-w-0 space-y-2">
           <div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Filter, Edit3, Trash2, History, Package, PlusCircle, 
   ExternalLink, ArrowUpDown, ChevronDown, CheckCircle2, AlertTriangle, HelpCircle,
-  RefreshCw, X, Tag, User, Download, FileText
+  RefreshCw, X, Tag, User, Download, FileText, Archive, ArchiveRestore
 } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { 
@@ -141,6 +141,27 @@ export default function AdminApplicationsView() {
     } catch (err: any) {
       console.error(err);
       setErrorMsg('Gagal menyimpan perubahan aplikasi: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Archive / Publish Quick Toggle
+  const handleToggleArchive = async (app: AppData) => {
+    setActionLoading(true);
+    const newStatus: AppStatus = app.status === 'published' ? 'archived' : 'published';
+    try {
+      await setDoc(doc(db, 'applications', app.id), { status: newStatus }, { merge: true });
+      await logAdminAction({
+        action: newStatus === 'archived' ? 'app_archived' : 'app_published',
+        entityType: 'application',
+        entityId: app.id,
+        entityName: app.name,
+        metadata: { previousStatus: app.status, newStatus }
+      });
+      setSuccessMsg(`Status aplikasi "${app.name}" diubah menjadi ${newStatus === 'published' ? 'Aktif (Published)' : 'Diarsipkan (Archived)'}.`);
+    } catch (err: any) {
+      setErrorMsg('Gagal mengubah status arsip: ' + err.message);
     } finally {
       setActionLoading(false);
     }
@@ -364,6 +385,21 @@ export default function AdminApplicationsView() {
                           title="Kelola Riwayat Versi"
                         >
                           <History className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleArchive(app)}
+                          className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                            app.status === 'archived'
+                              ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-500/10'
+                              : 'text-slate-400 hover:text-amber-500 hover:bg-amber-500/10'
+                          }`}
+                          title={app.status === 'archived' ? 'Terbitkan Ulang Aplikasi (Publish)' : 'Arsipkan Aplikasi (Archive)'}
+                        >
+                          {app.status === 'archived' ? (
+                            <ArchiveRestore className="h-4 w-4" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => setAppToEdit(app)}

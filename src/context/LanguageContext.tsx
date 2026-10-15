@@ -37,8 +37,7 @@ const translations: Record<AppLanguage, Record<string, string>> = {
     'nav.dmca': 'DMCA',
     'nav.terms': 'Syarat & Ketentuan',
     'nav.privacy': 'Kebijakan Privasi',
-    'nav.ownerConsole': 'Owner Console',
-    'nav.developerConsole': 'Developer Console',
+    'nav.ownerConsole': 'Console Pemilik',
 
     // Common UI elements
     'common.back': 'Kembali',
@@ -403,7 +402,6 @@ const translations: Record<AppLanguage, Record<string, string>> = {
     'nav.terms': 'Terms & Conditions',
     'nav.privacy': 'Privacy Policy',
     'nav.ownerConsole': 'Owner Console',
-    'nav.developerConsole': 'Developer Console',
 
     // Common UI elements
     'common.back': 'Back',

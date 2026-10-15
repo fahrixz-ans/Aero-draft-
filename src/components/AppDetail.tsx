@@ -564,7 +564,7 @@ export default function AppDetail({
                   controls
                   preload="metadata"
                   playsInline
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   onError={(e) => {
                     (e.target as HTMLElement).style.display = 'none';
                   }}
@@ -637,11 +637,15 @@ export default function AppDetail({
                       className="py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 px-2 rounded-lg cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <img
-                          src={app.iconUrl}
-                          alt={app.name}
-                          className="w-8 h-8 rounded-lg object-cover"
-                        />
+                        <div className="w-8 h-8 aspect-square rounded-lg overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                          <img
+                            src={app.iconUrl || app.icon}
+                            alt={app.name}
+                            className="w-full h-full aspect-square object-cover app-icon-1-1"
+                            style={{ aspectRatio: '1 / 1' }}
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
                         <div>
                           <p className="text-xs font-bold text-slate-900 dark:text-white">{app.name}</p>
                           <p className="text-[11px] text-slate-400 font-mono">v{ver.versionName}</p>
@@ -886,12 +890,15 @@ export default function AppDetail({
                 onClick={() => onSelectRelated(item.slug || item.id)}
                 className="p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl flex items-center gap-3 hover:border-blue-500/50 hover:shadow-sm cursor-pointer transition-all group"
               >
-                <img
-                  src={item.iconUrl}
-                  alt={item.name}
-                  referrerPolicy="no-referrer"
-                  className="w-12 h-12 rounded-xl object-cover shrink-0 group-hover:scale-105 transition-transform"
-                />
+                <div className="w-12 h-12 aspect-square rounded-xl overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                  <img
+                    src={item.iconUrl || item.icon}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full aspect-square object-cover app-icon-1-1 group-hover:scale-105 transition-transform"
+                    style={{ aspectRatio: '1 / 1' }}
+                  />
+                </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
                     {item.name}
@@ -934,12 +941,15 @@ export default function AppDetail({
                 className="flex-none w-52 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 hover:shadow-sm cursor-pointer transition-all group"
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={item.iconUrl}
-                    alt={item.name}
-                    referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-xl object-cover shrink-0 group-hover:scale-105 transition-transform"
-                  />
+                  <div className="w-10 h-10 aspect-square rounded-xl overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                    <img
+                      src={item.iconUrl || item.icon}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full aspect-square object-cover app-icon-1-1 group-hover:scale-105 transition-transform"
+                      style={{ aspectRatio: '1 / 1' }}
+                    />
+                  </div>
                   <div className="min-w-0 flex-1">
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
                       {item.name}
@@ -1001,12 +1011,15 @@ export default function AppDetail({
                   onClick={() => onSelectRelated(item.slug || item.id)}
                   className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
                 >
-                  <img
-                    src={item.iconUrl}
-                    alt={item.name}
-                    referrerPolicy="no-referrer"
-                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
-                  />
+                  <div className="w-14 h-14 aspect-square rounded-2xl mx-auto overflow-hidden mb-2 group-hover:scale-105 transition-transform shadow-xs bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                    <img
+                      src={item.iconUrl || item.icon}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full aspect-square object-cover app-icon-1-1"
+                      style={{ aspectRatio: '1 / 1' }}
+                    />
+                  </div>
                   <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{item.downloads || '10K+'} unduhan</p>
                 </div>
@@ -1030,12 +1043,15 @@ export default function AppDetail({
                   onClick={() => onSelectRelated(item.slug || item.id)}
                   className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
                 >
-                  <img
-                    src={item.iconUrl}
-                    alt={item.name}
-                    referrerPolicy="no-referrer"
-                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
-                  />
+                  <div className="w-14 h-14 aspect-square rounded-2xl mx-auto overflow-hidden mb-2 group-hover:scale-105 transition-transform shadow-xs bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                    <img
+                      src={item.iconUrl || item.icon}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full aspect-square object-cover app-icon-1-1"
+                      style={{ aspectRatio: '1 / 1' }}
+                    />
+                  </div>
                   <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{item.category}</p>
                 </div>
@@ -1059,12 +1075,15 @@ export default function AppDetail({
                   onClick={() => onSelectRelated(item.slug || item.id)}
                   className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
                 >
-                  <img
-                    src={item.iconUrl}
-                    alt={item.name}
-                    referrerPolicy="no-referrer"
-                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
-                  />
+                  <div className="w-14 h-14 aspect-square rounded-2xl mx-auto overflow-hidden mb-2 group-hover:scale-105 transition-transform shadow-xs bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                    <img
+                      src={item.iconUrl || item.icon}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full aspect-square object-cover app-icon-1-1"
+                      style={{ aspectRatio: '1 / 1' }}
+                    />
+                  </div>
                   <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
                   <p className="text-[10px] text-amber-500 font-bold mt-0.5">★ {(item.ratingAverage || item.rating || 0).toFixed(1)}</p>
                 </div>
@@ -1088,12 +1107,15 @@ export default function AppDetail({
                   onClick={() => onSelectRelated(item.slug || item.id)}
                   className="flex-none w-36 p-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-2xl hover:border-blue-500/50 cursor-pointer text-center group transition-all"
                 >
-                  <img
-                    src={item.iconUrl}
-                    alt={item.name}
-                    referrerPolicy="no-referrer"
-                    className="w-14 h-14 rounded-2xl mx-auto object-cover mb-2 group-hover:scale-105 transition-transform shadow-xs"
-                  />
+                  <div className="w-14 h-14 aspect-square rounded-2xl mx-auto overflow-hidden mb-2 group-hover:scale-105 transition-transform shadow-xs bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+                    <img
+                      src={item.iconUrl || item.icon}
+                      alt={item.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full aspect-square object-cover app-icon-1-1"
+                      style={{ aspectRatio: '1 / 1' }}
+                    />
+                  </div>
                   <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{new Date(item.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</p>
                 </div>

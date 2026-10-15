@@ -64,8 +64,7 @@ export const SUPPORT_COMMUNITY_NAV_ITEMS: NavItemConfig[] = [
   { id: 'donate', label: 'Donasi', view: 'donate', icon: HeartHandshake },
   { id: 'social-media', label: 'Social Media', view: 'social-media', icon: Share2 },
   { id: 'customer-service', label: 'Hubungi Kami', view: 'customer-service', icon: Headphones },
-  { id: 'help-center', label: 'Pusat Bantuan', view: 'help-center', icon: HelpCircle },
-  { id: 'premium', label: 'Premium', view: 'subscription', icon: Crown }
+  { id: 'help-center', label: 'Pusat Bantuan', view: 'help-center', icon: HelpCircle }
 ];
 
 // 4. Group 4: Account & Settings Section
@@ -82,11 +81,9 @@ export const LEGAL_NAV_ITEMS: NavItemConfig[] = [
   { id: 'privacy', label: 'Kebijakan Privasi', view: 'privacy', icon: ShieldCheck }
 ];
 
-
 // 5. Group 5: Consoles (Role-based)
 export const CONSOLE_NAV_ITEMS: NavItemConfig[] = [
-  { id: 'owner-console', label: 'Owner Console', view: 'admin', icon: ShieldAlert, roleRequired: 'admin' },
-  { id: 'developer-console', label: 'Developer Console', view: 'developer-dashboard', icon: Code2, roleRequired: 'developer' }
+  { id: 'owner-console', label: 'Owner Console', view: 'admin', icon: ShieldAlert, roleRequired: 'admin' }
 ];
 
 // 6. Secondary Category Navigation Items (Used on catalog filter bars)

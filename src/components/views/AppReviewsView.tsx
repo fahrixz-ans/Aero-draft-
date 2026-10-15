@@ -120,12 +120,15 @@ export default function AppReviewsView({
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <img
-            src={app.iconUrl || app.icon}
-            alt={app.name}
-            className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-white/10 shadow-xs"
-            referrerPolicy="no-referrer"
-          />
+          <div className="w-10 h-10 aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-xs shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+            <img
+              src={app.iconUrl || app.icon}
+              alt={app.name}
+              className="w-full h-full aspect-square object-cover app-icon-1-1"
+              style={{ aspectRatio: '1 / 1' }}
+              referrerPolicy="no-referrer"
+            />
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight">

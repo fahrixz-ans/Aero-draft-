@@ -86,12 +86,15 @@ export default function AppCommentsView({
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <img
-          src={app.icon}
-          alt={app.name}
-          referrerPolicy="no-referrer"
-          className="w-14 h-14 rounded-2xl object-cover shadow-sm"
-        />
+        <div className="w-14 h-14 aspect-square rounded-2xl overflow-hidden shadow-sm shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+          <img
+            src={app.iconUrl || app.icon}
+            alt={app.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full aspect-square object-cover app-icon-1-1"
+            style={{ aspectRatio: '1 / 1' }}
+          />
+        </div>
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
             Diskusi & Komentar {app.name}

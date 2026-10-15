@@ -63,15 +63,21 @@ export default function AppCard({
     >
       {/* Left: App Icon + App Hierarchy Details */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        {/* App Squircle Icon */}
+        {/* App Squircle Icon Container */}
         <div className="relative shrink-0">
-          <img
-            src={app.iconUrl || app.icon}
-            alt={app.name}
-            referrerPolicy="no-referrer"
-            className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-[14px] bg-slate-100 dark:bg-slate-800 shadow-2xs border border-black/5 dark:border-white/10 transition-transform duration-200 group-hover:scale-[1.02]"
-            loading="lazy"
-          />
+          <div className="w-14 h-14 sm:w-16 sm:h-16 aspect-square rounded-[14px] overflow-hidden bg-slate-100 dark:bg-slate-800 shadow-2xs border border-black/5 dark:border-white/10" style={{ aspectRatio: '1 / 1' }}>
+            <img
+              src={app.iconUrl || app.icon}
+              alt={app.name}
+              referrerPolicy="no-referrer"
+              className="w-full h-full aspect-square object-cover app-icon-1-1 transition-transform duration-200 group-hover:scale-[1.02]"
+              style={{ aspectRatio: '1 / 1' }}
+              loading="lazy"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%232563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="4"/><path d="m9 12 2 2 4-4"/></svg>';
+              }}
+            />
+          </div>
           {downloadInfo.hasUpdate ? (
             <span 
               title="Update tersedia"

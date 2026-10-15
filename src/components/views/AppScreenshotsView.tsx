@@ -95,7 +95,7 @@ export default function AppScreenshotsView({
               src={img}
               alt={`Thumb ${idx + 1}`}
               referrerPolicy="no-referrer"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain bg-slate-900"
             />
           </button>
         ))}

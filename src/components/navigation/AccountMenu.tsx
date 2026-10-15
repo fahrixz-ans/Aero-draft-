@@ -89,18 +89,9 @@ export default function AccountMenu({
             <p className="text-[11px] text-slate-400 truncate mt-0.5">{user.email}</p>
             
             <div className="flex items-center gap-1.5 mt-2">
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
-                subscriptionPlan === 'premium'
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                  : 'bg-slate-200/70 dark:bg-white/10 text-slate-600 dark:text-slate-300'
-              }`}>
-                {subscriptionPlan === 'premium' ? '👑 Premium' : 'Free Plan'}
+              <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                {isOwnerOrAdmin ? '🛡️ Owner / Admin' : '✓ Akun Terverifikasi'}
               </span>
-              {userRole === 'developer' && (
-                <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                  Developer
-                </span>
-              )}
             </div>
           </div>
 
@@ -154,29 +145,17 @@ export default function AccountMenu({
               <span>Pusat Notifikasi</span>
             </button>
 
-            <button
-              onClick={() => {
-                onNavigate('subscription');
-                setIsOpen(false);
-              }}
-              role="menuitem"
-              className="w-full text-left px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 flex items-center gap-2.5 cursor-pointer transition-colors"
-            >
-              <Crown className="h-4 w-4 text-amber-500" />
-              <span>Status Berlangganan</span>
-            </button>
-
             {isOwnerOrAdmin && (
               <button
                 onClick={() => {
-                  onNavigate('owner');
+                  onNavigate('admin');
                   setIsOpen(false);
                 }}
                 role="menuitem"
-                className="w-full text-left px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 flex items-center gap-2.5 cursor-pointer border-t border-slate-100 dark:border-white/5 transition-colors"
+                className="w-full text-left px-3.5 py-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 flex items-center gap-2.5 cursor-pointer border-t border-slate-100 dark:border-white/5 transition-colors"
               >
-                <ShieldAlert className="h-4 w-4 text-amber-500" />
-                <span>Admin CMS Panel</span>
+                <ShieldAlert className="h-4 w-4 text-blue-500" />
+                <span>Owner Console</span>
               </button>
             )}
           </div>

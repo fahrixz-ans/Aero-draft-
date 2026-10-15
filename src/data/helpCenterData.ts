@@ -58,14 +58,14 @@ export const HELP_QUESTIONS: HelpQuestion[] = [
   },
   {
     id: 'q-2',
-    categoryId: 'developer',
-    categoryName: 'Developer',
-    question: 'Bagaimana cara mendaftar dan mempublikasikan aplikasi sebagai Developer?',
-    shortAnswer: 'Buka menu Developer Console melalui Hamburger Menu. Lengkapi formulir pendaftaran developer atau klik Tambah Aplikasi untuk mengunggah berkas APK, screenshot resolusi tinggi, deskripsi, dan metadata aplikasi Anda. Tim kami akan melakukan pemindaian keamanan sebelum aplikasi aktif.',
-    articleSlug: 'panduan-developer-dan-publikasi-apk',
+    categoryId: 'katalog',
+    categoryName: 'Katalog & Publikasi',
+    question: 'Bagaimana standar kurasi dan cara menambahkan aplikasi baru di Mod Station?',
+    shortAnswer: 'Semua aplikasi di Mod Station dikurasi dan dikelola secara terpusat oleh tim Owner Console. Setiap berkas APK diverifikasi integritasnya, checksum SHA-256, dan kompatibilitasnya sebelum diterbitkan ke katalog publik.',
+    articleSlug: 'panduan-kurasi-dan-publikasi-apk',
     suggestedFollowUps: [
-      'Berapa lama proses peninjauan APK oleh Mod Station Shield?',
-      'Format dan ukuran maksimal berkas APK apa yang didukung?'
+      'Berapa lama proses verifikasi aplikasi oleh Mod Station?',
+      'Format dan versi Android minimum apa yang didukung?'
     ]
   },
   {
@@ -194,27 +194,26 @@ export const HELP_ARTICLES: HelpArticle[] = [
   },
   {
     id: 'art-help-2',
-    slug: 'panduan-developer-dan-publikasi-apk',
-    title: 'Panduan Lengkap Publikasi Aplikasi di Developer Console',
-    category: 'Developer',
-    categoryId: 'developer',
-    excerpt: 'Petunjuk langkah demi langkah bagi developer untuk mengunggah berkas APK, mengelola versi, dan memantau ulasan.',
+    slug: 'panduan-kurasi-dan-publikasi-apk',
+    title: 'Standar Kurasi dan Publikasi Aplikasi di Mod Station',
+    category: 'Publikasi',
+    categoryId: 'katalog',
+    excerpt: 'Standar kualitas dan tahapan kurasi aplikasi Android di Mod Station sebelum diterbitkan ke katalog resmi.',
     updatedAt: '10 September 2026',
-    content: `Developer Console Mod Station dirancang khusus agar pengembang aplikasi Android dapat mendistribusikan karya mereka kepada jutaan pengguna secara transparan, aman, dan tanpa biaya perantara.
+    content: `Mod Station menerapkan standar kurasi berkas APK yang ketat agar jutaan pengguna mendapatkan aplikasi yang stabil, bersih, dan berintegritas tinggi.
 
 ### Persyaratan Berkas APK:
 - Berkas harus berformat \`.apk\` valid dengan arsitektur yang didukung (armeabi-v7a, arm64-v8a, atau universal).
 - Menandatangani berkas dengan sertifikat rilis (Release Keystore) resmi.
-- Melampirkan ikon aplikasi resolusi 512x512 PNG dan minimal 3 tangkapan layar (screenshot).
+- Melampirkan ikon aplikasi resolusi tinggi dan tangkapan layar (screenshot) asli tanpa manipulasi.
 
-### Tahapan Publikasi:
-1. Buka **Developer Console** dari Hamburger Menu.
-2. Pilih menu **Add Application** / **Tambah Aplikasi**.
-3. Isi informasi detail: Nama Aplikasi, Package Name, Kategori, Versi, Ukuran Berkas, dan Catatan Rilis (Changelog).
-4. Unggah berkas APK Anda. Sistem **Mod Station Shield** akan memverifikasi checksum SHA-256 dan sertifikat digital secara otomatis.
-5. Klik **Publikasikan**. Aplikasi Anda akan segera tampil di katalog setelah verifikasi selesai.`,
+### Tahapan Kurasi & Pengelolaan:
+1. Verifikasi metadata: Nama Aplikasi, Package Name, Kategori, Versi, Ukuran Berkas, dan Catatan Rilis (Changelog).
+2. Verifikasi integritas checksum SHA-256 dan keaslian tanda tangan digital APK.
+3. Tim kurator menguji kestabilan aplikasi pada lingkungan pengujian Android.
+4. Publikasi ke katalog Mod Station secara instan dengan tautan unduh langsung berkecepatan tinggi.`,
     relatedQuestions: [
-      'Berapa lama proses peninjauan APK oleh Mod Station Shield?',
+      'Berapa lama proses verifikasi aplikasi oleh tim Mod Station?',
       'Bagaimana cara memperbarui versi aplikasi yang sudah ada?'
     ]
   },

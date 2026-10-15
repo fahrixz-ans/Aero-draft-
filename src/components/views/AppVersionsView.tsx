@@ -90,12 +90,15 @@ export default function AppVersionsView({
 
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <img
-          src={app.icon}
-          alt={app.name}
-          referrerPolicy="no-referrer"
-          className="w-14 h-14 rounded-2xl object-cover shadow-sm"
-        />
+        <div className="w-14 h-14 aspect-square rounded-2xl overflow-hidden shadow-sm shrink-0 bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: '1 / 1' }}>
+          <img
+            src={app.iconUrl || app.icon}
+            alt={app.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full aspect-square object-cover app-icon-1-1"
+            style={{ aspectRatio: '1 / 1' }}
+          />
+        </div>
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold border border-blue-500/20 mb-1">
             <History className="w-3 h-3" />

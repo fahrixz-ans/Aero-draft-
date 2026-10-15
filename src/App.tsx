@@ -29,6 +29,7 @@ import CategoryCard from './components/CategoryCard';
 import AppDetail from './components/AppDetail';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import EmptyState from './components/EmptyState';
+import UnauthorizedDomainModal from './components/auth/UnauthorizedDomainModal';
 import AdminPanel from './components/AdminPanel';
 import RecentlyUpdatedPage from './components/RecentlyUpdatedPage';
 import DynamicSEO from './components/DynamicSEO';
@@ -185,19 +186,8 @@ export default function App() {
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [loading, setLoading] = useState<boolean>(false);
   
-  // Dark mode initialized from modstation_theme_pref or localStorage (supports system mode)
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    try {
-      const pref = localStorage.getItem('modstation_theme_pref');
-      if (pref === 'light') return false;
-      if (pref === 'dark') return true;
-      if (pref === 'system' || !pref) {
-        return typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true;
-      }
-    } catch {}
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : true;
-  });
+  // Light theme default (Mod Station clean light design)
+  const [darkMode, setDarkMode] = useState<boolean>(false);
 
   // User state, bookmarks state, followed apps/categories, download history
   const [user, setUser] = useState<User | null>(null);
@@ -216,6 +206,8 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationModal, setShowNotificationModal] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showUnauthorizedDomainModal, setShowUnauthorizedDomainModal] = useState<boolean>(false);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string>('');
 
   // Interstitial modal state for free users (Section 32)
   const [interstitialDownload, setInterstitialDownload] = useState<{
@@ -316,42 +308,13 @@ export default function App() {
   const [dmcaForm, setDmcaForm] = useState({ appName: '', url: '', email: '', description: '' });
   const [dmcaSubmitted, setDmcaSubmitted] = useState(false);
 
-  // Synchronize Dark Mode state with HTML classes, Local Storage, and System Preference Listener
+  // Enforce Clean Light Theme
   useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
-
-  useEffect(() => {
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      const pref = localStorage.getItem('modstation_theme_pref') || 'system';
-      if (pref === 'system') {
-        setDarkMode(e.matches);
-      }
-    };
-
-    const mediaQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-    if (mediaQuery) {
-      if (mediaQuery.addEventListener) {
-        mediaQuery.addEventListener('change', handleSystemThemeChange);
-      } else if ('addListener' in mediaQuery) {
-        (mediaQuery as any).addListener(handleSystemThemeChange);
-      }
-    }
-
-    return () => {
-      if (mediaQuery) {
-        if (mediaQuery.removeEventListener) {
-          mediaQuery.removeEventListener('change', handleSystemThemeChange);
-        } else if ('removeListener' in mediaQuery) {
-          (mediaQuery as any).removeListener(handleSystemThemeChange);
-        }
-      }
-    };
+    document.documentElement.classList.remove('dark');
+    try {
+      localStorage.setItem('darkMode', 'false');
+      localStorage.setItem('modstation_theme_pref', 'light');
+    } catch {}
   }, []);
 
   // Load user data or guest data
@@ -542,6 +505,17 @@ export default function App() {
           );
           return;
         }
+      }
+
+      if (err?.code === 'auth/unauthorized-domain') {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'domain Anda';
+        console.error("Firebase auth/unauthorized-domain detected for hostname:", currentDomain);
+        setUnauthorizedDomain(currentDomain);
+        setShowUnauthorizedDomainModal(true);
+        setAuthError(
+          `Domain "${currentDomain}" belum diizinkan di Firebase Console. Daftarkan domain ini di Firebase Console (Authentication > Settings > Authorized domains).`
+        );
+        return;
       }
 
       console.warn("Sign-In failed:", err?.message || err);
@@ -784,17 +758,17 @@ export default function App() {
           setCurrentView('detail');
         }
       } else if (hash === '#/subscription' || hash === '#/premium') {
-        setCurrentView('subscription');
+        setCurrentView('donate');
       } else if (hash === '#/developer' || hash === '#/developer/' || hash === '#/developers' || hash === '#/developers/') {
         setSelectedDeveloperSlug(null);
         setCurrentView('all-developers');
       } else if (hash === '#/developer-register' || hash === '#/developer/register') {
-        setCurrentView('developer-register');
+        setCurrentView('home');
       } else if (hash === '#/category' || hash === '#/category/' || hash === '#/categories' || hash === '#/categories/') {
         setSelectedCategorySlug(null);
         setCurrentView('all-categories');
       } else if (hash === '#/developer-dashboard' || hash === '#/developer/dashboard') {
-        setCurrentView('developer-dashboard');
+        setCurrentView(isOwnerOrAdmin ? 'admin' : 'home');
       } else if (hash === '#/apps') {
         setCurrentView('apps');
       } else if (hash === '#/games') {
@@ -1063,9 +1037,9 @@ export default function App() {
         setSelectedAppSlug(null);
         setCurrentView('customer-service');
       } else if (view === 'subscription' || view === 'premium') {
-        window.location.hash = '/subscription';
+        window.location.hash = '/donate';
         setSelectedAppSlug(null);
-        setCurrentView('subscription');
+        setCurrentView('donate');
       } else if (view === 'dmca') {
         window.location.hash = '/dmca';
         setSelectedAppSlug(null);
@@ -1078,13 +1052,18 @@ export default function App() {
         window.location.hash = '/privacy';
         setSelectedAppSlug(null);
         setCurrentView('privacy');
-      } else if (view === 'admin' || view === 'owner-console') {
+      } else if (view === 'admin' || view === 'owner-console' || view === 'owner') {
         window.location.hash = slug ? `/admin/${slug}` : '/admin';
         setAdminInitialTab(slug || 'dashboard');
         setCurrentView('admin');
       } else if (view === 'developer-dashboard' || view === 'developer-console') {
-        window.location.hash = '/developer-dashboard';
-        setCurrentView('developer-dashboard');
+        if (isOwnerOrAdmin) {
+          window.location.hash = '/admin';
+          setCurrentView('admin');
+        } else {
+          window.location.hash = '/home';
+          setCurrentView('home');
+        }
       } else if (view === 'blog') {
         window.location.hash = '/blog';
         setCurrentView('blog');
@@ -1221,17 +1200,7 @@ export default function App() {
 
     if (!targetApp) return;
 
-    // Section 32: If FREE tier, show interstitial ad first
-    if (effectiveSubscriptionPlan === 'free') {
-      setInterstitialDownload({
-        isOpen: true,
-        app: targetApp,
-        downloadType: 'apk'
-      });
-      return;
-    }
-
-    // If PREMIUM or ADMIN/OWNER: instant direct download without ad delay
+    // Instant direct download without subscription barrier
     await proceedFinalDownload(targetApp, 'apk');
   };
 
@@ -1411,7 +1380,7 @@ export default function App() {
 
   if (currentView === 'admin') {
     return (
-      <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
+      <div className="min-h-screen flex flex-col font-sans bg-slate-50 text-slate-900">
         <OfflineBanner />
         {isOwnerOrAdmin ? (
           <AdminPanel onNavigate={navigateTo} user={user} initialTab={adminInitialTab} />
@@ -1433,17 +1402,26 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0F1115] text-slate-100' : 'bg-slate-50/30 text-slate-900'}`}>
+    <div className="min-h-screen flex flex-col font-sans bg-slate-50 text-slate-900">
       <OfflineBanner />
       
       {/* Non-blocking dismissable Auth Notification Banner */}
       {authError && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 sticky top-0 z-50 backdrop-blur-md">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50 backdrop-blur-md">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
-            <span className="truncate">{authError}</span>
+            <span className="font-medium">{authError}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {unauthorizedDomain && (
+              <button
+                type="button"
+                onClick={() => setShowUnauthorizedDomainModal(true)}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] transition-colors cursor-pointer shadow-xs"
+              >
+                <span>Lihat Cara Mengatasi</span>
+              </button>
+            )}
             <a
               href={window.location.href}
               target="_blank"
@@ -1455,7 +1433,10 @@ export default function App() {
             </a>
             <button
               type="button"
-              onClick={() => setAuthError(null)}
+              onClick={() => {
+                setAuthError(null);
+                setUnauthorizedDomain('');
+              }}
               className="p-1 hover:bg-amber-500/20 rounded-lg text-amber-800 dark:text-amber-200 cursor-pointer"
               aria-label="Tutup notifikasi login"
             >
@@ -2010,21 +1991,49 @@ export default function App() {
               />
             )}
 
-            {/* Developer Registration View */}
+            {/* Developer Registration View Redirect */}
             {currentView === 'developer-register' && (
-              <DeveloperRegisterView
-                user={user}
-                onSignIn={handleSignIn}
-                onBackToHome={() => navigateTo('home')}
-              />
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in text-center space-y-4">
+                <h2 className="text-xl font-bold text-slate-900">Kurasi Aplikasi Mod Station</h2>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  Semua penambahan dan kurasi aplikasi dikelola secara eksklusif melalui Owner Console Mod Station.
+                </p>
+                <button
+                  onClick={() => navigateTo('home')}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Kembali ke Beranda
+                </button>
+              </div>
             )}
 
-            {/* Developer Dashboard Portal */}
+            {/* Developer Dashboard Redirection */}
             {currentView === 'developer-dashboard' && (
-              <DeveloperDashboard
-                user={user}
-                onBackToHome={() => navigateTo('home')}
-              />
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in text-center space-y-4">
+                {isOwnerOrAdmin ? (
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Beralih ke Owner Console</h2>
+                    <p className="text-sm text-slate-500 mb-4">Kelola semua aplikasi dan kurasi di Mod Station Owner Console.</p>
+                    <button
+                      onClick={() => navigateTo('admin')}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Buka Owner Console
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Halaman Tidak Tersedia</h2>
+                    <p className="text-sm text-slate-500 mb-4">Mod Station menggunakan kurasi terpusat oleh tim editorial.</p>
+                    <button
+                      onClick={() => navigateTo('home')}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Kembali ke Beranda
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Apps Only View */}
@@ -2508,14 +2517,9 @@ export default function App() {
 
             {(currentView === 'subscription' || currentView === 'premium') && (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in">
-                <SubscriptionView
-                  subscriptionPlan={effectiveSubscriptionPlan}
-                  userRole={userRole}
-                  user={user}
-                  onUpgradePlan={handleUpgradePlan}
-                  onSignIn={handleSignIn}
-                  onBack={() => handleBack('home')}
+                <DonateView
                   onNavigate={navigateTo}
+                  onBack={() => handleBack('home')}
                 />
               </div>
             )}
@@ -2783,6 +2787,13 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Firebase Auth Unauthorized Domain Diagnostics Modal */}
+      <UnauthorizedDomainModal
+        isOpen={showUnauthorizedDomainModal}
+        onClose={() => setShowUnauthorizedDomainModal(false)}
+        domain={unauthorizedDomain}
+      />
 
       {/* Floating Scroll to Top button (appears after scrolling past 400px) */}
       <ScrollToTopButton threshold={400} />
